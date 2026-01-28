@@ -46,6 +46,7 @@ export interface DatabaseManualChange {
   requested_by_name: string;
   approved_at?: string;
   approved_by?: string;
+  approved_by_name?: string;
   original_transaction: any;
   created_at?: string;
   updated_at?: string;

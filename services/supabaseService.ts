@@ -71,6 +71,7 @@ const manualChangeToDb = (mc: ManualChange): DatabaseManualChange => {
     requested_by_name: mc.requestedByName,
     approved_at: mc.approvedAt || null,
     approved_by: mc.approvedBy || null,
+    approved_by_name: mc.approvedByName,
     original_transaction: mc.originalTransaction
   };
 };
@@ -91,6 +92,7 @@ const dbToManualChange = (db: DatabaseManualChange): ManualChange => ({
   requestedByName: db.requested_by_name,
   approvedAt: db.approved_at || undefined,
   approvedBy: db.approved_by || undefined,
+  approvedByName: db.approved_by_name,
   originalTransaction: db.original_transaction
 });
 
@@ -284,6 +286,7 @@ export const updateManualChange = async (id: string, updates: Partial<ManualChan
   if (updates.status) dbUpdates.status = updates.status;
   if (updates.approvedAt) dbUpdates.approved_at = updates.approvedAt;
   if (updates.approvedBy) dbUpdates.approved_by = updates.approvedBy;
+  if (updates.approvedByName) dbUpdates.approved_by_name = updates.approvedByName;
 
   // Remover campos null/undefined
   const cleanedUpdates: any = {};

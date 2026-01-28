@@ -301,13 +301,14 @@ const App: React.FC = () => {
       const changeUpdateSuccess = await supabaseService.updateManualChange(changeId, {
         status: 'Aplicado',
         approvedAt: new Date().toISOString(),
-        approvedBy: user?.email || 'unknown@raizeducacao.com.br'
+        approvedBy: user?.email || 'unknown@raizeducacao.com.br',
+        approvedByName: user?.name || 'Usuário Desconhecido'
       });
       console.log('✅ Status da mudança atualizado:', changeUpdateSuccess);
 
       setManualChanges(prev => prev.map(c =>
         c.id === changeId
-          ? { ...c, status: 'Aplicado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br' }
+          ? { ...c, status: 'Aplicado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br', approvedByName: user?.name || 'Usuário Desconhecido' }
           : c
       ));
 
@@ -335,11 +336,12 @@ const App: React.FC = () => {
     await supabaseService.updateManualChange(changeId, {
       status: 'Reprovado',
       approvedAt: new Date().toISOString(),
-      approvedBy: user?.email || 'unknown@raizeducacao.com.br'
+      approvedBy: user?.email || 'unknown@raizeducacao.com.br',
+      approvedByName: user?.name || 'Usuário Desconhecido'
     });
 
     setTransactions(prev => prev.map(t => t.id === change.transactionId ? { ...t, status: 'Normal' } : t));
-    setManualChanges(prev => prev.map(c => c.id === changeId ? { ...c, status: 'Reprovado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br' } : c));
+    setManualChanges(prev => prev.map(c => c.id === changeId ? { ...c, status: 'Reprovado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br', approvedByName: user?.name || 'Usuário Desconhecido' } : c));
   };
 
   const clearGlobalFilters = () => {

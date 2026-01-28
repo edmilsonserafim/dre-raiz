@@ -45,6 +45,7 @@ export interface ManualChange {
   requestedByName?: string;
   approvedAt?: string;
   approvedBy?: string;
+  approvedByName?: string;  // NEW FIELD
 }
 
 export interface SchoolKPIs {
