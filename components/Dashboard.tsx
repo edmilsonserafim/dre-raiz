@@ -137,11 +137,21 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
     const marginTrend = enhancedKpis.netMargin - compMargin;
     const studentsTrend = 0; // Pode adicionar lógica para alunos se tiver dados históricos
 
+    // Calculate absolute variations
+    const revenueAbsolute = enhancedKpis.totalRevenue - compRevenue;
+    const ebitdaAbsolute = enhancedKpis.ebitda - compEbitda;
+    const revenuePerStudentAbsolute = enhancedKpis.revenuePerStudent - (compRevenue > 0 ? compRevenue / enhancedKpis.activeStudents : 0);
+    const studentsAbsolute = 0;
+
     return {
       revenue: revenueTrend,
       ebitda: ebitdaTrend,
       margin: marginTrend,
       students: studentsTrend,
+      revenueAbsolute,
+      ebitdaAbsolute,
+      revenuePerStudentAbsolute,
+      studentsAbsolute,
       compRevenue,
       compEbitda,
       compFixedCosts,
@@ -470,10 +480,10 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
           Indicadores Executivos
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} color="blue" icon={<Target size={16} />} />
-          <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} color="orange" icon={<Target size={16} />} />
-          <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} color="blue" icon={<Users size={16} />} />
-          <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} color="teal" icon={<Users size={16} />} />
+          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} trendAbsolute={trends.revenueAbsolute} color="blue" icon={<Target size={16} />} />
+          <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} trendAbsolute={trends.ebitdaAbsolute} color="orange" icon={<Target size={16} />} />
+          <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} trendAbsolute={trends.revenuePerStudentAbsolute} color="blue" icon={<Users size={16} />} />
+          <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} trendAbsolute={trends.studentsAbsolute} color="teal" icon={<Users size={16} />} />
         </div>
       </section>
 
@@ -979,7 +989,7 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
   );
 };
 
-const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any) => {
+const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon }: any) => {
   const colorMaps: any = {
     blue: 'text-[#1B75BB] bg-blue-50',
     orange: 'text-[#F44C00] bg-orange-50',
@@ -994,6 +1004,12 @@ const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any)
     return isPercent ? `${formatted}%` : `R$ ${formatted}`;
   }, [value, isPercent, isNumber]);
 
+  const formattedTrendAbsolute = useMemo(() => {
+    if (trendAbsolute === undefined) return null;
+    if (isNumber) return Math.abs(trendAbsolute).toLocaleString('pt-BR');
+    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  }, [trendAbsolute, isNumber]);
+
   return (
     <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-all group">
       <div className="flex justify-between items-start mb-2">
@@ -1004,6 +1020,7 @@ const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any)
         {trend !== undefined && (
           <div className={`px-2 py-1 rounded text-[11px] font-black flex items-center gap-1 ${trend > 0 ? 'bg-teal-50 text-[#7AC5BF]' : 'bg-orange-50 text-[#F44C00]'}`}>
             {trend > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+            {formattedTrendAbsolute && <span>{formattedTrendAbsolute} | </span>}
             {Math.abs(trend).toFixed(1)}%
           </div>
         )}
