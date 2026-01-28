@@ -3,13 +3,15 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, ManualChange } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
 import * as XLSX from 'xlsx';
-import { 
-  Edit3, GitFork, X, Save, 
-  ReceiptText, FilterX, 
-  PlusCircle, ExternalLink, 
+import debounce from 'lodash.debounce';
+import {
+  Edit3, GitFork, X, Save,
+  ReceiptText, FilterX,
+  PlusCircle, ExternalLink,
   Trash2, Filter, Loader2,
-  Split, CheckCircle2, Upload, Download, ListOrdered, Calculator, ArrowRight,
-  ChevronDown, Check, Square, CheckSquare, TrendingUp, History
+  Split, CheckCircle2, Download, ListOrdered, Calculator, ArrowRight,
+  ChevronDown, Check, Square, CheckSquare, TrendingUp, History,
+  TrendingDown, ArrowUpRight, ArrowDownRight, AlertCircle
 } from 'lucide-react';
 
 interface TransactionsViewProps {
@@ -64,8 +66,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [rateioTransaction, setRateioTransaction] = useState<Transaction | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Abas e Paginação
+  const [activeTab, setActiveTab] = useState<'real' | 'orcamento' | 'comparativo'>('real');
+  const [currentPage, setCurrentPage] = useState(1);
+  const RECORDS_PER_PAGE = 1000;
+
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
   const [rateioParts, setRateioParts] = useState<RateioPart[]>([]);
@@ -74,7 +80,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const initialFilters = {
     scenario: [] as string[],
-    date: '',
+    monthFrom: '',
+    monthTo: '',
     brand: [] as string[],
     branch: [] as string[],
     tag01: [] as string[],
@@ -89,6 +96,19 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const [colFilters, setColFilters] = useState(initialFilters);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  // Debounced filter setter for text inputs
+  const debouncedSetFilter = useMemo(
+    () => debounce((key: string, value: string) => {
+      setColFilters(prev => ({ ...prev, [key]: value }));
+    }, 300),
+    []
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => debouncedSetFilter.cancel();
+  }, [debouncedSetFilter]);
 
   useEffect(() => {
     const handleGlobalClick = (event: MouseEvent) => {
@@ -108,11 +128,24 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       const filtered = transactions.filter(t => {
         return Object.entries(colFilters).every(([key, value]) => {
           if (key === field || !value || (Array.isArray(value) && value.length === 0)) return true;
-          if (key === 'date') return formatDateToMMAAAA(t.date).includes(value as string);
-          
+
+          // Handle month range filters
+          if (key === 'monthFrom' || key === 'monthTo') {
+            const tDate = new Date(t.date);
+            const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+
+            if (key === 'monthFrom' && value) {
+              if (tYearMonth < value) return false;
+            }
+            if (key === 'monthTo' && value) {
+              if (tYearMonth > value) return false;
+            }
+            return true;
+          }
+
           const tValue = String(t[key as keyof Transaction] || '');
           if (Array.isArray(value)) return value.includes(tValue);
-          
+
           const filterValue = String(value).toLowerCase();
           return tValue.toLowerCase().includes(filterValue);
         });
@@ -193,14 +226,46 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const filteredAndSorted = useMemo(() => {
     return transactions
       .filter(t => {
-        const fmtDate = formatDateToMMAAAA(t.date);
+        // Filtrar por aba ativa (cenário) - case-insensitive e sem acentos
+        const scenarioNormalized = (t.scenario || '').toLowerCase().trim()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
+
+        if (activeTab === 'real') {
+          // Aceita: "Real", "real", "REAL", etc.
+          if (scenarioNormalized !== 'real') return false;
+        }
+
+        if (activeTab === 'orcamento') {
+          // Aceita: "Orçamento", "Orcamento", "orcamento", "ORCAMENTO", etc.
+          if (scenarioNormalized !== 'orcamento') return false;
+        }
+
+        if (activeTab === 'comparativo') {
+          const currentYear = new Date().getFullYear();
+          const tYear = new Date(t.date).getFullYear();
+          if (tYear !== currentYear - 1) return false;
+        }
+
         return Object.entries(colFilters).every(([key, value]) => {
           if (!value || (Array.isArray(value) && value.length === 0)) return true;
-          if (key === 'date') return fmtDate.includes(value as string);
-          
+
+          // Handle month range filters
+          if (key === 'monthFrom' || key === 'monthTo') {
+            const tDate = new Date(t.date);
+            const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+
+            if (key === 'monthFrom' && value) {
+              if (tYearMonth < value) return false;
+            }
+            if (key === 'monthTo' && value) {
+              if (tYearMonth > value) return false;
+            }
+            return true;
+          }
+
           const tValue = String(t[key as keyof Transaction] || '');
           if (Array.isArray(value)) return value.includes(tValue);
-          
+
           const filterValue = String(value).toLowerCase();
           return tValue.toLowerCase().includes(filterValue);
         });
@@ -213,11 +278,93 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
         return sortConfig.direction === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
       });
-  }, [transactions, colFilters, sortConfig]);
+  }, [transactions, colFilters, sortConfig, activeTab]);
 
   const totalAmount = useMemo(() => {
     return filteredAndSorted.reduce((sum, t) => t.type === 'REVENUE' ? sum + t.amount : sum - t.amount, 0);
   }, [filteredAndSorted]);
+
+  // Paginação
+  const totalPages = Math.ceil(filteredAndSorted.length / RECORDS_PER_PAGE);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
+    const endIndex = startIndex + RECORDS_PER_PAGE;
+    return filteredAndSorted.slice(startIndex, endIndex);
+  }, [filteredAndSorted, currentPage]);
+
+  // Resetar para página 1 quando filtros ou aba mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [colFilters, activeTab]);
+
+  // Contadores por aba
+  const tabCounts = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const counts = {
+      real: 0,
+      orcamento: 0,
+      comparativo: 0
+    };
+
+    // Debug: Ver quais cenários existem no banco
+    const uniqueScenarios = new Set<string>();
+
+    transactions.forEach(t => {
+      const tYear = new Date(t.date).getFullYear();
+      uniqueScenarios.add(t.scenario || 'undefined');
+
+      // Normalizar cenário para comparação
+      const scenarioNormalized = (t.scenario || '').toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      if (scenarioNormalized === 'real') counts.real++;
+      if (scenarioNormalized === 'orcamento') counts.orcamento++;
+      if (tYear === currentYear - 1) counts.comparativo++;
+    });
+
+    // Log para debug (temporário)
+    console.log('🔍 Cenários encontrados no banco:', Array.from(uniqueScenarios));
+    console.log('📊 Contadores:', counts);
+
+    return counts;
+  }, [transactions]);
+
+  // Calculate summary metrics for filtered data
+  const filteredSummary = useMemo(() => {
+    const filtered = filteredAndSorted;
+    const budget = transactions.filter(t => t.scenario === 'Orçamento');
+
+    const totalRevenue = filtered.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    const totalVariableCosts = filtered.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const totalFixedCosts = filtered.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const sgaCosts = filtered.filter(t => t.type === 'SGA').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const rateioCosts = filtered.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const ebitda = totalRevenue - totalVariableCosts - totalFixedCosts - sgaCosts - rateioCosts;
+
+    // Budget comparisons
+    const budgetRevenue = budget.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    const budgetVariableCosts = budget.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const budgetFixedCosts = budget.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const budgetSga = budget.filter(t => t.type === 'SGA').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const budgetRateio = budget.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const budgetEbitda = budgetRevenue - budgetVariableCosts - budgetFixedCosts - budgetSga - budgetRateio;
+
+    const revenueVsBudget = budgetRevenue > 0 ? ((totalRevenue - budgetRevenue) / budgetRevenue) * 100 : undefined;
+    const variableCostsVsBudget = budgetVariableCosts > 0 ? ((totalVariableCosts - budgetVariableCosts) / budgetVariableCosts) * 100 : undefined;
+    const fixedCostsVsBudget = budgetFixedCosts > 0 ? ((totalFixedCosts - budgetFixedCosts) / budgetFixedCosts) * 100 : undefined;
+    const ebitdaVsBudget = budgetEbitda !== 0 ? ((ebitda - budgetEbitda) / Math.abs(budgetEbitda)) * 100 : undefined;
+
+    return {
+      totalRevenue,
+      totalVariableCosts,
+      totalFixedCosts,
+      ebitda,
+      revenueVsBudget,
+      variableCostsVsBudget,
+      fixedCostsVsBudget,
+      ebitdaVsBudget
+    };
+  }, [filteredAndSorted, transactions]);
 
   const handleExportExcel = () => {
     const headers = ["Cenário", "Data", "Tag 01", "Tag 02", "Tag 03", "Conta", "Unidade", "Marca", "Ticket", "Fornecedor", "Descrição", "Valor", "Recorrente", "ID", "Status", "Justificativa"];
@@ -299,6 +446,16 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return val !== initialFilters[key];
   };
 
+  // Check if any filter is active
+  const isAnyFilterActive = useMemo(() => {
+    return Object.keys(colFilters).some(key => isFilterActive(key as keyof typeof initialFilters));
+  }, [colFilters]);
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    return Object.keys(colFilters).filter(key => isFilterActive(key as keyof typeof initialFilters)).length;
+  }, [colFilters]);
+
   const MultiSelectFilter = ({ id, label, options, selected, active }: any) => {
     const isOpen = openDropdown === id;
     const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
@@ -365,15 +522,100 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           <p className="text-gray-500 text-[8px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
         </div>
         <div className="flex items-center gap-1.5">
-           <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase tracking-widest transition-all border ${showFilters ? 'bg-[#1B75BB] text-white border-[#1B75BB]' : 'bg-white text-[#1B75BB] border-[#1B75BB]'}`}><Filter size={10}/> {showFilters ? 'Ocultar Filtros' : 'Filtrar'}</button>
-           <button onClick={() => fileInputRef.current?.click()} disabled={isSyncing} className="flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase border bg-white text-[#7AC5BF] border-[#7AC5BF] hover:bg-teal-50">
-             {isSyncing ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />} Importar
+           <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase tracking-widest transition-all border ${showFilters ? 'bg-[#1B75BB] text-white border-[#1B75BB]' : 'bg-white text-[#1B75BB] border-[#1B75BB]'}`}>
+             <Filter size={10}/> {showFilters ? 'Ocultar Filtros' : 'Filtrar'}
+             {activeFilterCount > 0 && (
+               <span className="ml-1 px-1.5 py-0.5 bg-[#F44C00] text-white rounded-full text-[8px] font-black">
+                 {activeFilterCount}
+               </span>
+             )}
            </button>
            <button onClick={handleExportExcel} className="flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase border bg-[#1B75BB] text-white border-[#1B75BB] hover:bg-[#152e55]">
-             <Download size={10} /> Exportar
+             <Download size={10} /> Exportar Tudo
            </button>
         </div>
       </header>
+
+      {/* Abas de Cenário */}
+      <div className="flex gap-2 border-b-2 border-gray-200">
+        <button
+          onClick={() => setActiveTab('real')}
+          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+            activeTab === 'real'
+              ? 'text-[#1B75BB] border-b-4 border-[#1B75BB] -mb-[2px]'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Real
+          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+            activeTab === 'real' ? 'bg-[#1B75BB] text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            {tabCounts.real.toLocaleString()}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('orcamento')}
+          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+            activeTab === 'orcamento'
+              ? 'text-[#F44C00] border-b-4 border-[#F44C00] -mb-[2px]'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Orçamento
+          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+            activeTab === 'orcamento' ? 'bg-[#F44C00] text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            {tabCounts.orcamento.toLocaleString()}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('comparativo')}
+          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+            activeTab === 'comparativo'
+              ? 'text-emerald-600 border-b-4 border-emerald-600 -mb-[2px]'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Ano Anterior
+          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+            activeTab === 'comparativo' ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            {tabCounts.comparativo.toLocaleString()}
+          </span>
+        </button>
+      </div>
+
+      {/* Summary Cards Section */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-in slide-in-from-top-2 duration-300">
+        <SummaryCard
+          label="Receitas"
+          value={filteredSummary.totalRevenue}
+          color="emerald"
+          icon={<TrendingUp size={16} />}
+          change={filteredSummary.revenueVsBudget}
+        />
+        <SummaryCard
+          label="Custos Variáveis"
+          value={filteredSummary.totalVariableCosts}
+          color="orange"
+          icon={<TrendingDown size={16} />}
+          change={filteredSummary.variableCostsVsBudget}
+        />
+        <SummaryCard
+          label="Custos Fixos"
+          value={filteredSummary.totalFixedCosts}
+          color="blue"
+          icon={<Calculator size={16} />}
+          change={filteredSummary.fixedCostsVsBudget}
+        />
+        <SummaryCard
+          label="EBITDA"
+          value={filteredSummary.ebitda}
+          color={filteredSummary.ebitda >= 0 ? 'teal' : 'rose'}
+          icon={<ListOrdered size={16} />}
+          change={filteredSummary.ebitdaVsBudget}
+        />
+      </div>
 
       {showFilters && (
         <div ref={filterContainerRef} className="bg-white p-3 border border-gray-200 shadow-sm animate-in slide-in-from-top-1 duration-300 rounded-none">
@@ -382,16 +624,36 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                  <div className="bg-blue-50 p-1.5 rounded-none text-[#1B75BB]"><Filter size={12}/></div>
                  <h3 className="text-[9px] font-black text-gray-900 uppercase tracking-tighter">Painel de Refinamento Dinâmico</h3>
               </div>
-              <button onClick={handleClearAllFilters} className="text-[7.5px] font-black text-white bg-[#F44C00] hover:bg-[#d44200] px-3 py-1.5 rounded-none shadow-sm transition-all flex items-center gap-1 border border-[#F44C00] uppercase tracking-widest">
-                <FilterX size={10} /> LIMPAR TODOS
+              <button onClick={handleClearAllFilters} className="flex items-center gap-2 px-3 py-2 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95">
+                <FilterX size={14} />
+                Limpar Filtros
               </button>
            </div>
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5">
               <MultiSelectFilter id="scenario" label="Cenário" options={dynamicOptions.scenarios} selected={colFilters.scenario} active={isFilterActive('scenario')} />
-              <div className="space-y-0.5">
-                <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">Data</label>
-                <div className={`border p-1 rounded-none text-[8px] font-black transition-all ${isFilterActive('date') ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
-                  <input type="text" placeholder="MM-AAAA" className="w-full bg-transparent outline-none uppercase" value={colFilters.date} onChange={e => setColFilters({...colFilters, date: e.target.value})} />
+              <div className="col-span-2 space-y-0.5">
+                <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">Período (Mês-Ano)</label>
+                <div className="flex gap-1">
+                  <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthFrom') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
+                    <span className="text-[7px] text-gray-400">De:</span>
+                    <input
+                      type="month"
+                      value={colFilters.monthFrom}
+                      onChange={e => setColFilters({...colFilters, monthFrom: e.target.value})}
+                      className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
+                      placeholder="MM-AAAA"
+                    />
+                  </div>
+                  <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthTo') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
+                    <span className="text-[7px] text-gray-400">Até:</span>
+                    <input
+                      type="month"
+                      value={colFilters.monthTo}
+                      onChange={e => setColFilters({...colFilters, monthTo: e.target.value})}
+                      className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
+                      placeholder="MM-AAAA"
+                    />
+                  </div>
                 </div>
               </div>
               <MultiSelectFilter id="tag01" label="C.Custo" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
@@ -400,16 +662,88 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} />
               <MultiSelectFilter id="brand" label="Marca" options={dynamicOptions.brands} selected={colFilters.brand} active={isFilterActive('brand')} />
               <MultiSelectFilter id="branch" label="Unidade" options={dynamicOptions.branches} selected={colFilters.branch} active={isFilterActive('branch')} />
-              <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} />
-              <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" />
-              <FilterTextInput label="Desc" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" />
-              <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} />
+              <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
+              <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
+              <FilterTextInput label="Desc" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
+              <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
            </div>
         </div>
       )}
 
+      {/* Controles de Paginação */}
+      {filteredAndSorted.length > 0 && (
+        <div className="bg-white border border-gray-200 p-3 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-4">
+            <p className="text-xs font-bold text-gray-600">
+              Mostrando <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span> a{' '}
+              <span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
+              <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span> registros
+            </p>
+            {filteredAndSorted.length > RECORDS_PER_PAGE && (
+              <p className="text-[10px] text-gray-400">
+                (Página {currentPage} de {totalPages})
+              </p>
+            )}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                ← Anterior
+              </button>
+
+              <div className="flex gap-1">
+                {currentPage > 2 && (
+                  <>
+                    <button onClick={() => setCurrentPage(1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">1</button>
+                    {currentPage > 3 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
+                  </>
+                )}
+
+                {currentPage > 1 && (
+                  <button onClick={() => setCurrentPage(currentPage - 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                    {currentPage - 1}
+                  </button>
+                )}
+
+                <button className="px-2 py-1 text-xs font-black bg-[#1B75BB] text-white rounded">
+                  {currentPage}
+                </button>
+
+                {currentPage < totalPages && (
+                  <button onClick={() => setCurrentPage(currentPage + 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                    {currentPage + 1}
+                  </button>
+                )}
+
+                {currentPage < totalPages - 1 && (
+                  <>
+                    {currentPage < totalPages - 2 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
+                    <button onClick={() => setCurrentPage(totalPages)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Próxima →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white border border-gray-200 overflow-hidden shadow-sm rounded-none">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] relative">
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] relative">
           <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
             <thead>
               <tr className="whitespace-nowrap">
@@ -430,11 +764,25 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {filteredAndSorted.length === 0 ? (
+              {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-20 text-center text-gray-400 font-bold uppercase text-[10px] tracking-widest">Nenhum lançamento encontrado com os filtros atuais</td>
+                  <td colSpan={14} className="py-20">
+                    <div className="text-center">
+                      <AlertCircle size={48} className="mx-auto text-gray-300 mb-4" />
+                      <p className="text-gray-500 font-bold text-sm">Nenhum lançamento encontrado</p>
+                      <p className="text-gray-400 text-xs mt-2">Ajuste os filtros ou limpe-os para ver mais dados</p>
+                      {isAnyFilterActive && (
+                        <button
+                          onClick={handleClearAllFilters}
+                          className="mt-4 px-4 py-2 bg-[#F44C00] text-white rounded-xl text-xs font-black uppercase hover:bg-[#d44200] transition-all"
+                        >
+                          Limpar Filtros
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              ) : filteredAndSorted.map(t => (
+              ) : paginatedData.map(t => (
                 <tr key={t.id} className="hover:bg-blue-50/50 transition-colors border-b border-gray-50 h-8">
                   <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
                   <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden">{formatDateToMMAAAA(t.date)}</td>
@@ -668,13 +1016,53 @@ const HeaderCell = ({ label, sortKey, config, setConfig, align = 'left', classNa
   );
 };
 
-const FilterTextInput = ({ label, id, value, colFilters, setColFilters, className }: any) => (
+const FilterTextInput = ({ label, id, value, colFilters, setColFilters, className, debouncedSetFilter }: any) => (
   <div className={`space-y-0.5 ${className || ''}`}>
     <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</label>
     <div className={`border p-1 rounded-none text-[8px] font-black transition-all ${value ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
-      <input type="text" placeholder={label} className="w-full bg-transparent outline-none uppercase" value={value} onChange={e => setColFilters({...colFilters, [id]: e.target.value})} />
+      <input
+        type="text"
+        placeholder={label}
+        className="w-full bg-transparent outline-none uppercase"
+        defaultValue={value}
+        onChange={e => debouncedSetFilter ? debouncedSetFilter(id, e.target.value) : setColFilters({...colFilters, [id]: e.target.value})}
+      />
     </div>
   </div>
 );
+
+const SummaryCard: React.FC<{
+  label: string;
+  value: number;
+  color: 'emerald' | 'orange' | 'blue' | 'teal' | 'rose';
+  icon: React.ReactNode;
+  change?: number;
+}> = ({ label, value, color, icon, change }) => {
+  const colorClasses = {
+    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    orange: 'bg-orange-50 border-orange-200 text-orange-700',
+    blue: 'bg-blue-50 border-blue-200 text-blue-700',
+    teal: 'bg-teal-50 border-teal-200 text-teal-700',
+    rose: 'bg-rose-50 border-rose-200 text-rose-700'
+  };
+
+  return (
+    <div className={`border-2 rounded-xl p-3 ${colorClasses[color]}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[8px] font-black uppercase tracking-widest opacity-70">{label}</span>
+        {icon}
+      </div>
+      <p className="text-xl font-black mb-0.5">
+        R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+      </p>
+      {change !== undefined && (
+        <div className="flex items-center gap-1 text-[9px] font-bold">
+          {change >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+          <span>{Math.abs(change).toFixed(1)}% vs Orçado</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default TransactionsView;

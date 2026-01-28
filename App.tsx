@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import KPIsView from './components/KPIsView';
 import InsightsView from './components/InsightsView';
 import DREView from './components/DREView';
 import ManualChangesView from './components/ManualChangesView';
@@ -12,6 +11,7 @@ import ForecastingView from './components/ForecastingView';
 import DatabaseView from './components/DatabaseView';
 import LoginScreen from './components/LoginScreen';
 import AdminPanel from './components/AdminPanel';
+import PendingApprovalScreen from './components/PendingApprovalScreen';
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
 import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock } from 'lucide-react';
@@ -419,6 +419,11 @@ const App: React.FC = () => {
     return <LoginScreen />;
   }
 
+  // Tela de aguardando aprovação para usuários pendentes
+  if (user.role === 'pending') {
+    return <PendingApprovalScreen />;
+  }
+
   // Tela de loading - dados
   if (isLoading) {
     return (
@@ -442,8 +447,8 @@ const App: React.FC = () => {
           pendingCount={pendingApprovalsCount}
         />
       </div>
-      <main className="flex-1 p-6 overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
+      <main className="flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-40 bg-[#fcfcfc] px-6 pt-6 pb-6 mb-6 flex justify-between items-center border-b border-gray-200 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-all">
               <PanelLeftOpen size={20} />
@@ -510,27 +515,28 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {currentView === 'dashboard' && <Dashboard kpis={kpis} transactions={filteredTransactions} />}
-        {currentView === 'movements' && (
-          <TransactionsView
-            transactions={filteredTransactions}
-            addTransaction={handleAddTransaction}
-            requestChange={handleRequestChange}
-            deleteTransaction={handleDeleteTransaction}
-            fetchFromCSV={handleImportData}
-            isSyncing={isSyncing}
-            externalFilters={drillDownFilters}
-            clearGlobalFilters={clearGlobalFilters}
-          />
-        )}
-        {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
-        {currentView === 'insights' && <InsightsView transactions={filteredTransactions} kpis={kpis} />}
-        {currentView === 'assistant' && <AssistantView transactions={filteredTransactions} kpis={kpis} />}
-        {currentView === 'dre' && <DREView transactions={filteredTransactions} onDrillDown={handleDrillDown} />}
-        {currentView === 'kpis' && <KPIsView transactions={filteredTransactions} branch={selectedBranch} />}
-        {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
-        {currentView === 'settings' && <DatabaseView />}
-        {currentView === 'admin' && <AdminPanel />}
+        <div className="px-6 pb-6">
+          {currentView === 'dashboard' && <Dashboard kpis={kpis} transactions={filteredTransactions} />}
+          {currentView === 'movements' && (
+            <TransactionsView
+              transactions={filteredTransactions}
+              addTransaction={handleAddTransaction}
+              requestChange={handleRequestChange}
+              deleteTransaction={handleDeleteTransaction}
+              fetchFromCSV={handleImportData}
+              isSyncing={isSyncing}
+              externalFilters={drillDownFilters}
+              clearGlobalFilters={clearGlobalFilters}
+            />
+          )}
+          {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
+          {currentView === 'insights' && <InsightsView transactions={filteredTransactions} kpis={kpis} />}
+          {currentView === 'assistant' && <AssistantView transactions={filteredTransactions} kpis={kpis} />}
+          {currentView === 'dre' && <DREView transactions={filteredTransactions} onDrillDown={handleDrillDown} />}
+          {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
+          {currentView === 'settings' && <DatabaseView />}
+          {currentView === 'admin' && <AdminPanel />}
+        </div>
       </main>
     </div>
   );

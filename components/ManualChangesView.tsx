@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ManualChange } from '../types';
 import {
   History, CheckCircle2, XCircle, ArrowRight, AlertCircle, GitFork,
-  User, Clock, ChevronDown, ChevronUp, ShieldCheck, FileText, Shield, Lock
+  User, Clock, ChevronDown, ChevronUp, ShieldCheck, FileText, Shield, Lock, FilterX
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -195,8 +195,11 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
     }
 
     if (filterDateTo) {
+      // Set time to end of day (23:59:59.999) to include all records from the selected date
+      const dateToEndOfDay = new Date(filterDateTo);
+      dateToEndOfDay.setHours(23, 59, 59, 999);
       result = result.filter(c =>
-        new Date(c.requestedAt) <= new Date(filterDateTo)
+        new Date(c.requestedAt) <= dateToEndOfDay
       );
     }
 
@@ -385,8 +388,9 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
               setFilterDateFrom('');
               setFilterDateTo('');
             }}
-            className="text-xs font-bold text-gray-500 hover:text-gray-700 hover:underline"
+            className="flex items-center gap-2 px-3 py-2 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95"
           >
+            <FilterX size={14} />
             Limpar Filtros
           </button>
         </div>
@@ -463,9 +467,9 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
       </div>
 
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
           <table className="w-full text-left table-fixed min-w-0">
-            <thead className="bg-gray-50/80 border-b border-gray-100 text-[8px] font-black text-gray-400 uppercase tracking-widest h-12">
+            <thead className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm border-b border-gray-100 text-[8px] font-black text-gray-400 uppercase tracking-widest h-12 shadow-sm">
               <tr>
                 <th className="px-4 w-[180px]">Solicitante</th>
                 <th className="px-4 w-[160px]">Lançamento Base</th>

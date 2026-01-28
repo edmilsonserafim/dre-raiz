@@ -77,4 +77,4 @@ export interface IAInsight {
   category: 'Driver Positivo' | 'Driver Negativo' | 'Ação Recomendada';
 }
 
-export type ViewType = 'dashboard' | 'kpis' | 'insights' | 'dre' | 'forecasting' | 'manual_changes' | 'assistant' | 'movements' | 'settings' | 'admin';
+export type ViewType = 'dashboard' | 'insights' | 'dre' | 'forecasting' | 'manual_changes' | 'assistant' | 'movements' | 'settings' | 'admin';

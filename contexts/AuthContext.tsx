@@ -8,7 +8,7 @@ interface User {
   email: string;
   name: string;
   photoURL: string;
-  role: 'admin' | 'manager' | 'viewer';
+  role: 'admin' | 'manager' | 'viewer' | 'pending';
 }
 
 interface AuthContextType {
@@ -55,15 +55,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email: dbUser.email,
           name: dbUser.name,
           photoURL: firebaseUser.photoURL || '',
-          role: dbUser.role as 'admin' | 'manager' | 'viewer'
+          role: dbUser.role as 'admin' | 'manager' | 'viewer' | 'pending'
         };
       } else {
-        // Criar novo usuário no Supabase (primeiro login)
+        // Criar novo usuário no Supabase (primeiro login) - aguardando aprovação
         const newUser = await supabaseService.createUser({
           email: firebaseUser.email,
           name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           photoURL: firebaseUser.photoURL || '',
-          role: 'viewer' // Novo usuário começa como viewer
+          role: 'pending' // Novo usuário aguarda aprovação do admin
         });
 
         return {
@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email: newUser.email,
           name: newUser.name,
           photoURL: firebaseUser.photoURL || '',
-          role: newUser.role as 'admin' | 'manager' | 'viewer'
+          role: newUser.role as 'admin' | 'manager' | 'viewer' | 'pending'
         };
       }
     } catch (error) {

@@ -373,7 +373,7 @@ export const getAllUsers = async () => {
   return data;
 };
 
-export const updateUserRole = async (userId: string, role: 'admin' | 'manager' | 'viewer') => {
+export const updateUserRole = async (userId: string, role: 'admin' | 'manager' | 'viewer' | 'pending') => {
   const { error } = await supabase
     .from('users')
     .update({ role })
@@ -385,6 +385,38 @@ export const updateUserRole = async (userId: string, role: 'admin' | 'manager' |
   }
 
   return true;
+};
+
+export const deleteUser = async (userId: string) => {
+  try {
+    // Primeiro, deletar todas as permissões do usuário
+    const { error: permError } = await supabase
+      .from('user_permissions')
+      .delete()
+      .eq('user_id', userId);
+
+    if (permError) {
+      console.error('Error deleting user permissions:', permError);
+      // Continuar mesmo se falhar - pode ser que não tenha permissões
+    }
+
+    // Depois, deletar o usuário
+    const { error: userError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
+
+    if (userError) {
+      console.error('Error deleting user:', userError);
+      return false;
+    }
+
+    console.log(`User ${userId} deleted successfully`);
+    return true;
+  } catch (error) {
+    console.error('Exception in deleteUser:', error);
+    return false;
+  }
 };
 
 export const getUserPermissions = async (userId: string) => {

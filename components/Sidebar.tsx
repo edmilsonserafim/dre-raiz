@@ -35,7 +35,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
     { id: 'forecasting', label: 'Forecasting', icon: LineChart },
     { id: 'assistant', label: 'Estrategista SAP', icon: MessageSquareQuote },
-    { id: 'kpis', label: 'Indicadores KPI', icon: BarChart3 },
     { id: 'insights', label: 'IA Insights', icon: Lightbulb },
     { id: 'settings', label: 'Configurações', icon: Settings },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : []),
