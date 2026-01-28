@@ -74,6 +74,59 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
     };
   }, [filteredByMonth, kpis]);
 
+  // Calculate trends with absolute variations
+  const trends = useMemo(() => {
+    const comparison = filteredByMonth.filter(t => t.scenario === 'Orçamento');
+    const real = filteredByMonth.filter(t => t.scenario === 'Real');
+
+    // Comparison values
+    const compRevenue = comparison.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    const compSgaCosts = comparison.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
+    const compRateioCosts = comparison.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0);
+
+    const compTeacherCost = comparison.filter(t => t.category === 'Salários' || t.category?.includes('Professor')).reduce((acc, t) => acc + t.amount, 0);
+    const compAdminPayrollCost = comparison.filter(t => t.category === 'Folha Administrativa' || t.category?.includes('Folha Adm')).reduce((acc, t) => acc + t.amount, 0);
+    const compMaintenanceCost = comparison.filter(t => t.category === 'Manutenção' || t.category?.includes('Manutenção')).reduce((acc, t) => acc + t.amount, 0);
+    const compWaterCost = comparison.filter(t => t.category === 'Água & Gás').reduce((acc, t) => acc + t.amount, 0);
+    const compEnergyCost = comparison.filter(t => t.category === 'Energia').reduce((acc, t) => acc + t.amount, 0);
+    const compMaterialCost = comparison.filter(t => t.category === 'Material de Consumo' || t.category === 'Material de Consumo & Operação').reduce((acc, t) => acc + t.amount, 0);
+    const compEventsCost = comparison.filter(t => t.category === 'Eventos Comerciais' || t.category === 'Eventos Pedagógicos').reduce((acc, t) => acc + t.amount, 0);
+    const compMealCost = comparison.filter(t => t.category === 'Alimentação' || t.category?.includes('Alimentação')).reduce((acc, t) => acc + t.amount, 0);
+
+    // Real values for calculation
+    const realRevenue = real.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    const realTeacherCost = real.filter(t => t.category === 'Salários' || t.category?.includes('Professor')).reduce((acc, t) => acc + t.amount, 0);
+    const realAdminPayrollCost = real.filter(t => t.category === 'Folha Administrativa' || t.category?.includes('Folha Adm')).reduce((acc, t) => acc + t.amount, 0);
+
+    // Percentages
+    const compTeacherPercent = compRevenue > 0 ? (compTeacherCost / compRevenue) * 100 : 0;
+    const compAdminPercent = compRevenue > 0 ? (compAdminPayrollCost / compRevenue) * 100 : 0;
+    const compMaintenancePercent = compRevenue > 0 ? (compMaintenanceCost / compRevenue) * 100 : 0;
+
+    // Per unit
+    const numberOfStudents = kpis.activeStudents;
+    const numberOfClassrooms = Math.ceil(numberOfStudents / 25);
+    const compTeacherPerClassroom = numberOfClassrooms > 0 ? compTeacherCost / numberOfClassrooms : 0;
+    const compWaterPerStudent = numberOfStudents > 0 ? compWaterCost / numberOfStudents : 0;
+    const compEnergyPerClassroom = numberOfClassrooms > 0 ? compEnergyCost / numberOfClassrooms : 0;
+    const compMaterialPerStudent = numberOfStudents > 0 ? compMaterialCost / numberOfStudents : 0;
+    const compEventsPerStudent = numberOfStudents > 0 ? compEventsCost / numberOfStudents : 0;
+    const compMealPerStudent = numberOfStudents > 0 ? compMealCost / numberOfStudents : 0;
+
+    return {
+      teacherPercentAbsolute: enhancedKpis.teacherCostPercent - compTeacherPercent,
+      teacherPerClassroomAbsolute: enhancedKpis.teacherCostPerClassroom - compTeacherPerClassroom,
+      adminPercentAbsolute: enhancedKpis.adminPayrollPercent - compAdminPercent,
+      rateioCscAbsolute: (enhancedKpis.sgaCosts + enhancedKpis.rateioCosts) - (compSgaCosts + compRateioCosts),
+      maintenancePercentAbsolute: enhancedKpis.maintenancePercent - compMaintenancePercent,
+      waterPerStudentAbsolute: enhancedKpis.waterPerStudent - compWaterPerStudent,
+      energyPerClassroomAbsolute: enhancedKpis.energyPerClassroom - compEnergyPerClassroom,
+      materialPerStudentAbsolute: enhancedKpis.consumptionMaterialPerStudent - compMaterialPerStudent,
+      eventsPerStudentAbsolute: enhancedKpis.eventsPerStudent - compEventsPerStudent,
+      mealPerStudentAbsolute: enhancedKpis.studentMealPerStudent - compMealPerStudent
+    };
+  }, [filteredByMonth, enhancedKpis, kpis]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -197,6 +250,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             color="purple"
             icon={<GraduationCap size={16} />}
             trend={-2.3}
+            trendAbsolute={trends.teacherPercentAbsolute}
           />
           <KPICard
             label="Professor / Turma"
@@ -204,6 +258,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             color="teal"
             icon={<GraduationCap size={16} />}
             trend={-1.8}
+            trendAbsolute={trends.teacherPerClassroomAbsolute}
           />
           <KPICard
             label="Folha Adm / ROL"
@@ -212,6 +267,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             color="amber"
             icon={<Users size={16} />}
             trend={1.5}
+            trendAbsolute={trends.adminPercentAbsolute}
           />
           <KPICard
             label="Rateio CSC"
@@ -219,6 +275,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             trend={0}
             color="purple"
             icon={<Target size={16} />}
+            trendAbsolute={trends.rateioCscAbsolute}
           />
           <KPICard
             label="Manutenção / ROL"
@@ -227,6 +284,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             color="orange"
             icon={<Target size={16} />}
             trend={2.5}
+            trendAbsolute={trends.maintenancePercentAbsolute}
           />
         </div>
       </section>
@@ -244,6 +302,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             icon={<Droplets size={16} />}
             color="blue"
             trend={-3.2}
+            trendAbsolute={trends.waterPerStudentAbsolute}
           />
           <ConsumptionCard
             label="Energia / Turma"
@@ -252,6 +311,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             icon={<Zap size={16} />}
             color="amber"
             trend={2.1}
+            trendAbsolute={trends.energyPerClassroomAbsolute}
           />
           <ConsumptionCard
             label="Mat. Consumo / Aluno"
@@ -260,6 +320,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             icon={<Box size={16} />}
             color="purple"
             trend={-1.5}
+            trendAbsolute={trends.materialPerStudentAbsolute}
           />
           <ConsumptionCard
             label="Eventos / Aluno"
@@ -268,6 +329,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             icon={<PartyPopper size={16} />}
             color="emerald"
             trend={5.3}
+            trendAbsolute={trends.eventsPerStudentAbsolute}
           />
           <ConsumptionCard
             label="Alimentação / Aluno"
@@ -276,6 +338,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             icon={<Users size={16} />}
             color="rose"
             trend={-2.8}
+            trendAbsolute={trends.mealPerStudentAbsolute}
           />
         </div>
       </section>
@@ -283,7 +346,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   );
 };
 
-const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any) => {
+const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon }: any) => {
   const colorMaps: any = {
     blue: 'text-[#1B75BB] bg-blue-50',
     orange: 'text-[#F44C00] bg-orange-50',
@@ -298,6 +361,13 @@ const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any)
     ? value.toLocaleString('pt-BR')
     : `R$ ${Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
 
+  const formattedTrendAbsolute = useMemo(() => {
+    if (trendAbsolute === undefined) return null;
+    if (isPercent) return `${Math.abs(trendAbsolute).toFixed(1)}%`;
+    if (isNumber) return Math.abs(trendAbsolute).toLocaleString('pt-BR');
+    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  }, [trendAbsolute, isPercent, isNumber]);
+
   return (
     <div className="bg-white border-2 border-gray-100 rounded-2xl p-4 hover:shadow-lg transition-all hover:border-gray-200">
       <div className="flex items-center justify-between mb-2">
@@ -308,6 +378,7 @@ const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any)
         {trend !== undefined && (
           <div className={`px-2 py-1 rounded text-[11px] font-black flex items-center gap-1 ${trend > 0 ? 'bg-teal-50 text-[#7AC5BF]' : 'bg-orange-50 text-[#F44C00]'}`}>
             {trend > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+            {formattedTrendAbsolute && <span>{formattedTrendAbsolute} | </span>}
             {Math.abs(trend).toFixed(1)}%
           </div>
         )}
@@ -319,7 +390,7 @@ const KPICard = ({ label, value, trend, isPercent, isNumber, color, icon }: any)
   );
 };
 
-const ConsumptionCard = ({ label, value, desc, icon, color, trend }: any) => {
+const ConsumptionCard = ({ label, value, desc, icon, color, trend, trendAbsolute }: any) => {
   const colorMaps: any = {
     blue: 'text-[#1B75BB] bg-blue-50',
     amber: 'text-[#F44C00] bg-orange-50',
@@ -327,6 +398,11 @@ const ConsumptionCard = ({ label, value, desc, icon, color, trend }: any) => {
     emerald: 'text-[#7AC5BF] bg-teal-50',
     rose: 'text-rose-600 bg-rose-50'
   };
+
+  const formattedTrendAbsolute = useMemo(() => {
+    if (trendAbsolute === undefined) return null;
+    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }, [trendAbsolute]);
 
   return (
     <div className="bg-white border-2 border-gray-100 rounded-2xl p-4 hover:shadow-lg transition-all hover:border-gray-200">
@@ -340,6 +416,7 @@ const ConsumptionCard = ({ label, value, desc, icon, color, trend }: any) => {
         {trend !== undefined && (
           <div className={`px-2 py-1 rounded text-[11px] font-black flex items-center gap-1 ${trend > 0 ? 'bg-orange-50 text-[#F44C00]' : 'bg-teal-50 text-[#7AC5BF]'}`}>
             {trend > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+            {formattedTrendAbsolute && <span>{formattedTrendAbsolute} | </span>}
             {Math.abs(trend).toFixed(1)}%
           </div>
         )}
