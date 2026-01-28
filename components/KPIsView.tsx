@@ -7,6 +7,18 @@ interface KPIsViewProps {
   transactions: Transaction[];
 }
 
+// Helper function to format monetary values
+const formatCurrency = (value: number): string => {
+  const absValue = Math.abs(value);
+  if (absValue >= 1000) {
+    // Valores >= 1000: sem decimais, ponto como separador de milhares
+    return absValue.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  } else {
+    // Valores < 1000: com 2 decimais, vírgula como separador decimal
+    return absValue.toFixed(2).replace('.', ',');
+  }
+};
+
 const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(0);
   const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(11);
@@ -297,7 +309,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <ConsumptionCard
             label="Água / Aluno"
-            value={`R$ ${enhancedKpis.waterPerStudent.toFixed(2)}`}
+            value={`R$ ${formatCurrency(enhancedKpis.waterPerStudent)}`}
             desc="Gasto médio de água por estudante"
             icon={<Droplets size={16} />}
             color="blue"
@@ -306,7 +318,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
           />
           <ConsumptionCard
             label="Energia / Turma"
-            value={`R$ ${enhancedKpis.energyPerClassroom.toFixed(2)}`}
+            value={`R$ ${formatCurrency(enhancedKpis.energyPerClassroom)}`}
             desc={`${enhancedKpis.numberOfClassrooms} turmas ativas`}
             icon={<Zap size={16} />}
             color="amber"
@@ -315,7 +327,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
           />
           <ConsumptionCard
             label="Mat. Consumo / Aluno"
-            value={`R$ ${enhancedKpis.consumptionMaterialPerStudent.toFixed(2)}`}
+            value={`R$ ${formatCurrency(enhancedKpis.consumptionMaterialPerStudent)}`}
             desc="Material operacional por estudante"
             icon={<Box size={16} />}
             color="purple"
@@ -324,7 +336,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
           />
           <ConsumptionCard
             label="Eventos / Aluno"
-            value={`R$ ${enhancedKpis.eventsPerStudent.toFixed(2)}`}
+            value={`R$ ${formatCurrency(enhancedKpis.eventsPerStudent)}`}
             desc="Investimento em eventos comerciais"
             icon={<PartyPopper size={16} />}
             color="emerald"
@@ -333,7 +345,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
           />
           <ConsumptionCard
             label="Alimentação / Aluno"
-            value={`R$ ${enhancedKpis.studentMealPerStudent.toFixed(2)}`}
+            value={`R$ ${formatCurrency(enhancedKpis.studentMealPerStudent)}`}
             desc="Custo de alimentação por aluno"
             icon={<Users size={16} />}
             color="rose"
@@ -359,13 +371,13 @@ const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, colo
     ? `${value.toFixed(1)}%`
     : isNumber
     ? value.toLocaleString('pt-BR')
-    : `R$ ${Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
+    : `R$ ${formatCurrency(value)}`;
 
   const formattedTrendAbsolute = useMemo(() => {
     if (trendAbsolute === undefined) return null;
     if (isPercent) return `${Math.abs(trendAbsolute).toFixed(1)}%`;
     if (isNumber) return Math.abs(trendAbsolute).toLocaleString('pt-BR');
-    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `R$ ${formatCurrency(trendAbsolute)}`;
   }, [trendAbsolute, isPercent, isNumber]);
 
   return (
@@ -401,7 +413,7 @@ const ConsumptionCard = ({ label, value, desc, icon, color, trend, trendAbsolute
 
   const formattedTrendAbsolute = useMemo(() => {
     if (trendAbsolute === undefined) return null;
-    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `R$ ${formatCurrency(trendAbsolute)}`;
   }, [trendAbsolute]);
 
   return (
