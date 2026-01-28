@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ManualChange } from '../types';
-import { 
-  History, CheckCircle2, XCircle, ArrowRight, AlertCircle, GitFork, 
-  User, Clock, ChevronDown, ChevronUp, ShieldCheck, FileText
+import {
+  History, CheckCircle2, XCircle, ArrowRight, AlertCircle, GitFork,
+  User, Clock, ChevronDown, ChevronUp, ShieldCheck, FileText, Shield, Lock
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ManualChangesViewProps {
   changes: ManualChange[];
@@ -13,6 +14,16 @@ interface ManualChangesViewProps {
 
 const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveChange, rejectChange }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { user, isAdmin } = useAuth();
+
+  // Filtrar mudanças: Admin vê tudo, outros usuários veem apenas as suas
+  const filteredChanges = useMemo(() => {
+    if (isAdmin) {
+      return changes; // Admin vê todas as solicitações
+    }
+    // Usuários não-admin veem apenas suas próprias solicitações
+    return changes.filter(c => c.requestedBy === user?.email);
+  }, [changes, isAdmin, user]);
 
   const formatDateToMMAAAA = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -56,10 +67,37 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
           </div>
           <div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight leading-none">Aprovações</h2>
-            <p className="text-gray-500 text-[10px] font-medium mt-1">Gestão de reclassificações financeiras.</p>
+            <p className="text-gray-500 text-[10px] font-medium mt-1">
+              {isAdmin ? 'Gestão de reclassificações financeiras.' : 'Minhas solicitações de aprovação.'}
+            </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <div className="bg-purple-50 border-2 border-purple-200 px-4 py-2 rounded-xl flex items-center gap-2">
+              <Shield className="text-purple-600" size={16} />
+              <span className="text-xs font-black text-purple-900">ADMINISTRADOR</span>
+            </div>
+          ) : (
+            <div className="bg-blue-50 border-2 border-blue-200 px-4 py-2 rounded-xl flex items-center gap-2">
+              <Lock className="text-blue-600" size={16} />
+              <span className="text-xs font-bold text-blue-900">Apenas Visualização</span>
+            </div>
+          )}
+        </div>
       </header>
+
+      {!isAdmin && (
+        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="text-yellow-600 shrink-0" size={20} />
+          <div>
+            <p className="text-sm font-black text-yellow-900">ℹ️ Visualização Limitada</p>
+            <p className="text-xs text-yellow-700 mt-1">
+              Você está vendo apenas as solicitações que você criou. Apenas administradores podem aprovar ou reprovar alterações.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -75,16 +113,21 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {changes.length === 0 ? (
+              {filteredChanges.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <AlertCircle size={32} />
-                      <p className="font-black text-gray-400 uppercase tracking-widest text-[10px]">Fila Vazia</p>
+                      <p className="font-black text-gray-400 uppercase tracking-widest text-[10px]">
+                        {isAdmin ? 'Fila Vazia' : 'Nenhuma Solicitação'}
+                      </p>
+                      {!isAdmin && (
+                        <p className="text-xs text-gray-400 mt-1">Você ainda não fez nenhuma solicitação de alteração</p>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ) : changes.map((change) => {
+              ) : filteredChanges.map((change) => {
                 const isRateio = change.type === 'RATEIO';
                 const isExpanded = expandedId === change.id;
                 const orig = change.originalTransaction;
@@ -195,10 +238,30 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
 
                       <td className="px-4 py-4 text-right align-top">
                         {change.status === 'Pendente' && (
-                          <div className="flex justify-end gap-1.5">
-                            <button onClick={() => approveChange(change.id)} className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 shadow-md active:scale-95"><CheckCircle2 size={12} /></button>
-                            <button onClick={() => rejectChange(change.id)} className="bg-white text-rose-500 p-2 rounded-lg hover:bg-rose-50 border border-rose-100 active:scale-95"><XCircle size={12} /></button>
-                          </div>
+                          isAdmin ? (
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => approveChange(change.id)}
+                                className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 shadow-md active:scale-95 transition-all"
+                                title="Aprovar solicitação"
+                              >
+                                <CheckCircle2 size={12} />
+                              </button>
+                              <button
+                                onClick={() => rejectChange(change.id)}
+                                className="bg-white text-rose-500 p-2 rounded-lg hover:bg-rose-50 border border-rose-100 active:scale-95 transition-all"
+                                title="Reprovar solicitação"
+                              >
+                                <XCircle size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex justify-end">
+                              <span className="text-[8px] text-gray-400 font-bold px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                                Aguardando Admin
+                              </span>
+                            </div>
+                          )
                         )}
                       </td>
                     </tr>

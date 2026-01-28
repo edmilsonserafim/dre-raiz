@@ -227,6 +227,12 @@ const App: React.FC = () => {
   };
 
   const handleApproveChange = async (changeId: string) => {
+    // Verificar se o usuário é admin
+    if (user?.role !== 'admin') {
+      alert('⚠️ Acesso negado!\n\nApenas administradores podem aprovar alterações.');
+      return;
+    }
+
     const change = manualChanges.find(c => c.id === changeId);
     if (!change) return;
 
@@ -313,6 +319,12 @@ const App: React.FC = () => {
   };
 
   const handleRejectChange = async (changeId: string) => {
+    // Verificar se o usuário é admin
+    if (user?.role !== 'admin') {
+      alert('⚠️ Acesso negado!\n\nApenas administradores podem reprovar alterações.');
+      return;
+    }
+
     const change = manualChanges.find(c => c.id === changeId);
     if (!change) return;
 
