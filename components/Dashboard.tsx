@@ -470,9 +470,9 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
           Indicadores Executivos
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard label="Receita Bruta" value={enhancedKpis.totalRevenue} trend={trends.revenue} color="blue" icon={<Target size={16} />} />
+          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} color="blue" icon={<Target size={16} />} />
           <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} color="orange" icon={<Target size={16} />} />
-          <KPICard label="Margem Líquida" value={enhancedKpis.netMargin} isPercent trend={trends.margin} color="amber" icon={<Target size={16} />} />
+          <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} color="blue" icon={<Users size={16} />} />
           <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} color="teal" icon={<Users size={16} />} />
         </div>
       </section>
