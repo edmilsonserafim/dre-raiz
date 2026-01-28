@@ -184,35 +184,12 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
         </div>
       </header>
 
-      {/* Rateio CSC */}
-      <section>
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Custos Compartilhados
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <KPICard
-            label="Rateio CSC"
-            value={enhancedKpis.sgaCosts + enhancedKpis.rateioCosts}
-            trend={0}
-            color="purple"
-            icon={<Target size={16} />}
-          />
-        </div>
-      </section>
-
       {/* Operational KPIs Section */}
       <section>
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
           Indicadores Operacionais
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <KPICard
-            label="Receita / Aluno"
-            value={enhancedKpis.revenuePerStudent}
-            color="blue"
-            icon={<Users size={16} />}
-            trend={3.2}
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard
             label="Professor / ROL"
             value={enhancedKpis.teacherCostPercent}
@@ -220,6 +197,13 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             color="purple"
             icon={<GraduationCap size={16} />}
             trend={-2.3}
+          />
+          <KPICard
+            label="Professor / Turma"
+            value={enhancedKpis.teacherCostPerClassroom}
+            color="teal"
+            icon={<GraduationCap size={16} />}
+            trend={-1.8}
           />
           <KPICard
             label="Folha Adm / ROL"
@@ -230,11 +214,11 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             trend={1.5}
           />
           <KPICard
-            label="Professor / Turma"
-            value={enhancedKpis.teacherCostPerClassroom}
-            color="teal"
-            icon={<GraduationCap size={16} />}
-            trend={-1.8}
+            label="Rateio CSC"
+            value={enhancedKpis.sgaCosts + enhancedKpis.rateioCosts}
+            trend={0}
+            color="purple"
+            icon={<Target size={16} />}
           />
           <KPICard
             label="Manutenção / ROL"
@@ -252,7 +236,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
           Indicadores de Consumo
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <ConsumptionCard
             label="Água / Aluno"
             value={`R$ ${enhancedKpis.waterPerStudent.toFixed(2)}`}
