@@ -21,7 +21,7 @@ import { usePermissions } from './hooks/usePermissions';
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
-  const { filterTransactions, hasPermissions, allowedBrands, allowedBranches, loading: permissionsLoading } = usePermissions();
+  const { filterTransactions, hasPermissions, allowedBrands, allowedBranches, allowedCategories, loading: permissionsLoading } = usePermissions();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -447,6 +447,7 @@ const App: React.FC = () => {
                   <div className="flex gap-2 text-[10px] font-bold text-yellow-700">
                     {allowedBrands.length > 0 && <span>Marcas: {allowedBrands.join(', ')}</span>}
                     {allowedBranches.length > 0 && <span>Filiais: {allowedBranches.join(', ')}</span>}
+                    {allowedCategories.length > 0 && <span>Categorias: {allowedCategories.join(', ')}</span>}
                   </div>
                 </div>
               </div>

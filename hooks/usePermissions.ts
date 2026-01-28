@@ -18,6 +18,7 @@ interface UsePermissionsReturn {
   hasPermissions: boolean;
   allowedBrands: string[];
   allowedBranches: string[];
+  allowedCategories: string[];
 }
 
 export const usePermissions = (): UsePermissionsReturn => {
@@ -61,7 +62,8 @@ export const usePermissions = (): UsePermissionsReturn => {
       filterTransactions: (transactions) => transactions,
       hasPermissions: false, // Admin não tem restrições
       allowedBrands: [],
-      allowedBranches: []
+      allowedBranches: [],
+      allowedCategories: []
     };
   }
 
@@ -74,7 +76,8 @@ export const usePermissions = (): UsePermissionsReturn => {
       filterTransactions: (transactions) => transactions,
       hasPermissions: false,
       allowedBrands: [],
-      allowedBranches: []
+      allowedBranches: [],
+      allowedCategories: []
     };
   }
 
@@ -108,11 +111,9 @@ export const usePermissions = (): UsePermissionsReturn => {
     }
 
     // Se tem permissão de centro de custo configurada, verificar
-    // (assumindo que centro_custo está mapeado para category ou tag01)
+    // Centro de custo está mapeado para o campo category
     if (allowedCentroCusto.length > 0) {
-      // Aqui você pode ajustar conforme o mapeamento real do seu sistema
-      const transactionCentroCusto = transaction.tag01 || transaction.category;
-      if (!transactionCentroCusto || !allowedCentroCusto.includes(transactionCentroCusto)) {
+      if (!transaction.category || !allowedCentroCusto.includes(transaction.category)) {
         return false;
       }
     }
@@ -132,6 +133,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     filterTransactions,
     hasPermissions: true,
     allowedBrands,
-    allowedBranches
+    allowedBranches,
+    allowedCategories: allowedCentroCusto
   };
 };
