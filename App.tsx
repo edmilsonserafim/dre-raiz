@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
+import KPIsView from './components/KPIsView';
 import InsightsView from './components/InsightsView';
 import DREView from './components/DREView';
 import ManualChangesView from './components/ManualChangesView';
@@ -517,6 +518,7 @@ const App: React.FC = () => {
 
         <div className="px-6 pb-6">
           {currentView === 'dashboard' && <Dashboard kpis={kpis} transactions={filteredTransactions} />}
+          {currentView === 'kpis' && <KPIsView kpis={kpis} transactions={filteredTransactions} />}
           {currentView === 'movements' && (
             <TransactionsView
               transactions={filteredTransactions}

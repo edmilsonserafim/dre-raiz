@@ -469,108 +469,11 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
           Indicadores Executivos
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard label="Receita Bruta" value={enhancedKpis.totalRevenue} trend={trends.revenue} color="blue" icon={<Target size={16} />} />
           <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} color="orange" icon={<Target size={16} />} />
           <KPICard label="Margem Líquida" value={enhancedKpis.netMargin} isPercent trend={trends.margin} color="amber" icon={<Target size={16} />} />
-          <KPICard label="Rateio CSC" value={enhancedKpis.sgaCosts + (filteredByMonth.filter(t => t.scenario === 'Real' && t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0))} trend={0} color="purple" icon={<Target size={16} />} />
           <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} color="teal" icon={<Users size={16} />} />
-        </div>
-      </section>
-
-      {/* Operational KPIs Section */}
-      <section>
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Indicadores Operacionais
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <KPICard
-            label="Receita / Aluno"
-            value={enhancedKpis.revenuePerStudent}
-            color="blue"
-            icon={<Users size={16} />}
-            trend={3.2}
-          />
-          <KPICard
-            label="Professor / ROL"
-            value={enhancedKpis.teacherCostPercent}
-            isPercent
-            color="purple"
-            icon={<GraduationCap size={16} />}
-            trend={-2.3}
-          />
-          <KPICard
-            label="Folha Adm / ROL"
-            value={enhancedKpis.adminPayrollPercent}
-            isPercent
-            color="amber"
-            icon={<Users size={16} />}
-            trend={1.5}
-          />
-          <KPICard
-            label="Professor / Turma"
-            value={enhancedKpis.teacherCostPerClassroom}
-            color="teal"
-            icon={<GraduationCap size={16} />}
-            trend={-1.8}
-          />
-          <KPICard
-            label="Manutenção / ROL"
-            value={enhancedKpis.maintenancePercent}
-            isPercent
-            color="orange"
-            icon={<Target size={16} />}
-            trend={2.5}
-          />
-        </div>
-      </section>
-
-      {/* Consumption Metrics Section */}
-      <section>
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Indicadores de Consumo
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <ConsumptionCard
-            label="Água / Aluno"
-            value={`R$ ${enhancedKpis.waterPerStudent.toFixed(2)}`}
-            desc="Gasto médio de água por estudante"
-            icon={<Droplets size={16} />}
-            color="blue"
-            trend={-3.2}
-          />
-          <ConsumptionCard
-            label="Energia / Turma"
-            value={`R$ ${enhancedKpis.energyPerClassroom.toFixed(2)}`}
-            desc={`${enhancedKpis.numberOfClassrooms} turmas ativas`}
-            icon={<Zap size={16} />}
-            color="amber"
-            trend={2.1}
-          />
-          <ConsumptionCard
-            label="Mat. Consumo / Aluno"
-            value={`R$ ${enhancedKpis.consumptionMaterialPerStudent.toFixed(2)}`}
-            desc="Material operacional por estudante"
-            icon={<Box size={16} />}
-            color="purple"
-            trend={-1.5}
-          />
-          <ConsumptionCard
-            label="Eventos / Aluno"
-            value={`R$ ${enhancedKpis.eventsPerStudent.toFixed(2)}`}
-            desc="Investimento em eventos comerciais"
-            icon={<PartyPopper size={16} />}
-            color="emerald"
-            trend={5.3}
-          />
-          <ConsumptionCard
-            label="Alimentação / Aluno"
-            value={`R$ ${enhancedKpis.studentMealPerStudent.toFixed(2)}`}
-            desc="Custo de alimentação por aluno"
-            icon={<Users size={16} />}
-            color="rose"
-            trend={-2.8}
-          />
         </div>
       </section>
 

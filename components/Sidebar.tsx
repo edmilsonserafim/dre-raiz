@@ -30,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'kpis', label: 'Indicadores e KPIs', icon: BarChart3 },
     { id: 'dre', label: 'DRE Fixa', icon: TableProperties },
     { id: 'movements', label: 'Lançamentos', icon: ReceiptText },
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
