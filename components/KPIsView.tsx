@@ -274,6 +274,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               </div>
             </div>
           </div>
+          </div>
         </div>
       </header>
 
