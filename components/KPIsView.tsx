@@ -22,7 +22,6 @@ const formatCurrency = (value: number): string => {
 const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(0);
   const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(11);
-  const [comparisonMode, setComparisonMode] = useState<'budget' | 'prevYear'>('budget');
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
   // Filter transactions by selected month range
@@ -87,11 +86,9 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
     };
   }, [filteredByMonth, kpis]);
 
-  // Calculate trends with absolute variations based on comparison mode
+  // Calculate trends with absolute variations
   const trends = useMemo(() => {
-    const comparison = filteredByMonth.filter(t =>
-      t.scenario === (comparisonMode === 'budget' ? 'Orçamento' : 'Ano Anterior')
-    );
+    const comparison = filteredByMonth.filter(t => t.scenario === 'Orçamento');
     const real = filteredByMonth.filter(t => t.scenario === 'Real');
 
     // Comparison values
@@ -140,7 +137,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
       eventsPerStudentAbsolute: enhancedKpis.eventsPerStudent - compEventsPerStudent,
       mealPerStudentAbsolute: enhancedKpis.studentMealPerStudent - compMealPerStudent
     };
-  }, [filteredByMonth, enhancedKpis, kpis, comparisonMode]);
+  }, [filteredByMonth, enhancedKpis, kpis]);
 
   return (
     <div className="space-y-6">
@@ -155,35 +152,8 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
             <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Métricas operacionais e de consumo detalhadas</p>
           </div>
 
-          {/* Comparison Mode and Month Range Filters */}
-          <div className="flex items-center gap-4">
-            {/* Comparison Mode Selector */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setComparisonMode('budget')}
-                className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
-                  comparisonMode === 'budget'
-                    ? 'bg-[#1B75BB] text-white shadow-md'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                vs Orçado
-              </button>
-              <button
-                onClick={() => setComparisonMode('prevYear')}
-                className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
-                  comparisonMode === 'prevYear'
-                    ? 'bg-[#1B75BB] text-white shadow-md'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                vs Ano Anterior
-              </button>
-            </div>
-
-            {/* Month Range Filter */}
-            <div className="h-8 w-px bg-gray-300"></div>
-            <div className="flex items-center gap-2">
+          {/* Month Range Filter */}
+          <div className="flex items-center gap-2">
             {/* Quick access buttons */}
             <button
               onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
@@ -273,7 +243,6 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
                 </select>
               </div>
             </div>
-          </div>
           </div>
         </div>
       </header>
