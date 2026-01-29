@@ -142,7 +142,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#1B75BB] to-[#4AC8F4] p-6 rounded-[2rem] shadow-2xl">
+      <header className="bg-gradient-to-r from-[#F44C00] to-[#FF7A3D] p-6 rounded-[2rem] shadow-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl">
@@ -161,7 +161,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
               className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
                 selectedMonthStart === 0 && selectedMonthEnd === 11
-                  ? 'bg-white text-[#1B75BB] shadow-lg'
+                  ? 'bg-white text-[#F44C00] shadow-lg'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
@@ -171,7 +171,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(2); }}
               className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
                 selectedMonthStart === 0 && selectedMonthEnd === 2
-                  ? 'bg-white text-[#1B75BB] shadow-lg'
+                  ? 'bg-white text-[#F44C00] shadow-lg'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
@@ -181,7 +181,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               onClick={() => { setSelectedMonthStart(3); setSelectedMonthEnd(5); }}
               className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
                 selectedMonthStart === 3 && selectedMonthEnd === 5
-                  ? 'bg-white text-[#1B75BB] shadow-lg'
+                  ? 'bg-white text-[#F44C00] shadow-lg'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
@@ -191,7 +191,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               onClick={() => { setSelectedMonthStart(6); setSelectedMonthEnd(8); }}
               className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
                 selectedMonthStart === 6 && selectedMonthEnd === 8
-                  ? 'bg-white text-[#1B75BB] shadow-lg'
+                  ? 'bg-white text-[#F44C00] shadow-lg'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
@@ -201,7 +201,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
               onClick={() => { setSelectedMonthStart(9); setSelectedMonthEnd(11); }}
               className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
                 selectedMonthStart === 9 && selectedMonthEnd === 11
-                  ? 'bg-white text-[#1B75BB] shadow-lg'
+                  ? 'bg-white text-[#F44C00] shadow-lg'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
