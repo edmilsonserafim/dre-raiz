@@ -6,11 +6,9 @@ import {
   TableProperties,
   LineChart,
   History,
-  Settings,
-  MessageSquareQuote,
   ReceiptText,
   BarChart3,
-  Lightbulb,
+  Brain,
   LogOut,
   User as UserIcon,
   Shield
@@ -35,9 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
     { id: 'movements', label: 'Lançamentos', icon: ReceiptText },
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
     { id: 'forecasting', label: 'Forecasting', icon: LineChart },
-    { id: 'assistant', label: 'Estrategista SAP', icon: MessageSquareQuote },
-    { id: 'insights', label: 'IA Insights', icon: Lightbulb },
-    { id: 'settings', label: 'Configurações', icon: Settings },
+    { id: 'ai_financial', label: 'IA Financeira', icon: Brain },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : []),
   ];
 

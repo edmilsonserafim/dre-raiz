@@ -3,13 +3,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import KPIsView from './components/KPIsView';
-import InsightsView from './components/InsightsView';
+import AIFinancialView from './components/AIFinancialView';
 import DREView from './components/DREView';
 import ManualChangesView from './components/ManualChangesView';
 import TransactionsView from './components/TransactionsView';
-import AssistantView from './components/AssistantView';
 import ForecastingView from './components/ForecastingView';
-import DatabaseView from './components/DatabaseView';
 import LoginScreen from './components/LoginScreen';
 import AdminPanel from './components/AdminPanel';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
@@ -532,11 +530,9 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
-          {currentView === 'insights' && <InsightsView transactions={filteredTransactions} kpis={kpis} />}
-          {currentView === 'assistant' && <AssistantView transactions={filteredTransactions} kpis={kpis} />}
+          {currentView === 'ai_financial' && <AIFinancialView transactions={filteredTransactions} kpis={kpis} />}
           {currentView === 'dre' && <DREView transactions={filteredTransactions} onDrillDown={handleDrillDown} />}
           {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
-          {currentView === 'settings' && <DatabaseView />}
           {currentView === 'admin' && <AdminPanel />}
         </div>
       </main>
