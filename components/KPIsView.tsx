@@ -142,76 +142,74 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#F44C00] to-[#FF7A3D] p-6 rounded-[2rem] shadow-2xl">
+      <header className="bg-gray-50 p-6 border-b border-gray-200 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl">
-              <Target size={32} className="text-white" />
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight">Indicadores e KPIs</h2>
             </div>
-            <div>
-              <h1 className="text-3xl font-black text-white tracking-tight">Indicadores e KPIs</h1>
-              <p className="text-sm text-white/80 font-bold mt-1">Métricas operacionais e de consumo detalhadas</p>
-            </div>
+            <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Métricas operacionais e de consumo detalhadas</p>
           </div>
 
           {/* Month Range Filter */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Quick access buttons */}
             <button
               onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
-              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
                 selectedMonthStart === 0 && selectedMonthEnd === 11
-                  ? 'bg-white text-[#F44C00] shadow-lg'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-[#F44C00] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
               Ano
             </button>
             <button
               onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(2); }}
-              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
                 selectedMonthStart === 0 && selectedMonthEnd === 2
-                  ? 'bg-white text-[#F44C00] shadow-lg'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-[#F44C00] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
               1T
             </button>
             <button
               onClick={() => { setSelectedMonthStart(3); setSelectedMonthEnd(5); }}
-              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
                 selectedMonthStart === 3 && selectedMonthEnd === 5
-                  ? 'bg-white text-[#F44C00] shadow-lg'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-[#F44C00] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
               2T
             </button>
             <button
               onClick={() => { setSelectedMonthStart(6); setSelectedMonthEnd(8); }}
-              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
                 selectedMonthStart === 6 && selectedMonthEnd === 8
-                  ? 'bg-white text-[#F44C00] shadow-lg'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-[#F44C00] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
               3T
             </button>
             <button
               onClick={() => { setSelectedMonthStart(9); setSelectedMonthEnd(11); }}
-              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${
                 selectedMonthStart === 9 && selectedMonthEnd === 11
-                  ? 'bg-white text-[#F44C00] shadow-lg'
-                  : 'bg-white/20 text-white hover:bg-white/30'
+                  ? 'bg-[#F44C00] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
               4T
             </button>
 
             {/* Month selectors */}
-            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
+            <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-white/80 font-bold">De:</span>
+                <span className="text-xs text-gray-600 font-bold">De:</span>
                 <select
                   value={selectedMonthStart}
                   onChange={e => {
@@ -222,13 +220,13 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
                       setSelectedMonthEnd(newStart);
                     }
                   }}
-                  className="bg-white/30 text-white text-xs font-black px-2 py-1 rounded outline-none cursor-pointer"
+                  className="bg-gray-50 text-gray-900 text-xs font-black px-2 py-1 rounded outline-none cursor-pointer border border-gray-200"
                 >
                   {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-white/80 font-bold">Até:</span>
+                <span className="text-xs text-gray-600 font-bold">Até:</span>
                 <select
                   value={selectedMonthEnd}
                   onChange={e => {
@@ -239,7 +237,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
                       setSelectedMonthStart(newEnd);
                     }
                   }}
-                  className="bg-white/30 text-white text-xs font-black px-2 py-1 rounded outline-none cursor-pointer"
+                  className="bg-gray-50 text-gray-900 text-xs font-black px-2 py-1 rounded outline-none cursor-pointer border border-gray-200"
                 >
                   {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                 </select>
