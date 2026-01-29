@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import { Transaction, TransactionType, TransactionStatus, ManualChange } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
 import * as XLSX from 'xlsx';
@@ -67,10 +68,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [rateioTransaction, setRateioTransaction] = useState<Transaction | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
 
-  // Abas e Paginação
+  // Abas
   const [activeTab, setActiveTab] = useState<'real' | 'orcamento' | 'comparativo'>('real');
-  const [currentPage, setCurrentPage] = useState(1);
-  const RECORDS_PER_PAGE = 1000;
 
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
@@ -283,19 +282,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const totalAmount = useMemo(() => {
     return filteredAndSorted.reduce((sum, t) => t.type === 'REVENUE' ? sum + t.amount : sum - t.amount, 0);
   }, [filteredAndSorted]);
-
-  // Paginação
-  const totalPages = Math.ceil(filteredAndSorted.length / RECORDS_PER_PAGE);
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
-    const endIndex = startIndex + RECORDS_PER_PAGE;
-    return filteredAndSorted.slice(startIndex, endIndex);
-  }, [filteredAndSorted, currentPage]);
-
-  // Resetar para página 1 quando filtros ou aba mudar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [colFilters, activeTab]);
 
   // Contadores por aba
   const tabCounts = useMemo(() => {
@@ -671,178 +657,121 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       )}
 
       {/* Controles de Paginação */}
-      {filteredAndSorted.length > 0 && (
-        <div className="bg-white border border-gray-200 p-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-4">
-            <p className="text-xs font-bold text-gray-600">
-              Mostrando <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span> a{' '}
-              <span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
-              <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span> registros
-            </p>
-            {filteredAndSorted.length > RECORDS_PER_PAGE && (
-              <p className="text-[10px] text-gray-400">
-                (Página {currentPage} de {totalPages})
-              </p>
-            )}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                ← Anterior
-              </button>
-
-              <div className="flex gap-1">
-                {currentPage > 2 && (
-                  <>
-                    <button onClick={() => setCurrentPage(1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">1</button>
-                    {currentPage > 3 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
-                  </>
-                )}
-
-                {currentPage > 1 && (
-                  <button onClick={() => setCurrentPage(currentPage - 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
-                    {currentPage - 1}
-                  </button>
-                )}
-
-                <button className="px-2 py-1 text-xs font-black bg-[#1B75BB] text-white rounded">
-                  {currentPage}
-                </button>
-
-                {currentPage < totalPages && (
-                  <button onClick={() => setCurrentPage(currentPage + 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
-                    {currentPage + 1}
-                  </button>
-                )}
-
-                {currentPage < totalPages - 1 && (
-                  <>
-                    {currentPage < totalPages - 2 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
-                    <button onClick={() => setCurrentPage(totalPages)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
-                      {totalPages}
-                    </button>
-                  </>
-                )}
-              </div>
-
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                Próxima →
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="bg-white border border-gray-200 overflow-hidden shadow-sm rounded-none">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] relative">
-          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
-            <thead>
-              <tr className="whitespace-nowrap">
-                <HeaderCell label="Cen" sortKey="scenario" config={sortConfig} setConfig={setSortConfig} className="w-[50px]" />
-                <HeaderCell label="Data" sortKey="date" config={sortConfig} setConfig={setSortConfig} className="w-[65px]" />
-                <HeaderCell label="CC" sortKey="tag01" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
-                <HeaderCell label="Seg" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
-                <HeaderCell label="Proj" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
-                <HeaderCell label="Conta" sortKey="category" config={sortConfig} setConfig={setSortConfig} className="w-[105px]" />
-                <HeaderCell label="Mar" sortKey="brand" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
-                <HeaderCell label="Filial" sortKey="branch" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
-                <HeaderCell label="Tick" sortKey="ticket" config={sortConfig} setConfig={setSortConfig} className="w-[60px]" />
-                <HeaderCell label="Fornecedor" sortKey="vendor" config={sortConfig} setConfig={setSortConfig} className="w-[120px]" />
-                <HeaderCell label="Descrição" sortKey="description" config={sortConfig} setConfig={setSortConfig} className="w-[180px]" />
-                <HeaderCell label="Valor" sortKey="amount" config={sortConfig} setConfig={setSortConfig} align="right" className="w-[95px]" />
-                <HeaderCell label="Status" sortKey="status" config={sortConfig} setConfig={setSortConfig} align="center" className="w-[70px]" />
-                <th className="sticky top-0 z-[60] bg-[#1B75BB] text-white text-center w-[65px] border-b border-white/10 px-1 py-1.5 uppercase text-[8px] font-black">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {paginatedData.length === 0 ? (
-                <tr>
-                  <td colSpan={14} className="py-20">
-                    <div className="text-center">
-                      <AlertCircle size={48} className="mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500 font-bold text-sm">Nenhum lançamento encontrado</p>
-                      <p className="text-gray-400 text-xs mt-2">Ajuste os filtros ou limpe-os para ver mais dados</p>
-                      {isAnyFilterActive && (
-                        <button
-                          onClick={handleClearAllFilters}
-                          className="mt-4 px-4 py-2 bg-[#F44C00] text-white rounded-xl text-xs font-black uppercase hover:bg-[#d44200] transition-all"
-                        >
-                          Limpar Filtros
-                        </button>
-                      )}
+        {filteredAndSorted.length === 0 ? (
+          <div className="py-20 text-center">
+            <AlertCircle size={48} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500 font-bold text-sm">Nenhum lançamento encontrado</p>
+            <p className="text-gray-400 text-xs mt-2">Ajuste os filtros ou limpe-os para ver mais dados</p>
+            {isAnyFilterActive && (
+              <button
+                onClick={handleClearAllFilters}
+                className="mt-4 px-4 py-2 bg-[#F44C00] text-white rounded-xl text-xs font-black uppercase hover:bg-[#d44200] transition-all"
+              >
+                Limpar Filtros
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto min-w-[1200px]">
+              <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
+                <thead>
+                  <tr className="whitespace-nowrap">
+                    <HeaderCell label="Cen" sortKey="scenario" config={sortConfig} setConfig={setSortConfig} className="w-[50px]" />
+                    <HeaderCell label="Data" sortKey="date" config={sortConfig} setConfig={setSortConfig} className="w-[65px]" />
+                    <HeaderCell label="CC" sortKey="tag01" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
+                    <HeaderCell label="Seg" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
+                    <HeaderCell label="Proj" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
+                    <HeaderCell label="Conta" sortKey="category" config={sortConfig} setConfig={setSortConfig} className="w-[105px]" />
+                    <HeaderCell label="Mar" sortKey="brand" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
+                    <HeaderCell label="Filial" sortKey="branch" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
+                    <HeaderCell label="Tick" sortKey="ticket" config={sortConfig} setConfig={setSortConfig} className="w-[60px]" />
+                    <HeaderCell label="Fornecedor" sortKey="vendor" config={sortConfig} setConfig={setSortConfig} className="w-[120px]" />
+                    <HeaderCell label="Descrição" sortKey="description" config={sortConfig} setConfig={setSortConfig} className="w-[180px]" />
+                    <HeaderCell label="Valor" sortKey="amount" config={sortConfig} setConfig={setSortConfig} align="right" className="w-[95px]" />
+                    <HeaderCell label="Status" sortKey="status" config={sortConfig} setConfig={setSortConfig} align="center" className="w-[70px]" />
+                    <th className="sticky top-0 z-[60] bg-[#1B75BB] text-white text-center w-[65px] border-b border-white/10 px-1 py-1.5 uppercase text-[8px] font-black">Ações</th>
+                  </tr>
+                </thead>
+              </table>
+              <List
+                height={Math.min(600, window.innerHeight - 420)}
+                itemCount={filteredAndSorted.length}
+                itemSize={32}
+                width="100%"
+                style={{ minWidth: '1200px' }}
+              >
+                {({ index, style }) => {
+                  const t = filteredAndSorted[index];
+                  return (
+                    <div style={style}>
+                      <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
+                        <tbody className="bg-white">
+                          <tr className="hover:bg-blue-50/50 transition-colors border-b border-gray-50 h-8">
+                            <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden w-[50px]"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
+                            <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden w-[65px]">{formatDateToMMAAAA(t.date)}</td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[75px]">{t.tag01 || '-'}</td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[85px]">{t.tag02 || '-'}</td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[85px]">{t.tag03 || '-'}</td>
+                            <td className="px-2 py-1 text-[8px] font-black text-[#F44C00] border-r border-gray-100 uppercase truncate w-[105px]">{t.category}</td>
+                            <td className="px-2 py-1 text-[8px] font-black text-[#1B75BB] border-r border-gray-100 uppercase truncate w-[45px]">{t.brand || 'SAP'}</td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[100px]">{t.branch}</td>
+                            <td className="px-2 py-1 text-[8px] font-mono border-r border-gray-100 truncate w-[60px]">
+                              {t.ticket ? (
+                                <a href={`https://raizeducacao.zeev.it/report/main/?inpsearch=${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-[#1B75BB] font-black flex items-center gap-0.5 hover:underline active:scale-95">
+                                  {t.ticket} <ExternalLink size={8} />
+                                </a>
+                              ) : '-'}
+                            </td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[120px]" title={t.vendor}>{t.vendor || '-'}</td>
+                            <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate w-[180px]" title={t.description}>{t.description}</td>
+                            <td className={`px-2 py-1 text-[8px] font-mono font-black text-right border-r border-gray-100 w-[95px] ${t.type === 'REVENUE' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                              {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1 text-center border-r border-gray-100 w-[70px]">
+                              <span className={`px-2 py-0.5 rounded-none text-[8px] font-black uppercase border ${
+                                t.status === 'Pendente' ? 'bg-orange-50 text-orange-600 border-orange-200' :
+                                t.status === 'Ajustado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                                t.status === 'Rateado' ? 'bg-purple-50 text-purple-600 border-purple-200' :
+                                t.status === 'Excluído' ? 'bg-red-50 text-red-600 border-red-200' :
+                                'bg-gray-50 text-gray-400 border-gray-200'
+                              }`}>
+                                {t.status}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1 text-center w-[65px]">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={() => setEditingTransaction(t)} className="p-1.5 text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 active:scale-90 transition-all"><Edit3 size={12}/></button>
+                                <button onClick={() => setRateioTransaction(t)} className="p-1.5 text-[#F44C00] bg-amber-50 hover:bg-amber-100 border border-amber-100 active:scale-90 transition-all"><GitFork size={12}/></button>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
-                  </td>
-                </tr>
-              ) : paginatedData.map(t => (
-                <tr key={t.id} className="hover:bg-blue-50/50 transition-colors border-b border-gray-50 h-8">
-                  <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
-                  <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden">{formatDateToMMAAAA(t.date)}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag01 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag02 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag03 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-black text-[#F44C00] border-r border-gray-100 uppercase truncate">{t.category}</td>
-                  <td className="px-2 py-1 text-[8px] font-black text-[#1B75BB] border-r border-gray-100 uppercase truncate">{t.brand || 'SAP'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.branch}</td>
-                  <td className="px-2 py-1 text-[8px] font-mono border-r border-gray-100 truncate">
-                    {t.ticket ? (
-                      <a href={`https://raizeducacao.zeev.it/report/main/?inpsearch=${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-[#1B75BB] font-black flex items-center gap-0.5 hover:underline active:scale-95">
-                        {t.ticket} <ExternalLink size={8} />
-                      </a>
-                    ) : '-'}
-                  </td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.vendor}>{t.vendor || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.description}>{t.description}</td>
-                  <td className={`px-2 py-1 text-[8px] font-mono font-black text-right border-r border-gray-100 ${t.type === 'REVENUE' ? 'text-emerald-600' : 'text-gray-900'}`}>
-                    {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-2 py-1 text-center border-r border-gray-100">
-                    <span className={`px-2 py-0.5 rounded-none text-[8px] font-black uppercase border ${
-                      t.status === 'Pendente' ? 'bg-orange-50 text-orange-600 border-orange-200' :
-                      t.status === 'Ajustado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                      t.status === 'Rateado' ? 'bg-purple-50 text-purple-600 border-purple-200' :
-                      t.status === 'Excluído' ? 'bg-red-50 text-red-600 border-red-200' :
-                      'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                       <button onClick={() => setEditingTransaction(t)} className="p-1.5 text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 active:scale-90 transition-all"><Edit3 size={12}/></button>
-                       <button onClick={() => setRateioTransaction(t)} className="p-1.5 text-[#F44C00] bg-amber-50 hover:bg-amber-100 border border-amber-100 active:scale-90 transition-all"><GitFork size={12}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="sticky bottom-0 z-50 bg-[#152e55] text-white">
-              <tr className="h-10 border-t border-white/20 whitespace-nowrap">
-                <td colSpan={11} className="px-4 text-[10px] font-black uppercase tracking-widest bg-[#152e55]">
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                       <ListOrdered size={14} className="text-[#4AC8F4]" />
-                       <span>ITENS: <span className="text-[#4AC8F4]">{filteredAndSorted.length}</span></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <Calculator size={14} className="text-[#4AC8F4]" />
-                       <span>TOTAL: <span className="text-[#4AC8F4]">R$ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                    </div>
+                  );
+                }}
+              </List>
+            </div>
+
+            <div className="sticky bottom-0 z-50 bg-[#152e55] text-white border-t border-white/20">
+              <div className="h-10 flex items-center px-4">
+                <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
+                  <div className="flex items-center gap-2">
+                    <ListOrdered size={14} className="text-[#4AC8F4]" />
+                    <span>ITENS: <span className="text-[#4AC8F4]">{filteredAndSorted.length}</span></span>
                   </div>
-                </td>
-                <td colSpan={3} className="bg-[#152e55]"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+                  <div className="flex items-center gap-2">
+                    <Calculator size={14} className="text-[#4AC8F4]" />
+                    <span>TOTAL: <span className="text-[#4AC8F4]">R$ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* --- MODAL DE SOLICITAÇÃO DE AJUSTE --- */}
