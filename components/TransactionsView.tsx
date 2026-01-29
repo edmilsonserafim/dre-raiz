@@ -79,7 +79,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [rateioJustification, setRateioJustification] = useState('');
 
   const initialFilters = {
-    scenario: [] as string[],
     monthFrom: '',
     monthTo: '',
     brand: [] as string[],
@@ -91,7 +90,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     ticket: '',
     vendor: '',
     description: '',
-    amount: ''
+    amount: '',
+    recurring: ['Sim'] as string[]  // Filtro padrão: apenas "Sim"
   };
 
   const [colFilters, setColFilters] = useState(initialFilters);
@@ -160,7 +160,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       tag02s: getOptions('tag02'),
       tag03s: getOptions('tag03'),
       categories: getOptions('category'),
-      scenarios: getOptions('scenario')
+      recurrings: ['Sim', 'Não']
     };
   }, [transactions, colFilters]);
 
@@ -513,13 +513,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   return (
-    <div className="space-y-3 animate-in fade-in duration-500 pb-10">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+    <div className="space-y-2 animate-in fade-in duration-500 pb-10">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
         <div>
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <ReceiptText className="text-[#F44C00]" size={18} /> Lançamentos
+          <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+            <ReceiptText className="text-[#F44C00]" size={16} /> Lançamentos
           </h2>
-          <p className="text-gray-500 text-[8px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
+          <p className="text-gray-500 text-[7px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
         </div>
         <div className="flex items-center gap-1.5">
            <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase tracking-widest transition-all border ${showFilters ? 'bg-[#1B75BB] text-white border-[#1B75BB]' : 'bg-white text-[#1B75BB] border-[#1B75BB]'}`}>
@@ -537,17 +537,17 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       </header>
 
       {/* Abas de Cenário */}
-      <div className="flex gap-2 border-b-2 border-gray-200">
+      <div className="flex gap-2 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('real')}
-          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+          className={`px-3 py-1.5 font-black text-[10px] uppercase tracking-wide transition-all relative ${
             activeTab === 'real'
-              ? 'text-[#1B75BB] border-b-4 border-[#1B75BB] -mb-[2px]'
+              ? 'text-[#1B75BB] border-b-2 border-[#1B75BB] -mb-[1px]'
               : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           Real
-          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+          <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${
             activeTab === 'real' ? 'bg-[#1B75BB] text-white' : 'bg-gray-200 text-gray-600'
           }`}>
             {tabCounts.real.toLocaleString()}
@@ -555,14 +555,14 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('orcamento')}
-          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+          className={`px-3 py-1.5 font-black text-[10px] uppercase tracking-wide transition-all relative ${
             activeTab === 'orcamento'
-              ? 'text-[#F44C00] border-b-4 border-[#F44C00] -mb-[2px]'
+              ? 'text-[#F44C00] border-b-2 border-[#F44C00] -mb-[1px]'
               : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           Orçamento
-          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+          <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${
             activeTab === 'orcamento' ? 'bg-[#F44C00] text-white' : 'bg-gray-200 text-gray-600'
           }`}>
             {tabCounts.orcamento.toLocaleString()}
@@ -570,51 +570,19 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('comparativo')}
-          className={`px-4 py-2 font-black text-xs uppercase tracking-wide transition-all relative ${
+          className={`px-3 py-1.5 font-black text-[10px] uppercase tracking-wide transition-all relative ${
             activeTab === 'comparativo'
-              ? 'text-emerald-600 border-b-4 border-emerald-600 -mb-[2px]'
+              ? 'text-emerald-600 border-b-2 border-emerald-600 -mb-[1px]'
               : 'text-gray-400 hover:text-gray-600'
           }`}
         >
           Ano Anterior
-          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+          <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${
             activeTab === 'comparativo' ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
           }`}>
             {tabCounts.comparativo.toLocaleString()}
           </span>
         </button>
-      </div>
-
-      {/* Summary Cards Section */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-in slide-in-from-top-2 duration-300">
-        <SummaryCard
-          label="Receitas"
-          value={filteredSummary.totalRevenue}
-          color="emerald"
-          icon={<TrendingUp size={16} />}
-          change={filteredSummary.revenueVsBudget}
-        />
-        <SummaryCard
-          label="Custos Variáveis"
-          value={filteredSummary.totalVariableCosts}
-          color="orange"
-          icon={<TrendingDown size={16} />}
-          change={filteredSummary.variableCostsVsBudget}
-        />
-        <SummaryCard
-          label="Custos Fixos"
-          value={filteredSummary.totalFixedCosts}
-          color="blue"
-          icon={<Calculator size={16} />}
-          change={filteredSummary.fixedCostsVsBudget}
-        />
-        <SummaryCard
-          label="EBITDA"
-          value={filteredSummary.ebitda}
-          color={filteredSummary.ebitda >= 0 ? 'teal' : 'rose'}
-          icon={<ListOrdered size={16} />}
-          change={filteredSummary.ebitdaVsBudget}
-        />
       </div>
 
       {showFilters && (
@@ -629,59 +597,65 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 Limpar Filtros
               </button>
            </div>
-           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5">
-              <MultiSelectFilter id="scenario" label="Cenário" options={dynamicOptions.scenarios} selected={colFilters.scenario} active={isFilterActive('scenario')} />
-              <div className="col-span-2 space-y-0.5">
-                <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">Período (Mês-Ano)</label>
-                <div className="flex gap-1">
-                  <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthFrom') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
-                    <span className="text-[7px] text-gray-400">De:</span>
-                    <input
-                      type="month"
-                      value={colFilters.monthFrom}
-                      onChange={e => setColFilters({...colFilters, monthFrom: e.target.value})}
-                      className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
-                      placeholder="MM-AAAA"
-                    />
-                  </div>
-                  <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthTo') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
-                    <span className="text-[7px] text-gray-400">Até:</span>
-                    <input
-                      type="month"
-                      value={colFilters.monthTo}
-                      onChange={e => setColFilters({...colFilters, monthTo: e.target.value})}
-                      className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
-                      placeholder="MM-AAAA"
-                    />
+           <div className="space-y-1.5">
+              {/* Primeira linha de filtros */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-1.5">
+                <div className="col-span-2 space-y-0.5">
+                  <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">Período (Mês-Ano)</label>
+                  <div className="flex gap-1">
+                    <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthFrom') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
+                      <span className="text-[7px] text-gray-400">De:</span>
+                      <input
+                        type="month"
+                        value={colFilters.monthFrom}
+                        onChange={e => setColFilters({...colFilters, monthFrom: e.target.value})}
+                        className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
+                        placeholder="MM-AAAA"
+                      />
+                    </div>
+                    <div className={`border p-1 rounded-none text-[8px] flex items-center gap-1 flex-1 ${isFilterActive('monthTo') ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100'}`}>
+                      <span className="text-[7px] text-gray-400">Até:</span>
+                      <input
+                        type="month"
+                        value={colFilters.monthTo}
+                        onChange={e => setColFilters({...colFilters, monthTo: e.target.value})}
+                        className="bg-transparent outline-none text-[8px] font-bold flex-1 min-w-0"
+                        placeholder="MM-AAAA"
+                      />
+                    </div>
                   </div>
                 </div>
+                <MultiSelectFilter id="tag01" label="C.Custo" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
+                <MultiSelectFilter id="tag02" label="Segmento" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} />
+                <MultiSelectFilter id="tag03" label="Projeto" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} />
+                <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} />
+                <MultiSelectFilter id="brand" label="Marca" options={dynamicOptions.brands} selected={colFilters.brand} active={isFilterActive('brand')} />
+                <MultiSelectFilter id="branch" label="Unidade" options={dynamicOptions.branches} selected={colFilters.branch} active={isFilterActive('branch')} />
               </div>
-              <MultiSelectFilter id="tag01" label="C.Custo" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
-              <MultiSelectFilter id="tag02" label="Segmento" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} />
-              <MultiSelectFilter id="tag03" label="Projeto" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} />
-              <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} />
-              <MultiSelectFilter id="brand" label="Marca" options={dynamicOptions.brands} selected={colFilters.brand} active={isFilterActive('brand')} />
-              <MultiSelectFilter id="branch" label="Unidade" options={dynamicOptions.branches} selected={colFilters.branch} active={isFilterActive('branch')} />
-              <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
-              <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
-              <FilterTextInput label="Desc" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
-              <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
+
+              {/* Segunda linha de filtros */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-1.5">
+                <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
+                <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
+                <FilterTextInput label="Descrição" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-3" debouncedSetFilter={debouncedSetFilter} />
+                <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
+                <MultiSelectFilter id="recurring" label="Recorrência" options={dynamicOptions.recurrings} selected={colFilters.recurring} active={isFilterActive('recurring')} />
+              </div>
            </div>
         </div>
       )}
 
       {/* Controles de Paginação */}
       {filteredAndSorted.length > 0 && (
-        <div className="bg-white border border-gray-200 p-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-4">
-            <p className="text-xs font-bold text-gray-600">
-              Mostrando <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span> a{' '}
-              <span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
-              <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span> registros
+        <div className="bg-white border border-gray-200 p-1.5 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-bold text-gray-600">
+              <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span>-<span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
+              <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span>
             </p>
             {filteredAndSorted.length > RECORDS_PER_PAGE && (
-              <p className="text-[10px] text-gray-400">
-                (Página {currentPage} de {totalPages})
+              <p className="text-[9px] text-gray-400">
+                (Pág {currentPage}/{totalPages})
               </p>
             )}
           </div>
@@ -903,6 +877,16 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                         {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[8px] font-black text-gray-500 uppercase">Status de Recorrência</label>
+                        <DeParaVisualizer oldValue={editingTransaction.recurring || 'Sim'} newValue={editForm.recurring} />
+                      </div>
+                      <select value={editForm.recurring} onChange={e => setEditForm({...editForm, recurring: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
+                        <option value="Sim">Sim</option>
+                        <option value="Não">Não</option>
+                      </select>
+                    </div>
                     <div className="col-span-2 space-y-1 pt-4">
                       <label className="text-[8px] font-black text-[#F44C00] uppercase">Justificativa da Solicitação (Obrigatório)</label>
                       <textarea value={editForm.justification} onChange={e => setEditForm({...editForm, justification: e.target.value})} placeholder="Explique o motivo deste ajuste para aprovação da diretoria..." className="w-full border border-gray-200 p-3 text-[10px] font-bold h-32 outline-none focus:border-[#F44C00] bg-gray-50/10" />
@@ -1047,18 +1031,18 @@ const SummaryCard: React.FC<{
   };
 
   return (
-    <div className={`border-2 rounded-xl p-3 ${colorClasses[color]}`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[8px] font-black uppercase tracking-widest opacity-70">{label}</span>
-        {icon}
+    <div className={`border-2 rounded-lg p-2 ${colorClasses[color]}`}>
+      <div className="flex items-center justify-between mb-0.5">
+        <span className="text-[7px] font-black uppercase tracking-widest opacity-70">{label}</span>
+        <div className="scale-75">{icon}</div>
       </div>
-      <p className="text-xl font-black mb-0.5">
+      <p className="text-base font-black mb-0">
         R$ {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
       </p>
       {change !== undefined && (
-        <div className="flex items-center gap-1 text-[9px] font-bold">
-          {change >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-          <span>{Math.abs(change).toFixed(1)}% vs Orçado</span>
+        <div className="flex items-center gap-0.5 text-[8px] font-bold">
+          {change >= 0 ? <ArrowUpRight size={8} /> : <ArrowDownRight size={8} />}
+          <span>{Math.abs(change).toFixed(1)}%</span>
         </div>
       )}
     </div>

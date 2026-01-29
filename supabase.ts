@@ -28,6 +28,9 @@ export interface DatabaseTransaction {
   tag01?: string | null;
   tag02?: string | null;
   tag03?: string | null;
+  recurring?: string | null;
+  ticket?: string | null;
+  vendor?: string | null;
   created_at?: string;
   updated_at?: string;
 }

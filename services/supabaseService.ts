@@ -21,6 +21,9 @@ const transactionToDb = (t: Transaction): DatabaseTransaction => {
   if (t.tag01) dbTransaction.tag01 = t.tag01;
   if (t.tag02) dbTransaction.tag02 = t.tag02;
   if (t.tag03) dbTransaction.tag03 = t.tag03;
+  if (t.recurring) dbTransaction.recurring = t.recurring;
+  if (t.ticket) dbTransaction.ticket = t.ticket;
+  if (t.vendor) dbTransaction.vendor = t.vendor;
 
   return dbTransaction;
 };
@@ -39,7 +42,10 @@ const dbToTransaction = (db: DatabaseTransaction): Transaction => ({
   brand: db.brand,
   tag01: db.tag01,
   tag02: db.tag02,
-  tag03: db.tag03
+  tag03: db.tag03,
+  recurring: db.recurring || undefined,
+  ticket: db.ticket || undefined,
+  vendor: db.vendor || undefined
 });
 
 // Converter ManualChange para formato do banco

@@ -269,8 +269,8 @@ const App: React.FC = () => {
         console.log('✏️ Tipo:', change.type, '- atualizando transação');
 
         // Para MULTI, CONTA, DATA, MARCA, FILIAL
-        // Remover campos que não existem no banco: justification, recurring, ticket, vendor
-        const { justification, recurring, ticket, vendor, ...transactionData } = parsedValue;
+        // Remover apenas justification (campo que não existe no banco)
+        const { justification, ...transactionData } = parsedValue;
         const updatedData = {
           ...transactionData,
           status: 'Ajustado',
@@ -398,7 +398,7 @@ const App: React.FC = () => {
     };
   }, [filteredTransactions, selectedBrand, selectedBranch]);
 
-  const showGlobalFilters = currentView !== 'dre' && currentView !== 'movements';
+  const showGlobalFilters = currentView !== 'dre' && currentView !== 'movements' && currentView !== 'dashboard';
 
   // Tela de loading - autenticação
   if (authLoading) {
@@ -515,7 +515,18 @@ const App: React.FC = () => {
         </div>
 
         <div className="px-6 pb-6">
-          {currentView === 'dashboard' && <Dashboard kpis={kpis} transactions={filteredTransactions} />}
+          {currentView === 'dashboard' && (
+            <Dashboard
+              kpis={kpis}
+              transactions={filteredTransactions}
+              selectedBrand={selectedBrand}
+              selectedBranch={selectedBranch}
+              uniqueBrands={uniqueBrands}
+              availableBranches={availableBranches}
+              onBrandChange={setSelectedBrand}
+              onBranchChange={setSelectedBranch}
+            />
+          )}
           {currentView === 'kpis' && <KPIsView kpis={kpis} transactions={filteredTransactions} />}
           {currentView === 'movements' && (
             <TransactionsView

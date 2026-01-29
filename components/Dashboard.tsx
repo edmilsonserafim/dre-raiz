@@ -1,15 +1,30 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ComposedChart, Line, Legend, ReferenceLine } from 'recharts';
-import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp } from 'lucide-react';
+import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2 } from 'lucide-react';
 import { SchoolKPIs, Transaction } from '../types';
 import { BRANCHES, CATEGORIES } from '../constants';
 
 interface DashboardProps {
   kpis: SchoolKPIs;
   transactions: Transaction[];
+  selectedBrand: string;
+  selectedBranch: string;
+  uniqueBrands: string[];
+  availableBranches: string[];
+  onBrandChange: (brand: string) => void;
+  onBranchChange: (branch: string) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  kpis,
+  transactions,
+  selectedBrand,
+  selectedBranch,
+  uniqueBrands,
+  availableBranches,
+  onBrandChange,
+  onBranchChange
+}) => {
   const [activeMetric, setActiveMetric] = useState<'revenue' | 'ebitda' | 'margin'>('ebitda');
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(0);
   const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(11);
@@ -344,34 +359,79 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
         }
       `}</style>
       <div className="animate-in fade-in duration-500 pb-10">
-      <header className="sticky top-0 z-40 bg-gray-50 -mx-6 px-6 pt-4 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-             <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
-             <h2 className="text-xl font-black text-gray-900 tracking-tight">Painel Executivo Raiz</h2>
-          </div>
-          <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Grupo Raiz Educação • Performance Financeira Consolidada</p>
-        </div>
-
-        <div className="flex gap-2">
-          <div className="flex bg-white p-0.5 rounded-lg border border-gray-100 shadow-sm">
-            {(['budget', 'prevYear'] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setComparisonMode(mode)}
-                className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-lg ${
-                  comparisonMode === mode
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'text-gray-400 hover:text-[#1B75BB]'
-                }`}
-              >
-                vs {mode === 'budget' ? 'ORÇADO' : 'ANO ANT'}
-              </button>
-            ))}
+      <header className="sticky top-0 z-40 bg-gray-50 -mx-6 px-6 pt-4 pb-4 border-b border-gray-200 shadow-sm">
+        <div className="flex flex-col gap-4">
+          {/* Título */}
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight">Painel Executivo Raiz</h2>
+            </div>
+            <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Grupo Raiz Educação • Performance Financeira Consolidada</p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Atalhos rápidos */}
+          {/* Filtros e Controles */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Filtro de Marca */}
+            <div className={`flex items-center gap-2 bg-white px-3 py-2 rounded-lg border-2 shadow-sm transition-all ${selectedBrand === 'all' ? 'border-gray-100' : 'border-[#1B75BB]'}`}>
+              <div className={`p-1.5 rounded-lg ${selectedBrand === 'all' ? 'bg-blue-50 text-[#1B75BB]' : 'bg-[#1B75BB] text-white'}`}>
+                <Flag size={14} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Marca</span>
+                <select
+                  value={selectedBrand}
+                  onChange={e => {
+                    onBrandChange(e.target.value);
+                    onBranchChange('all');
+                  }}
+                  className="font-black text-[10px] uppercase tracking-tight outline-none bg-transparent cursor-pointer text-gray-900"
+                >
+                  <option value="all">TODAS</option>
+                  {uniqueBrands.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Filtro de Filial */}
+            <div className={`flex items-center gap-2 bg-white px-3 py-2 rounded-lg border-2 shadow-sm transition-all ${selectedBranch === 'all' ? 'border-gray-100' : 'border-[#F44C00]'}`}>
+              <div className={`p-1.5 rounded-lg ${selectedBranch === 'all' ? 'bg-orange-50 text-[#F44C00]' : 'bg-[#F44C00] text-white'}`}>
+                <Building2 size={14} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Filial</span>
+                <select
+                  value={selectedBranch}
+                  onChange={e => onBranchChange(e.target.value)}
+                  className="font-black text-[10px] uppercase tracking-tight outline-none bg-transparent cursor-pointer text-gray-900"
+                >
+                  <option value="all">TODAS</option>
+                  {availableBranches.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Separador visual */}
+            <div className="h-8 w-px bg-gray-300"></div>
+
+            {/* Botões de Comparação */}
+            <div className="flex bg-white p-0.5 rounded-lg border border-gray-100 shadow-sm">
+              {(['budget', 'prevYear'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setComparisonMode(mode)}
+                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-lg ${
+                    comparisonMode === mode
+                      ? 'bg-[#1B75BB] text-white'
+                      : 'text-gray-400 hover:text-[#1B75BB]'
+                  }`}
+                >
+                  vs {mode === 'budget' ? 'ORÇADO' : 'ANO ANT'}
+                </button>
+              ))}
+            </div>
+
+            {/* Atalhos de período */}
             <div className="flex gap-1">
               <button
                 onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
@@ -440,7 +500,6 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
                   onChange={(e) => {
                     const newStart = parseInt(e.target.value);
                     setSelectedMonthStart(newStart);
-                    // Ajustar o fim se for menor que o início
                     if (selectedMonthEnd < newStart) {
                       setSelectedMonthEnd(newStart);
                     }
@@ -457,7 +516,6 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
                   onChange={(e) => {
                     const newEnd = parseInt(e.target.value);
                     setSelectedMonthEnd(newEnd);
-                    // Ajustar o início se for maior que o fim
                     if (selectedMonthStart > newEnd) {
                       setSelectedMonthStart(newEnd);
                     }
@@ -820,54 +878,54 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
     {/* Modal de Detalhamento de Variação */}
     {showVariationDetail && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="bg-white rounded-[2rem] shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+        <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
           {/* Header */}
-          <div className="sticky top-0 bg-gradient-to-r from-[#1B75BB] to-[#4AC8F4] p-6 rounded-t-[2rem] flex items-center justify-between">
+          <div className="sticky top-0 bg-gradient-to-r from-[#1B75BB] to-[#4AC8F4] p-4 rounded-t-xl flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-black text-white flex items-center gap-3">
-                <Target size={28} />
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Target size={20} />
                 Detalhamento de Variação
               </h3>
-              <p className="text-sm text-white/80 font-bold mt-1">
+              <p className="text-[10px] text-white/80 font-bold mt-0.5">
                 Análise detalhada do atingimento de meta e comparações
               </p>
             </div>
             <button
               onClick={() => setShowVariationDetail(false)}
-              className="p-2 hover:bg-white/20 rounded-xl transition-all"
+              className="p-1.5 hover:bg-white/20 rounded-lg transition-all"
             >
-              <X size={24} className="text-white" />
+              <X size={20} className="text-white" />
             </button>
           </div>
 
           {/* Content */}
-          <div className="p-6 space-y-6">
+          <div className="p-4 space-y-3">
             {/* Meta vs Realizado */}
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-2xl border border-gray-200">
-              <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-3 rounded-xl border border-gray-200">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                 Atingimento da Meta de EBITDA (25%)
               </h4>
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-3 gap-3 mb-2">
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">Meta (25%)</p>
-                  <p className="text-2xl font-black text-gray-900">
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">Meta (25%)</p>
+                  <p className="text-base font-black text-gray-900">
                     R$ {variationDetail.targetValue.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">Realizado</p>
-                  <p className="text-2xl font-black text-[#1B75BB]">
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">Realizado</p>
+                  <p className="text-base font-black text-[#1B75BB]">
                     R$ {variationDetail.realValue.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">Variação</p>
-                  <p className={`text-2xl font-black ${variationDetail.variationFromTarget >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">Variação</p>
+                  <p className={`text-base font-black ${variationDetail.variationFromTarget >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
                     {variationDetail.variationFromTarget >= 0 ? '+' : ''}
                     R$ {variationDetail.variationFromTarget.toLocaleString('pt-BR')}
                   </p>
-                  <p className={`text-sm font-bold ${variationDetail.variationFromTarget >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
-                    {variationDetail.variationFromTarget >= 0 ? <TrendingUp size={14} className="inline" /> : <TrendingDown size={14} className="inline" />}
+                  <p className={`text-[10px] font-bold ${variationDetail.variationFromTarget >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
+                    {variationDetail.variationFromTarget >= 0 ? <TrendingUp size={10} className="inline" /> : <TrendingDown size={10} className="inline" />}
                     {' '}{Math.abs(variationDetail.variationFromTargetPercent).toFixed(1)}%
                   </p>
                 </div>
@@ -875,13 +933,13 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
 
               {/* Progress bar */}
               <div className="relative">
-                <div className="flex justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-600">Progresso</span>
-                  <span className="text-xs font-black text-[#1B75BB]">
+                <div className="flex justify-between mb-1">
+                  <span className="text-[9px] font-bold text-gray-600">Progresso</span>
+                  <span className="text-[9px] font-black text-[#1B75BB]">
                     {variationDetail.targetReached.toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 h-4 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
                       variationDetail.targetReached >= 100 ? 'bg-[#7AC5BF]' : 'bg-[#F44C00]'
@@ -893,33 +951,33 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
             </div>
 
             {/* Comparação vs Orçado/Ano Anterior */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200">
-              <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-xl border border-blue-200">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                 Comparação vs {comparisonMode === 'budget' ? 'Orçamento' : 'Ano Anterior'}
               </h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">
                     {comparisonMode === 'budget' ? 'Orçado' : 'Ano Anterior'}
                   </p>
-                  <p className="text-2xl font-black text-gray-900">
+                  <p className="text-base font-black text-gray-900">
                     R$ {variationDetail.comparisonValue.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">Realizado</p>
-                  <p className="text-2xl font-black text-[#1B75BB]">
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">Realizado</p>
+                  <p className="text-base font-black text-[#1B75BB]">
                     R$ {variationDetail.realValue.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-1">Variação</p>
-                  <p className={`text-2xl font-black ${variationDetail.variationFromComparison >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
+                  <p className="text-[9px] text-gray-500 font-bold mb-0.5">Variação</p>
+                  <p className={`text-base font-black ${variationDetail.variationFromComparison >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
                     {variationDetail.variationFromComparison >= 0 ? '+' : ''}
                     R$ {variationDetail.variationFromComparison.toLocaleString('pt-BR')}
                   </p>
-                  <p className={`text-sm font-bold ${variationDetail.variationFromComparison >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
-                    {variationDetail.variationFromComparison >= 0 ? <TrendingUp size={14} className="inline" /> : <TrendingDown size={14} className="inline" />}
+                  <p className={`text-[10px] font-bold ${variationDetail.variationFromComparison >= 0 ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
+                    {variationDetail.variationFromComparison >= 0 ? <TrendingUp size={10} className="inline" /> : <TrendingDown size={10} className="inline" />}
                     {' '}{Math.abs(variationDetail.variationFromComparisonPercent).toFixed(1)}%
                   </p>
                 </div>
@@ -928,10 +986,10 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
 
             {/* Breakdown por tipo de custo */}
             <div>
-              <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                 Detalhamento por Categoria vs {comparisonMode === 'budget' ? 'Orçamento' : 'Ano Anterior'}
               </h4>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {[
                   { label: 'Receita', data: variationDetail.breakdown.revenue, positive: true },
                   { label: 'Custos Variáveis', data: variationDetail.breakdown.variableCosts, positive: false },
@@ -947,16 +1005,16 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
                     : item.data.diff <= 0;
 
                   return (
-                    <div key={item.label} className="bg-white p-4 rounded-xl border border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-black text-gray-900">{item.label}</span>
-                        <span className={`text-sm font-black ${isGood ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
+                    <div key={item.label} className="bg-white p-2.5 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-black text-gray-900">{item.label}</span>
+                        <span className={`text-[11px] font-black ${isGood ? 'text-[#7AC5BF]' : 'text-[#F44C00]'}`}>
                           {item.data.diff >= 0 ? '+' : ''}
                           R$ {item.data.diff.toLocaleString('pt-BR')}
                           {' '}({Math.abs(variationPercent).toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="flex gap-4 text-xs">
+                      <div className="flex gap-3 text-[9px]">
                         <div>
                           <span className="text-gray-500">Real: </span>
                           <span className="font-bold">R$ {item.data.real.toLocaleString('pt-BR')}</span>
@@ -974,10 +1032,10 @@ const Dashboard: React.FC<DashboardProps> = ({ kpis, transactions }) => {
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-gray-50 p-4 rounded-b-[2rem] border-t border-gray-200 flex justify-end">
+          <div className="sticky bottom-0 bg-gray-50 p-3 rounded-b-xl border-t border-gray-200 flex justify-end">
             <button
               onClick={() => setShowVariationDetail(false)}
-              className="px-6 py-3 bg-[#1B75BB] text-white rounded-xl font-black text-sm uppercase tracking-wider hover:bg-[#145a94] transition-all"
+              className="px-4 py-2 bg-[#1B75BB] text-white rounded-lg font-black text-[11px] uppercase tracking-wider hover:bg-[#145a94] transition-all"
             >
               Fechar
             </button>
