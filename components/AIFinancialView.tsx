@@ -1,12 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Zap, TrendingUp, TrendingDown, Lightbulb, ArrowRight, Brain } from 'lucide-react';
-import { chatWithFinancialData, getFinancialInsights } from '../services/geminiService';
-import { Transaction, SchoolKPIs, IAInsight } from '../types';
+import { generateChartWithData, getFinancialInsights } from '../services/geminiService';
+import { Transaction, SchoolKPIs, IAInsight, ChartConfig } from '../types';
+import DynamicChartRenderer from './DynamicChartRenderer';
 
 interface Message {
   role: 'user' | 'model';
   content: string;
+  chartConfig?: ChartConfig;
 }
 
 interface AIFinancialViewProps {
@@ -56,14 +58,18 @@ const AIFinancialView: React.FC<AIFinancialViewProps> = ({ transactions, kpis })
     setChatLoading(true);
 
     try {
-      // Convert message history to the format expected by chatWithFinancialData
+      // Convert message history to the format expected by generateChartWithData
       const history = messages.map(msg => ({
         role: msg.role,
         content: msg.content
       }));
 
-      const response = await chatWithFinancialData(userMessage, history, { transactions, kpis });
-      setMessages(prev => [...prev, { role: 'model', content: response || 'Não consegui processar sua solicitação.' }]);
+      const response = await generateChartWithData(userMessage, history, { transactions, kpis });
+      setMessages(prev => [...prev, {
+        role: 'model',
+        content: response.explanation || 'Não consegui processar sua solicitação.',
+        chartConfig: response.chartConfig || undefined
+      }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'model', content: 'Houve um erro na comunicação com a IA.' }]);
     } finally {
@@ -72,10 +78,10 @@ const AIFinancialView: React.FC<AIFinancialViewProps> = ({ transactions, kpis })
   };
 
   const suggestions = [
-    "Qual é a nossa margem de segurança?",
-    "Onde estão os maiores custos variáveis?",
-    "Como podemos atingir 25% de margem?",
-    "Resumo executivo do EBITDA anual."
+    "Mostre a evolução do EBITDA mensal",
+    "Compare receita Real vs Orçado",
+    "Breakdown de custos por categoria",
+    "Qual é a nossa margem de segurança?"
   ];
 
   return (
@@ -86,7 +92,7 @@ const AIFinancialView: React.FC<AIFinancialViewProps> = ({ transactions, kpis })
           <h2 className="text-3xl font-black text-gray-900 flex items-center gap-3">
             <Brain className="text-[#F44C00]" />
             IA Financeira
-            <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Groq Llama 3.3</span>
+            <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">Claude Sonnet 4.5</span>
           </h2>
           <p className="text-gray-500 mt-1 font-medium">Análise automática estruturada + chat conversacional para deep dive.</p>
         </div>
@@ -175,27 +181,38 @@ const AIFinancialView: React.FC<AIFinancialViewProps> = ({ transactions, kpis })
           {/* Chat Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth">
             {messages.map((m, i) => (
-              <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm ${
-                  m.role === 'user' ? 'bg-[#1B75BB] text-white' : 'bg-[#fdf2f2] text-[#F44C00]'
-                }`}>
-                  {m.role === 'user' ? <User size={20} /> : <Bot size={20} />}
-                </div>
-                <div className={`max-w-[80%] p-5 rounded-3xl text-sm leading-relaxed ${
-                  m.role === 'user'
-                    ? 'bg-blue-50 text-gray-800 rounded-tr-none border border-blue-100'
-                    : 'bg-gray-50 text-gray-800 rounded-tl-none border border-gray-100'
-                }`}>
-                  <div className="prose prose-sm max-w-none">
-                     {m.content.split('\n').map((line, idx) => (
-                       <p key={idx} className="mb-2 last:mb-0">
-                         {line.split('**').map((part, pIdx) => (
-                           pIdx % 2 === 1 ? <strong key={pIdx} className="font-black text-gray-900">{part}</strong> : part
-                         ))}
-                       </p>
-                     ))}
+              <div key={i} className="space-y-4">
+                <div className={`flex gap-4 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm ${
+                    m.role === 'user' ? 'bg-[#1B75BB] text-white' : 'bg-[#fdf2f2] text-[#F44C00]'
+                  }`}>
+                    {m.role === 'user' ? <User size={20} /> : <Bot size={20} />}
+                  </div>
+                  <div className={`max-w-[80%] p-5 rounded-3xl text-sm leading-relaxed ${
+                    m.role === 'user'
+                      ? 'bg-blue-50 text-gray-800 rounded-tr-none border border-blue-100'
+                      : 'bg-gray-50 text-gray-800 rounded-tl-none border border-gray-100'
+                  }`}>
+                    <div className="prose prose-sm max-w-none">
+                       {m.content.split('\n').map((line, idx) => (
+                         <p key={idx} className="mb-2 last:mb-0">
+                           {line.split('**').map((part, pIdx) => (
+                             pIdx % 2 === 1 ? <strong key={pIdx} className="font-black text-gray-900">{part}</strong> : part
+                           ))}
+                         </p>
+                       ))}
+                    </div>
                   </div>
                 </div>
+                {m.chartConfig && (
+                  <div className="ml-14">
+                    <DynamicChartRenderer
+                      config={m.chartConfig}
+                      transactions={transactions}
+                      kpis={kpis}
+                    />
+                  </div>
+                )}
               </div>
             ))}
             {chatLoading && (
