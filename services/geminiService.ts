@@ -1,8 +1,10 @@
 
 import { Transaction, SchoolKPIs, IAInsight, AIChartResponse } from "../types";
 
-// Proxy server URL (local development)
-const PROXY_URL = "http://localhost:3021/api/anthropic";
+// API URL - detecta automaticamente produção vs desenvolvimento
+const PROXY_URL = import.meta.env.PROD
+  ? "/api/anthropic"  // Produção: usa Vercel serverless function
+  : "http://localhost:3021/api/anthropic";  // Desenvolvimento: usa proxy local
 
 /**
  * Helper function to clean JSON from markdown code blocks
