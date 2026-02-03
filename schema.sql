@@ -16,6 +16,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   tag01 TEXT,
   tag02 TEXT,
   tag03 TEXT,
+  vendor TEXT,
+  ticket TEXT,
+  nat_orc TEXT,
+  recurring TEXT,
+  chave_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -46,6 +51,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_filial ON transactions(filial);
 CREATE INDEX IF NOT EXISTS idx_transactions_marca ON transactions(marca);
 CREATE INDEX IF NOT EXISTS idx_transactions_scenario ON transactions(scenario);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_vendor ON transactions(vendor);
+CREATE INDEX IF NOT EXISTS idx_transactions_ticket ON transactions(ticket);
+CREATE INDEX IF NOT EXISTS idx_transactions_nat_orc ON transactions(nat_orc);
+CREATE INDEX IF NOT EXISTS idx_transactions_chave_id ON transactions(chave_id);
 CREATE INDEX IF NOT EXISTS idx_manual_changes_status ON manual_changes(status);
 CREATE INDEX IF NOT EXISTS idx_manual_changes_transaction_id ON manual_changes(transaction_id);
 

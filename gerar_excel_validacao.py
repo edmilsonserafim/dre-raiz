@@ -1,11 +1,10 @@
 """
-Script de DIAGNÓSTICO para identificar por que faltam 1,560 registros
+Script para gerar Excel com 100 linhas para validação
 """
 
 import struct
 import pyodbc
-import requests
-import json
+import pandas as pd
 from datetime import datetime, date, time
 from decimal import Decimal
 from azure.identity import ClientSecretCredential
@@ -16,17 +15,10 @@ CLIENT_ID = 'ae63bd51-263f-4bb7-aabd-c04c2d44d384'
 CLIENT_SECRET = 'OgU8Q~rVCDHsFjbUYCI7N5jlgC2bWZx-RDbTcdh1'
 FABRIC_SERVER = 'brexl7eomxoerljqiapyaul67i-tscdkva6temu3gn4zp67tlafl4.datawarehouse.fabric.microsoft.com'
 FABRIC_DATABASE = 'DRE'
-SUPABASE_URL = 'https://vafmufhlompwsdrlhkfz.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhZm11Zmhsb21wd3Nkcmxoa2Z6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTQzMjI5MSwiZXhwIjoyMDg1MDA4MjkxfQ.m0viLArNl57ExdNlRoEuNNZH0n_0iKSaa81Fyj2ekpA'
-SUPABASE_TABLE = 'dre_fabric'
 DATA_MINIMA = '2026-01-01'
 
 def get_azure_token():
-    credential = ClientSecretCredential(
-        tenant_id=TENANT_ID,
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET
-    )
+    credential = ClientSecretCredential(TENANT_ID, CLIENT_ID, CLIENT_SECRET)
     token = credential.get_token("https://database.windows.net/.default")
     return token.token
 
@@ -77,11 +69,11 @@ def conectar_fabric():
     print("[OK] Conectado ao Fabric")
     return conn
 
-def buscar_dados_tratados(conn):
-    print("Buscando dados do Fabric...")
+def buscar_dados_100_linhas(conn):
+    print("Buscando 100 primeiras linhas do Fabric...")
 
     query = f"""
-    SELECT
+    SELECT TOP 100
         CONCAT(F.IDLANCAMENTO, F.IDPARTIDA) AS CHAVE,
         CODLOTE, FIL.CIA, FIL.FILIAL, F.INTEGRAAPLICACAO, F.IDPARTIDA,
         F.FLUIG AS TICKET,
@@ -108,9 +100,22 @@ def buscar_dados_tratados(conn):
             WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
             ELSE F.INTEGRACHAVE_TRATADA
         END AS INTEGRACHAVE_TRATADA,
-        -- chave_id: Identificador unico composto por CODCOLIGADA + INTEGRACHAVE_TRATADA + contador sequencial
-        -- Formato: "1-12345-1", "1-12345-2", "2-67890-1"
-        -- O contador reinicia a cada mudanca de CODCOLIGADA ou INTEGRACHAVE_TRATADA
+        CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
+            CASE
+                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                ELSE F.INTEGRACHAVE_TRATADA
+            END
+        ) AS Coligada_Chave,
+        ROW_NUMBER() OVER (
+            PARTITION BY CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
+                CASE
+                    WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                    WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                    ELSE F.INTEGRACHAVE_TRATADA
+                END)
+            ORDER BY F.IDPARTIDA ASC, F.VALOR DESC
+        ) AS ID_Cont,
         CONCAT(
             CAST(F.CODCOLIGADA AS VARCHAR), '-',
             CASE
@@ -138,12 +143,7 @@ def buscar_dados_tratados(conn):
     WHERE F.DATA >= '{DATA_MINIMA}' AND F.DATA <= GETDATE()
     AND T.Tag1 != 'N/A'
     ORDER BY
-        CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
-            CASE
-                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
-                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
-                ELSE F.INTEGRACHAVE_TRATADA
-            END) ASC,
+        Coligada_Chave ASC,
         F.IDPARTIDA ASC,
         F.VALOR DESC
     """
@@ -153,131 +153,60 @@ def buscar_dados_tratados(conn):
     columns = [column[0] for column in cursor.description]
     rows = cursor.fetchall()
 
-    print(f"[OK] Buscados {len(rows):,} registros do Fabric")
+    print(f"[OK] Buscados {len(rows)} registros")
 
     records = []
-    erros = 0
-
-    for idx, row in enumerate(rows):
-        try:
-            record = {}
-            for i, value in enumerate(row):
-                col_name = columns[i].lower()
-                if isinstance(value, (datetime, date)):
-                    record[col_name] = value.strftime('%Y-%m-%d')
-                elif isinstance(value, time):
-                    record[col_name] = value.strftime('%H:%M:%S')
-                elif isinstance(value, Decimal):
-                    record[col_name] = float(value)
-                elif value is None:
-                    record[col_name] = None
-                else:
-                    value = converter_data_brasileira(value)
-                    record[col_name] = limpar_valor_numerico(value)
-            records.append(record)
-        except Exception as e:
-            erros += 1
-            if erros <= 5:  # Mostrar apenas os primeiros 5 erros
-                print(f"[ERRO] Linha {idx+1}: {e}")
-
-    if erros > 0:
-        print(f"[AVISO] {erros} registros com erro na conversao")
+    for row in rows:
+        record = {}
+        for i, value in enumerate(row):
+            col_name = columns[i].lower()
+            if isinstance(value, (datetime, date)):
+                record[col_name] = value.strftime('%Y-%m-%d')
+            elif isinstance(value, time):
+                record[col_name] = value.strftime('%H:%M:%S')
+            elif isinstance(value, Decimal):
+                record[col_name] = float(value)
+            elif value is None:
+                record[col_name] = None
+            else:
+                value = converter_data_brasileira(value)
+                record[col_name] = limpar_valor_numerico(value)
+        records.append(record)
 
     return records
 
-def limpar_tabela_supabase():
-    print("Limpando tabela Supabase...")
-    url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE}?id=gt.0"
-    headers = {
-        'apikey': SUPABASE_KEY,
-        'Authorization': f'Bearer {SUPABASE_KEY}',
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-    }
-    response = requests.delete(url, headers=headers)
-    print(f"[OK] Tabela limpa (Status: {response.status_code})")
-
-def inserir_supabase(records):
-    print(f"Inserindo {len(records):,} registros no Supabase...")
-
-    url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE}"
-    headers = {
-        'apikey': SUPABASE_KEY,
-        'Authorization': f'Bearer {SUPABASE_KEY}',
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-    }
-
-    batch_size = 1000
-    total_inseridos = 0
-    total_erros = 0
-
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
-        batch_num = (i // batch_size) + 1
-        total_batches = (len(records) + batch_size - 1) // batch_size
-
-        try:
-            response = requests.post(url, headers=headers, json=batch)
-
-            if response.status_code == 201:
-                total_inseridos += len(batch)
-                print(f"   Batch {batch_num}/{total_batches}: {len(batch)} registros [OK]")
-            else:
-                total_erros += len(batch)
-                print(f"   Batch {batch_num}/{total_batches}: [ERRO] Status {response.status_code}")
-                print(f"   Resposta: {response.text[:200]}")
-
-        except Exception as e:
-            total_erros += len(batch)
-            print(f"   Batch {batch_num}/{total_batches}: [ERRO] {e}")
-
-    print(f"[RESUMO] Inseridos: {total_inseridos:,} | Erros: {total_erros:,}")
-    return total_inseridos, total_erros
-
 def main():
     print("=" * 60)
-    print("DIAGNÓSTICO DE SINCRONIZAÇÃO")
+    print("GERAR EXCEL COM 100 LINHAS PARA VALIDAÇÃO")
     print("=" * 60)
     print()
 
     try:
-        # 1. Conectar e buscar
+        # Conectar e buscar
         conn = conectar_fabric()
-        records = buscar_dados_tratados(conn)
+        records = buscar_dados_100_linhas(conn)
         conn.close()
 
-        print()
-        print(f"Registros obtidos do Fabric: {len(records):,}")
+        # Converter para DataFrame
+        df = pd.DataFrame(records)
 
-        # 2. Limpar Supabase
-        print()
-        limpar_tabela_supabase()
+        # Gerar nome do arquivo com timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'validacao_100_linhas_{timestamp}.xlsx'
 
-        # 3. Inserir
-        print()
-        inseridos, erros = inserir_supabase(records)
+        # Salvar Excel
+        print(f"Gerando arquivo Excel: {filename}")
+        df.to_excel(filename, index=False, sheet_name='Validação')
 
-        # 4. Verificar resultado
         print()
-        print("=" * 60)
-        print("RESULTADO FINAL")
-        print("=" * 60)
-        print(f"Esperado:    108,672")
-        print(f"Buscado:     {len(records):,}")
-        print(f"Inserido:    {inseridos:,}")
-        print(f"Com erro:    {erros:,}")
+        print("[SUCESSO] Arquivo Excel gerado!")
+        print(f"Arquivo: {filename}")
+        print(f"Linhas: {len(records)}")
+        print(f"Colunas: {len(df.columns)}")
         print()
-
-        if len(records) == 108672:
-            print("[OK] Busca do Fabric está correta!")
-        else:
-            print(f"[PROBLEMA] Faltam {108672 - len(records):,} registros na busca")
-
-        if inseridos == len(records):
-            print("[OK] Inserção no Supabase está correta!")
-        else:
-            print(f"[PROBLEMA] Apenas {inseridos:,} de {len(records):,} foram inseridos")
+        print("Colunas incluídas:")
+        for i, col in enumerate(df.columns, 1):
+            print(f"  {i:2}. {col}")
 
     except Exception as e:
         print(f"[ERRO] {e}")

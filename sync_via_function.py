@@ -98,7 +98,33 @@ def buscar_dados_tratados(conn):
         CASE WHEN T.TagOrc NOT IN ('CUSTOS', 'DESPESAS') THEN T.TagOrc ELSE T.TagOrc END AS TAG_ORC,
         'Original' AS ORIGINAL, 'Real' AS R_O, F.CC, F.CODCOLIGADA, F.CODFILIAL, F.USUARIO,
         F.CONTA AS CONTA_ORIGINAL, T.Tag1 AS TAG1_ORIGINAL, T.TAG4 AS TAG4_ORIGINAL,
-        T.TagOrc AS TAGORC_ORIGINAL, F.INTEGRACHAVE_TRATADA,
+        T.TagOrc AS TAGORC_ORIGINAL,
+        CASE
+            WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+            WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+            ELSE F.INTEGRACHAVE_TRATADA
+        END AS INTEGRACHAVE_TRATADA,
+        -- chave_id: Identificador unico composto por CODCOLIGADA + INTEGRACHAVE_TRATADA + contador sequencial
+        -- Formato: "1-12345-1", "1-12345-2", "2-67890-1"
+        -- O contador reinicia a cada mudanca de CODCOLIGADA ou INTEGRACHAVE_TRATADA
+        CONCAT(
+            CAST(F.CODCOLIGADA AS VARCHAR), '-',
+            CASE
+                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                ELSE F.INTEGRACHAVE_TRATADA
+            END,
+            '-',
+            CAST(ROW_NUMBER() OVER (
+                PARTITION BY CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
+                    CASE
+                        WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                        WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                        ELSE F.INTEGRACHAVE_TRATADA
+                    END)
+                ORDER BY F.IDPARTIDA ASC, F.VALOR DESC
+            ) AS VARCHAR)
+        ) AS chave_id,
         [STATUS LANC. FINANCEIRO] AS STATUS_LANC_FINANCEIRO,
         FORMAT(F.DATA,'yyyyMM') AS ANOMES_ORIGINAL
     FROM DRE F
@@ -107,7 +133,15 @@ def buscar_dados_tratados(conn):
     LEFT JOIN Fornecedor_Tags FORN_TAG ON TRIM(FORN_TAG.[Fornecedor Original]) = TRIM(F.NOMEFORNECEDOR)
     WHERE F.DATA >= '{DATA_MINIMA}' AND F.DATA <= GETDATE()
     AND T.Tag1 != 'N/A'
-    ORDER BY F.CODCOLIGADA, F.IDLANCAMENTO, F.IDPARTIDA
+    ORDER BY
+        CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
+            CASE
+                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                ELSE F.INTEGRACHAVE_TRATADA
+            END) ASC,
+        F.IDPARTIDA ASC,
+        F.VALOR DESC
     """
 
     cursor = conn.cursor()

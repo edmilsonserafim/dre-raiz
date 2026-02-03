@@ -83,7 +83,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
   const [rateioParts, setRateioParts] = useState<RateioPart[]>([]);
-  const [editForm, setEditForm] = useState({ category: '', date: '', filial: '', marca: '', justification: '', amount: 0, recurring: 'Sim' });
+  const [editForm, setEditForm] = useState({ category: '', date: '', filial: '', marca: '', justification: '', amount: 0, recurring: 'Sim', chave_id: '' });
   const [rateioJustification, setRateioJustification] = useState('');
 
   const initialFilters = {
@@ -96,6 +96,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     tag03: [] as string[],
     category: [] as string[],
     ticket: '',
+    chave_id: [] as string[],
     vendor: '',
     description: '',
     amount: '',
@@ -182,6 +183,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       tag02s: getOptions('tag02'),
       tag03s: getOptions('tag03'),
       categories: getOptions('category'),
+      chave_id: getOptions('chave_id'),
       recurrings: ['Sim', 'Não']
     };
   }, [transactions, colFilters]);
@@ -230,7 +232,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         marca: editingTransaction.brand || 'SAP',
         justification: '',
         amount: editingTransaction.amount,
-        recurring: editingTransaction.recurring || 'Sim'
+        recurring: editingTransaction.recurring || 'Sim',
+        chave_id: editingTransaction.chave_id || ''
       });
     }
   }, [editingTransaction]);
@@ -768,6 +771,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               {/* Segunda linha de filtros */}
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-1.5">
                 <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
+                <MultiSelectFilter id="chave_id" label="Chave ID" options={dynamicOptions.chave_id} selected={colFilters.chave_id} active={isFilterActive('chave_id')} />
                 <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Descrição" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-3" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
@@ -862,6 +866,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <HeaderCell label="Mar" sortKey="brand" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
                 <HeaderCell label="Filial" sortKey="branch" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
                 <HeaderCell label="Tick" sortKey="ticket" config={sortConfig} setConfig={setSortConfig} className="w-[60px]" />
+                <HeaderCell label="Chave ID" sortKey="chave_id" config={sortConfig} setConfig={setSortConfig} className="w-[80px]" />
                 <HeaderCell label="Fornecedor" sortKey="vendor" config={sortConfig} setConfig={setSortConfig} className="w-[120px]" />
                 <HeaderCell label="Descrição" sortKey="description" config={sortConfig} setConfig={setSortConfig} className="w-[180px]" />
                 <HeaderCell label="Valor" sortKey="amount" config={sortConfig} setConfig={setSortConfig} align="right" className="w-[95px]" />
@@ -905,6 +910,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                       </a>
                     ) : '-'}
                   </td>
+                  <td className="px-3 py-2 text-xs">{t.chave_id || '-'}</td>
                   <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.vendor}>{t.vendor || '-'}</td>
                   <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.description}>{t.description}</td>
                   <td className={`px-2 py-1 text-[8px] font-mono font-black text-right border-r border-gray-100 ${t.type === 'REVENUE' ? 'text-emerald-600' : 'text-gray-900'}`}>
@@ -1018,6 +1024,15 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                         <option value="Sim">Sim</option>
                         <option value="Não">Não</option>
                       </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-gray-300 mb-1">Chave ID</label>
+                      <input
+                        type="text"
+                        value={editForm.chave_id || ''}
+                        onChange={e => setEditForm({...editForm, chave_id: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      />
                     </div>
                     <div className="col-span-2 space-y-1 pt-4">
                       <label className="text-[8px] font-black text-[#F44C00] uppercase">Justificativa da Solicitação (Obrigatório)</label>

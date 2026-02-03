@@ -26,6 +26,8 @@ export interface Transaction {
   ticket?: string;
   vendor?: string;
   recurring?: string;
+  nat_orc?: string;
+  chave_id?: string;
   justification?: string;
 }
 
