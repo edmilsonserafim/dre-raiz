@@ -23,8 +23,8 @@ export interface DatabaseTransaction {
   type: string;
   scenario: string;
   status: string;
-  branch: string;
-  brand?: string | null;
+  filial: string;
+  marca?: string | null;
   tag01?: string | null;
   tag02?: string | null;
   tag03?: string | null;

@@ -11,7 +11,9 @@ import {
   Brain,
   LogOut,
   User as UserIcon,
-  Shield
+  Shield,
+  FileText,
+  FlaskConical
 } from 'lucide-react';
 import { ViewType } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,12 +31,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'kpis', label: 'Indicadores e KPIs', icon: BarChart3 },
-    { id: 'dre', label: 'DRE Fixa', icon: TableProperties },
+    { id: 'analysis', label: 'Análise Financeira', icon: FileText },
+    { id: 'dre', label: 'DRE Gerencial', icon: TableProperties },
     { id: 'movements', label: 'Lançamentos', icon: ReceiptText },
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
     { id: 'forecasting', label: 'Forecasting', icon: LineChart },
-    { id: 'ai_financial', label: 'IA Financeira', icon: Brain },
-    ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : []),
+    ...(isAdmin ? [
+      { id: 'admin', label: 'Admin', icon: Shield },
+      { id: 'teste', label: 'Teste AnalysisPack', icon: FlaskConical }
+    ] : []),
   ];
 
   return (
@@ -120,7 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
           <div className="relative z-10">
             <p className="text-[9px] font-black opacity-80 uppercase tracking-widest mb-1">Status do Grupo</p>
             <p className="text-xs font-black uppercase tracking-tighter">
-              {selectedBrand === 'all' ? 'Consolidação Raiz' : selectedBrand}
+              Consolidação Raiz
             </p>
           </div>
         </div>

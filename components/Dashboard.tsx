@@ -1,29 +1,34 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ComposedChart, Line, Legend, ReferenceLine } from 'recharts';
-import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2 } from 'lucide-react';
+import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2, ChevronDown, Check } from 'lucide-react';
 import { SchoolKPIs, Transaction } from '../types';
 import { BRANCHES, CATEGORIES } from '../constants';
 
 interface DashboardProps {
   kpis: SchoolKPIs;
   transactions: Transaction[];
-  selectedBrand: string;
-  selectedBranch: string;
+  selectedMarca: string[];
+  selectedFilial: string[];
   uniqueBrands: string[];
   availableBranches: string[];
-  onBrandChange: (brand: string) => void;
-  onBranchChange: (branch: string) => void;
+  onMarcaChange: (brands: string[]) => void;
+  onFilialChange: (branches: string[]) => void;
+}
+
+export interface MonthRange {
+  start: number;
+  end: number;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
   kpis,
   transactions,
-  selectedBrand,
-  selectedBranch,
+  selectedMarca,
+  selectedFilial,
   uniqueBrands,
   availableBranches,
-  onBrandChange,
-  onBranchChange
+  onMarcaChange,
+  onFilialChange
 }) => {
   const [activeMetric, setActiveMetric] = useState<'revenue' | 'ebitda' | 'margin'>('ebitda');
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(0);
@@ -31,7 +36,30 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [comparisonMode, setComparisonMode] = useState<'budget' | 'prevYear'>('budget');
   const [sortBranchesAZ, setSortBranchesAZ] = useState(false);
   const [showVariationDetail, setShowVariationDetail] = useState(false);
+  const [showAlertsDetail, setShowAlertsDetail] = useState(false);
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+
+  // Expor o range de meses e modo de comparação via eventos para o DashboardEnhanced
+  useEffect(() => {
+    const dashboardEl = document.getElementById('dashboard-wrapper');
+    if (dashboardEl) {
+      dashboardEl.setAttribute('data-month-start', selectedMonthStart.toString());
+      dashboardEl.setAttribute('data-month-end', selectedMonthEnd.toString());
+      // Disparar evento customizado
+      const event = new CustomEvent('monthRangeChange', {
+        detail: { start: selectedMonthStart, end: selectedMonthEnd }
+      });
+      window.dispatchEvent(event);
+    }
+  }, [selectedMonthStart, selectedMonthEnd]);
+
+  // Expor o modo de comparação
+  useEffect(() => {
+    const event = new CustomEvent('comparisonModeChange', {
+      detail: { mode: comparisonMode }
+    });
+    window.dispatchEvent(event);
+  }, [comparisonMode]);
 
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
@@ -43,7 +71,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const branchData = useMemo(() => {
     const data = BRANCHES.map(branch => {
-      const bTrans = filteredByMonth.filter(t => t.branch === branch);
+      const bTrans = filteredByMonth.filter(t => t.filial === branch);
       const rev = bTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const exp = bTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const ebitda = rev - exp;
@@ -303,11 +331,54 @@ const Dashboard: React.FC<DashboardProps> = ({
     return data;
   }, [filteredByMonth, comparisonMode]);
 
+  // Função auxiliar para formatar valores do heatmap
+  const formatHeatmapValue = (value: number): string => {
+    const valueInThousands = value / 1000;
+    const rounded = Math.round(valueInThousands);
+
+    // Retornar "-" para zero absoluto
+    if (rounded === 0) return '-';
+
+    // Usar toLocaleString('pt-BR') para adicionar "." como separador
+    return rounded.toLocaleString('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+  };
+
   // Heatmap de Performance Mensal
   const heatmapData = useMemo(() => {
     const metrics = ['Receita', 'Custos Variáveis', 'Custos Fixos', 'SG&A', 'Rateio', 'EBITDA'];
+
+    // Manter todos os meses visíveis, mas zerar dados fora do filtro
     const monthsData = months.map((month, idx) => {
-      const monthTransactions = transactions.filter(t => new Date(t.date).getMonth() === idx && t.scenario === 'Real');
+      // Verificar se o mês está dentro do intervalo selecionado
+      const isInRange = idx >= selectedMonthStart && idx <= selectedMonthEnd;
+
+      // Se não está no intervalo, retornar dados zerados com "-"
+      if (!isInRange) {
+        return {
+          month,
+          monthIndex: idx,
+          Receita: '-',
+          'Custos Variáveis': '-',
+          'Custos Fixos': '-',
+          'SG&A': '-',
+          'Rateio': '-',
+          'EBITDA': '-',
+          scores: {
+            Receita: 0,
+            'Custos Variáveis': 0,
+            'Custos Fixos': 0,
+            'SG&A': 0,
+            'Rateio': 0,
+            'EBITDA': 0
+          }
+        };
+      }
+
+      // Usar filteredByMonth que já aplica os filtros de data, marca e unidade
+      let monthTransactions = filteredByMonth.filter(t => new Date(t.date).getMonth() === idx && t.scenario === 'Real');
       const revenue = monthTransactions.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const variableCosts = monthTransactions.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
       const fixedCosts = monthTransactions.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
@@ -318,12 +389,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       return {
         month,
         monthIndex: idx,
-        Receita: revenue > 0 ? (revenue / 1000).toFixed(0) : '0', // em milhares
-        'Custos Variáveis': variableCosts > 0 ? (variableCosts / 1000).toFixed(0) : '0',
-        'Custos Fixos': fixedCosts > 0 ? (fixedCosts / 1000).toFixed(0) : '0',
-        'SG&A': sgaCosts > 0 ? (sgaCosts / 1000).toFixed(0) : '0',
-        'Rateio': rateioCosts > 0 ? (rateioCosts / 1000).toFixed(0) : '0',
-        'EBITDA': ebitda !== 0 ? (ebitda / 1000).toFixed(0) : '0',
+        Receita: formatHeatmapValue(revenue),
+        'Custos Variáveis': formatHeatmapValue(variableCosts),
+        'Custos Fixos': formatHeatmapValue(fixedCosts),
+        'SG&A': formatHeatmapValue(sgaCosts),
+        'Rateio': formatHeatmapValue(rateioCosts),
+        'EBITDA': formatHeatmapValue(ebitda),
         // Scores para coloração (0-100)
         scores: {
           Receita: revenue > 0 ? Math.min(100, (revenue / 150000) * 100) : 0,
@@ -336,9 +407,44 @@ const Dashboard: React.FC<DashboardProps> = ({
       };
     });
 
-    console.log('🔥 Heatmap Data:', { metrics, monthsData });
-    return { metrics, monthsData };
-  }, [transactions, months]);
+    // Função auxiliar para somar valores formatados
+    const sumFormattedValues = (key: string): string => {
+      const sum = monthsData.reduce((acc, m) => {
+        const val = m[key] === '-' ? 0 : parseFloat(m[key].replace(/\./g, ''));
+        return acc + val;
+      }, 0);
+      return sum === 0 ? '-' : sum.toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      });
+    };
+
+    // Calcular totais
+    const totals = {
+      month: 'TOTAL',
+      monthIndex: 12,
+      Receita: sumFormattedValues('Receita'),
+      'Custos Variáveis': sumFormattedValues('Custos Variáveis'),
+      'Custos Fixos': sumFormattedValues('Custos Fixos'),
+      'SG&A': sumFormattedValues('SG&A'),
+      'Rateio': sumFormattedValues('Rateio'),
+      'EBITDA': sumFormattedValues('EBITDA'),
+      scores: {
+        Receita: 85,
+        'Custos Variáveis': 85,
+        'Custos Fixos': 85,
+        'SG&A': 85,
+        'Rateio': 85,
+        'EBITDA': 85
+      }
+    };
+
+    // Adicionar totais ao final
+    const monthsDataWithTotal = [...monthsData, totals];
+
+    console.log('🔥 Heatmap Data:', { metrics, monthsData: monthsDataWithTotal });
+    return { metrics, monthsData: monthsDataWithTotal };
+  }, [filteredByMonth, months, selectedMarca, selectedFilial, selectedMonthStart, selectedMonthEnd]);
 
   return (
     <>
@@ -358,7 +464,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           background: #94a3b8;
         }
       `}</style>
-      <div className="animate-in fade-in duration-500 pb-10">
+      <div id="dashboard-wrapper" className="animate-in fade-in duration-500 pb-10">
       <header className="sticky top-0 z-40 bg-gray-50 -mx-6 px-6 pt-4 pb-4 border-b border-gray-200 shadow-sm">
         <div className="flex flex-col gap-4">
           {/* Título */}
@@ -370,60 +476,47 @@ const Dashboard: React.FC<DashboardProps> = ({
             <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Grupo Raiz Educação • Performance Financeira Consolidada</p>
           </div>
 
-          {/* Filtros e Controles */}
+          {/* Filtros e Controles - Altura padronizada */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Filtro de Marca */}
-            <div className={`flex items-center gap-2 bg-white px-3 py-2 rounded-lg border-2 shadow-sm transition-all ${selectedBrand === 'all' ? 'border-gray-100' : 'border-[#1B75BB]'}`}>
-              <div className={`p-1.5 rounded-lg ${selectedBrand === 'all' ? 'bg-blue-50 text-[#1B75BB]' : 'bg-[#1B75BB] text-white'}`}>
-                <Flag size={14} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Marca</span>
-                <select
-                  value={selectedBrand}
-                  onChange={e => {
-                    onBrandChange(e.target.value);
-                    onBranchChange('all');
-                  }}
-                  className="font-black text-[10px] uppercase tracking-tight outline-none bg-transparent cursor-pointer text-gray-900"
-                >
-                  <option value="all">TODAS</option>
-                  {uniqueBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-            </div>
+            {/* Filtro de Marca - Multi-select */}
+            <MultiSelectFilter
+              label="Marca"
+              icon={<Flag size={14} />}
+              options={uniqueBrands}
+              selected={selectedMarca}
+              onChange={(newSelection) => {
+                onMarcaChange(newSelection);
+                if (newSelection.length > 0 && selectedFilial.length > 0) {
+                  // Limpar filiais se as marcas mudarem
+                  onFilialChange([]);
+                }
+              }}
+              colorScheme="blue"
+            />
 
-            {/* Filtro de Filial */}
-            <div className={`flex items-center gap-2 bg-white px-3 py-2 rounded-lg border-2 shadow-sm transition-all ${selectedBranch === 'all' ? 'border-gray-100' : 'border-[#F44C00]'}`}>
-              <div className={`p-1.5 rounded-lg ${selectedBranch === 'all' ? 'bg-orange-50 text-[#F44C00]' : 'bg-[#F44C00] text-white'}`}>
-                <Building2 size={14} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Filial</span>
-                <select
-                  value={selectedBranch}
-                  onChange={e => onBranchChange(e.target.value)}
-                  className="font-black text-[10px] uppercase tracking-tight outline-none bg-transparent cursor-pointer text-gray-900"
-                >
-                  <option value="all">TODAS</option>
-                  {availableBranches.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-            </div>
+            {/* Filtro de Filial - Multi-select */}
+            <MultiSelectFilter
+              label="Filial"
+              icon={<Building2 size={14} />}
+              options={availableBranches}
+              selected={selectedFilial}
+              onChange={onFilialChange}
+              colorScheme="orange"
+            />
 
             {/* Separador visual */}
-            <div className="h-8 w-px bg-gray-300"></div>
+            <div className="h-[52px] w-px bg-gray-300"></div>
 
-            {/* Botões de Comparação */}
-            <div className="flex bg-white p-0.5 rounded-lg border border-gray-100 shadow-sm">
+            {/* Botões de Comparação - Altura padronizada */}
+            <div className="flex bg-white rounded-lg border-2 border-gray-200 shadow-sm h-[52px]">
               {(['budget', 'prevYear'] as const).map(mode => (
                 <button
                   key={mode}
                   onClick={() => setComparisonMode(mode)}
-                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all rounded-lg ${
+                  className={`px-4 h-full text-[9px] font-black uppercase tracking-widest transition-all first:rounded-l-md last:rounded-r-md ${
                     comparisonMode === mode
                       ? 'bg-[#1B75BB] text-white'
-                      : 'text-gray-400 hover:text-[#1B75BB]'
+                      : 'text-gray-400 hover:text-[#1B75BB] hover:bg-gray-50'
                   }`}
                 >
                   vs {mode === 'budget' ? 'ORÇADO' : 'ANO ANT'}
@@ -431,14 +524,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               ))}
             </div>
 
-            {/* Atalhos de período */}
-            <div className="flex gap-1">
+            {/* Atalhos de período - Altura padronizada */}
+            <div className="flex gap-1.5 h-[52px]">
               <button
                 onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
-                className={`px-2 py-1 text-[9px] font-black uppercase rounded transition-all ${
+                className={`px-3 h-full text-[9px] font-black uppercase rounded-lg transition-all border-2 ${
                   selectedMonthStart === 0 && selectedMonthEnd === 11
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#1B75BB] text-white border-[#1B75BB] shadow-md'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
                 }`}
                 title="Ano completo"
               >
@@ -446,10 +539,10 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button
                 onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(2); }}
-                className={`px-2 py-1 text-[9px] font-black uppercase rounded transition-all ${
+                className={`px-3 h-full text-[9px] font-black uppercase rounded-lg transition-all border-2 ${
                   selectedMonthStart === 0 && selectedMonthEnd === 2
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#1B75BB] text-white border-[#1B75BB] shadow-md'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
                 }`}
                 title="1º Trimestre"
               >
@@ -457,10 +550,10 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button
                 onClick={() => { setSelectedMonthStart(3); setSelectedMonthEnd(5); }}
-                className={`px-2 py-1 text-[9px] font-black uppercase rounded transition-all ${
+                className={`px-3 h-full text-[9px] font-black uppercase rounded-lg transition-all border-2 ${
                   selectedMonthStart === 3 && selectedMonthEnd === 5
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#1B75BB] text-white border-[#1B75BB] shadow-md'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
                 }`}
                 title="2º Trimestre"
               >
@@ -468,10 +561,10 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button
                 onClick={() => { setSelectedMonthStart(6); setSelectedMonthEnd(8); }}
-                className={`px-2 py-1 text-[9px] font-black uppercase rounded transition-all ${
+                className={`px-3 h-full text-[9px] font-black uppercase rounded-lg transition-all border-2 ${
                   selectedMonthStart === 6 && selectedMonthEnd === 8
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#1B75BB] text-white border-[#1B75BB] shadow-md'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
                 }`}
                 title="3º Trimestre"
               >
@@ -479,10 +572,10 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button
                 onClick={() => { setSelectedMonthStart(9); setSelectedMonthEnd(11); }}
-                className={`px-2 py-1 text-[9px] font-black uppercase rounded transition-all ${
+                className={`px-3 h-full text-[9px] font-black uppercase rounded-lg transition-all border-2 ${
                   selectedMonthStart === 9 && selectedMonthEnd === 11
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-[#1B75BB] text-white border-[#1B75BB] shadow-md'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
                 }`}
                 title="4º Trimestre"
               >
@@ -490,8 +583,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </div>
 
-            {/* Seletores de mês */}
-            <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm">
+            {/* Seletores de mês - Altura padronizada */}
+            <div className="flex items-center gap-2 bg-white border-2 border-gray-200 px-4 h-[52px] rounded-lg shadow-sm">
               <CalendarDays size={14} className="text-[#F44C00]" />
               <div className="flex items-center gap-1.5">
                 <select
@@ -534,14 +627,18 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="space-y-4">
       {/* Executive KPIs Section */}
       <section>
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Indicadores Executivos
-        </h3>
+        <div className="mb-3">
+          <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+            <div className="h-6 w-1.5 bg-[#1B75BB] rounded-full"></div>
+            Indicadores Executivos
+          </h2>
+          <p className="text-xs text-gray-500 mt-1 ml-4">KPIs principais e tendências de performance</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} trendAbsolute={trends.revenueAbsolute} color="blue" icon={<Target size={16} />} />
-          <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} trendAbsolute={trends.ebitdaAbsolute} color="orange" icon={<Target size={16} />} />
-          <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} trendAbsolute={trends.revenuePerStudentAbsolute} color="blue" icon={<Users size={16} />} />
-          <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} trendAbsolute={trends.studentsAbsolute} color="teal" icon={<Users size={16} />} />
+          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} trendAbsolute={trends.revenueAbsolute} color="blue" icon={<Target size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
+          <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} trendAbsolute={trends.ebitdaAbsolute} color="orange" icon={<Target size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
+          <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} trendAbsolute={trends.revenuePerStudentAbsolute} color="blue" icon={<Users size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
+          <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} trendAbsolute={trends.studentsAbsolute} color="teal" icon={<Users size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
         </div>
       </section>
 
@@ -554,11 +651,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         <p className="text-xs text-gray-500 mt-1 ml-4">Visualizações detalhadas de performance e comparações</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* COLUNA ESQUERDA - GRÁFICOS (col-8) */}
-        <div className="lg:col-span-8 space-y-4">
-          {/* 1. Waterfall Chart */}
-          <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+      {/* Waterfall Chart - Full Width */}
+      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-base font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
@@ -664,216 +758,310 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
 
-          {/* 2. Heatmap de Performance Mensal */}
-          <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-base font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
-                  <CalendarDays size={18} className="text-[#7AC5BF]" />
-                  Performance Mensal - Heatmap
-                </h3>
-                <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Visualização de tendências mensais por métrica</p>
-              </div>
-            </div>
-
-            {/* Heatmap Grid */}
-            <div className="w-full">
-              <div className="flex">
-                {/* Labels das métricas */}
-                <div className="flex flex-col w-20 shrink-0">
-                    <div className="h-8 flex items-center justify-end pr-2 text-[8px] font-black text-gray-400 uppercase">
-                      Métrica
-                    </div>
-                    {heatmapData.metrics.map((metric) => (
-                      <div key={metric} className="h-12 flex items-center justify-end pr-2 text-[10px] font-black text-gray-700">
-                        {metric}
-                      </div>
-                    ))}
-                  </div>
-
-                {/* Grid de células do heatmap */}
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex">
-                    {heatmapData.monthsData.map((monthData) => (
-                      <div key={monthData.month} className="flex-1 min-w-[40px]">
-                          {/* Header do mês */}
-                          <div className="h-8 flex items-center justify-center text-[8px] font-black text-gray-400 uppercase">
-                            {monthData.month}
-                          </div>
-                          {/* Células de cada métrica */}
-                          {heatmapData.metrics.map((metric) => {
-                            const score = monthData.scores[metric as keyof typeof monthData.scores];
-                            const value = monthData[metric as keyof typeof monthData];
-
-                            // Calcular cor baseada no score (0-100)
-                            let bgColor = '#f3f4f6';
-                            if (score > 70) bgColor = '#7AC5BF';
-                            else if (score > 50) bgColor = '#93C5FD';
-                            else if (score > 30) bgColor = '#FCD34D';
-                            else if (score > 0) bgColor = '#FCA5A5';
-
-                            return (
-                              <div
-                                key={`${monthData.month}-${metric}`}
-                                className="h-12 flex items-center justify-center m-0.5 rounded transition-all hover:scale-105 cursor-pointer shadow-sm"
-                                style={{ backgroundColor: bgColor }}
-                                title={`${metric}: ${value} (Score: ${score.toFixed(0)})`}
-                              >
-                                <span className="text-[10px] font-black text-gray-900 whitespace-nowrap">
-                                  {value}{metric === 'Margem %' && '%'}{metric === 'Alunos' && '%'}
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Legenda */}
-              <div className="mt-4 flex items-center justify-center gap-3 text-[9px] font-bold text-gray-600">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded" style={{backgroundColor: '#FCA5A5'}}></div>
-                    <span>Crítico</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded" style={{backgroundColor: '#FCD34D'}}></div>
-                    <span>Atenção</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded" style={{backgroundColor: '#93C5FD'}}></div>
-                    <span>Regular</span>
-                  </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded" style={{backgroundColor: '#7AC5BF'}}></div>
-                  <span>Excelente</span>
-                </div>
-              </div>
+      {/* Cards Grid - 3 columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+        {/* Target Achievement */}
+        <div className="bg-[#1B75BB] p-5 rounded-xl text-white shadow-lg h-[180px] relative overflow-hidden flex flex-col justify-between group">
+          <div className="relative z-10">
+            <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest">Atingimento da Meta</span>
+            <p className="text-5xl font-black mt-3 leading-none">{((enhancedKpis.ebitda / Math.max(1, enhancedKpis.targetEbitdaValue)) * 100).toFixed(0)}%</p>
+            <div className="w-full bg-white/10 h-2 rounded-full mt-4 overflow-hidden">
+              <div className="bg-[#7AC5BF] h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (enhancedKpis.ebitda / Math.max(1, enhancedKpis.targetEbitdaValue)) * 100)}%` }}></div>
             </div>
           </div>
-
+          <button
+            onClick={() => setShowVariationDetail(true)}
+            className="relative z-10 w-full py-2.5 bg-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-1.5 border border-white/5"
+          >
+            Detalhar Variação <ArrowRight size={12} />
+          </button>
+          <div className="absolute -bottom-10 -right-10 opacity-5 group-hover:scale-110 transition-transform">
+            <GraduationCap size={120} />
+          </div>
         </div>
 
-        {/* COLUNA DIREITA - CARDS (col-4) */}
+        {/* Dynamic Performance Status */}
+        <div className={`p-5 rounded-xl shadow-lg h-[180px] flex flex-col justify-center ${
+          enhancedKpis.isBelowTarget
+            ? 'bg-gradient-to-br from-orange-500 to-orange-600'
+            : 'bg-gradient-to-br from-teal-500 to-teal-600'
+        } text-white`}>
+          {enhancedKpis.isBelowTarget ? (
+            <>
+              <Scissors size={32} className="mb-3" />
+              <h4 className="text-lg font-black mb-2">Atenção Necessária</h4>
+              <p className="text-sm font-bold opacity-90 leading-relaxed">
+                É necessário reduzir custos em <span className="font-black">R$ {enhancedKpis.costReductionNeeded.toLocaleString('pt-BR')}</span> para atingir a meta de margem de 25%.
+              </p>
+            </>
+          ) : (
+            <>
+              <ShieldCheck size={32} className="mb-3" />
+              <h4 className="text-lg font-black mb-2">Performance Excelente</h4>
+              <p className="text-sm font-bold opacity-90 leading-relaxed">
+                Unidade operando acima da meta com margem de segurança de <span className="font-black">R$ {enhancedKpis.marginOfSafety.toLocaleString('pt-BR')}</span>.
+              </p>
+            </>
+          )}
+        </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          {/* Target Achievement */}
-          <div className="bg-[#1B75BB] p-5 rounded-xl text-white shadow-lg flex-1 relative overflow-hidden flex flex-col justify-between group">
-            <div className="relative z-10">
-              <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest">Atingimento da Meta</span>
-              <p className="text-4xl font-black mt-2">{((enhancedKpis.ebitda / Math.max(1, enhancedKpis.targetEbitdaValue)) * 100).toFixed(0)}%</p>
-              <div className="w-full bg-white/10 h-1.5 rounded-full mt-3 overflow-hidden">
-                <div className="bg-[#7AC5BF] h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (enhancedKpis.ebitda / Math.max(1, enhancedKpis.targetEbitdaValue)) * 100)}%` }}></div>
+        {/* Principais Alertas */}
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm h-[180px] flex flex-col">
+          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 flex-shrink-0">
+            <AlertCircle size={14} />
+            Atenção Necessária
+          </h4>
+          <div className="space-y-2 flex-1 overflow-y-auto">
+            {/* Inadimplência */}
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                enhancedKpis.defaultRate > 10 ? 'bg-red-500' :
+                enhancedKpis.defaultRate > 5 ? 'bg-yellow-500' :
+                'bg-green-500'
+              }`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-bold text-gray-700 truncate">Inadimplência</span>
+                  <span className={`text-xs font-black whitespace-nowrap ${
+                    enhancedKpis.defaultRate > 10 ? 'text-red-600' :
+                    enhancedKpis.defaultRate > 5 ? 'text-yellow-600' :
+                    'text-green-600'
+                  }`}>
+                    {enhancedKpis.defaultRate.toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-[9px] text-gray-400 font-medium mt-0.5">
+                  {enhancedKpis.defaultRate > 10 ? 'Acima do aceitável' :
+                   enhancedKpis.defaultRate > 5 ? 'Requer atenção' :
+                   'Dentro da meta'}
+                </p>
+              </div>
+            </div>
+
+              {/* Custo de Professores % Receita */}
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  enhancedKpis.teacherCostPercent > 40 ? 'bg-red-500' :
+                  enhancedKpis.teacherCostPercent > 38 ? 'bg-yellow-500' :
+                  'bg-green-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-700 truncate">Custo Professores</span>
+                    <span className={`text-xs font-black whitespace-nowrap ${
+                      enhancedKpis.teacherCostPercent > 40 ? 'text-red-600' :
+                      enhancedKpis.teacherCostPercent > 38 ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`}>
+                      {enhancedKpis.teacherCostPercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">
+                    {enhancedKpis.teacherCostPercent > 40 ? 'Reduzir custos' :
+                     enhancedKpis.teacherCostPercent > 38 ? 'Próximo do limite' :
+                     'Meta: 38%'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Energia por Sala */}
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  enhancedKpis.energyPerClassroom > 1000 ? 'bg-red-500' :
+                  enhancedKpis.energyPerClassroom > 800 ? 'bg-yellow-500' :
+                  'bg-green-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-700 truncate">Energia/Sala</span>
+                    <span className={`text-xs font-black whitespace-nowrap ${
+                      enhancedKpis.energyPerClassroom > 1000 ? 'text-red-600' :
+                      enhancedKpis.energyPerClassroom > 800 ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`}>
+                      R$ {enhancedKpis.energyPerClassroom.toFixed(0)}
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">
+                    {enhancedKpis.energyPerClassroom > 1000 ? 'Consumo elevado' :
+                     enhancedKpis.energyPerClassroom > 800 ? 'Acima da média' :
+                     'Consumo controlado'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Margem EBITDA */}
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  enhancedKpis.netMargin < 15 ? 'bg-red-500' :
+                  enhancedKpis.netMargin < 25 ? 'bg-yellow-500' :
+                  'bg-green-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-700 truncate">Margem EBITDA</span>
+                    <span className={`text-xs font-black whitespace-nowrap ${
+                      enhancedKpis.netMargin < 15 ? 'text-red-600' :
+                      enhancedKpis.netMargin < 25 ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`}>
+                      {enhancedKpis.netMargin.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">
+                    {enhancedKpis.netMargin < 15 ? 'Crítico - abaixo de 15%' :
+                     enhancedKpis.netMargin < 25 ? 'Abaixo da meta de 25%' :
+                     'Acima da meta'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Manutenção % Receita */}
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  enhancedKpis.maintenancePercent > 8 ? 'bg-red-500' :
+                  enhancedKpis.maintenancePercent > 5 ? 'bg-yellow-500' :
+                  'bg-green-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-700 truncate">Manutenção</span>
+                    <span className={`text-xs font-black whitespace-nowrap ${
+                      enhancedKpis.maintenancePercent > 8 ? 'text-red-600' :
+                      enhancedKpis.maintenancePercent > 5 ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`}>
+                      {enhancedKpis.maintenancePercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-gray-400 font-medium mt-0.5">
+                    {enhancedKpis.maintenancePercent > 8 ? 'Custos excessivos' :
+                     enhancedKpis.maintenancePercent > 5 ? 'Monitorar de perto' :
+                     'Sob controle'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          {/* Legenda e Botão */}
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                <span className="text-[9px] font-bold text-gray-500">OK</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                <span className="text-[9px] font-bold text-gray-500">Atenção</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                <span className="text-[9px] font-bold text-gray-500">Crítico</span>
               </div>
             </div>
             <button
-              onClick={() => setShowVariationDetail(true)}
-              className="relative z-10 w-full mt-4 py-3 bg-white/10 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-1.5 border border-white/5"
+              onClick={() => setShowAlertsDetail(true)}
+              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1"
             >
-              Detalhar Variação <ArrowRight size={12} />
+              Detalhar <ArrowRight size={10} />
             </button>
-            <div className="absolute -bottom-10 -right-10 opacity-5 group-hover:scale-110 transition-transform">
-              <GraduationCap size={120} />
+          </div>
+        </div>
+      </div>
+
+      {/* Heatmap de Performance Mensal - EXPANDIDO HORIZONTALMENTE */}
+      <div className="mt-4">
+        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
+                <CalendarDays size={20} className="text-[#7AC5BF]" />
+                Performance Mensal - Heatmap
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-1">Visualização de tendências mensais por métrica</p>
             </div>
           </div>
 
-          {/* Dynamic Performance Status */}
-          <div className={`p-4 rounded-xl shadow-lg ${
-            enhancedKpis.isBelowTarget
-              ? 'bg-gradient-to-br from-orange-500 to-orange-600'
-              : 'bg-gradient-to-br from-teal-500 to-teal-600'
-          } text-white`}>
-            {enhancedKpis.isBelowTarget ? (
-              <>
-                <Scissors size={24} className="mb-2" />
-                <h4 className="text-base font-black mb-1.5">Atenção Necessária</h4>
-                <p className="text-xs font-bold opacity-90">
-                  É necessário reduzir custos em <span className="font-black">R$ {enhancedKpis.costReductionNeeded.toLocaleString('pt-BR')}</span> para atingir a meta de margem de 25%.
-                </p>
-              </>
-            ) : (
-              <>
-                <ShieldCheck size={24} className="mb-2" />
-                <h4 className="text-base font-black mb-1.5">Performance Excelente</h4>
-                <p className="text-xs font-bold opacity-90">
-                  Unidade operando acima da meta com margem de segurança de <span className="font-black">R$ {enhancedKpis.marginOfSafety.toLocaleString('pt-BR')}</span>.
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Cost Structure Breakdown */}
-          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-            <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <PieChart size={12} />
-              Estrutura de Custos
-            </h4>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-gray-600">Custos Fixos</span>
-                  <span className="text-[10px] font-black text-[#1B75BB]">
-                    {((enhancedKpis.totalFixedCosts / Math.max(1, enhancedKpis.totalFixedCosts + enhancedKpis.totalVariableCosts)) * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-[#1B75BB] h-full rounded-full transition-all"
-                    style={{ width: `${(enhancedKpis.totalFixedCosts / Math.max(1, enhancedKpis.totalFixedCosts + enhancedKpis.totalVariableCosts)) * 100}%` }}
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-gray-600">Custos Variáveis</span>
-                  <span className="text-[10px] font-black text-[#F44C00]">
-                    {((enhancedKpis.totalVariableCosts / Math.max(1, enhancedKpis.totalFixedCosts + enhancedKpis.totalVariableCosts)) * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-[#F44C00] h-full rounded-full transition-all"
-                    style={{ width: `${(enhancedKpis.totalVariableCosts / Math.max(1, enhancedKpis.totalFixedCosts + enhancedKpis.totalVariableCosts)) * 100}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col" style={{ height: '500px' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Top Unidades (EBITDA)</h4>
-              <button
-                onClick={() => setSortBranchesAZ(!sortBranchesAZ)}
-                className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
-                  sortBranchesAZ
-                    ? 'bg-[#1B75BB] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-                title={sortBranchesAZ ? 'Ordenar por EBITDA' : 'Ordenar A-Z'}
-              >
-                {sortBranchesAZ ? 'A-Z' : 'EBITDA'}
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-              {branchData.map((b, i) => (
-                <div key={b.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all border border-transparent hover:border-[#1B75BB]/20">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-5 h-5 flex items-center justify-center rounded text-[9px] font-black ${!sortBranchesAZ && i === 0 ? 'bg-[#FFF4ED] text-[#F44C00]' : 'bg-white text-gray-400'}`}>
-                      {i + 1}
-                    </span>
-                    <span className="text-[10px] font-black text-gray-900">{b.name}</span>
+          {/* Heatmap Grid */}
+          <div className="w-full">
+            <div className="flex">
+              {/* Labels das métricas */}
+              <div className="flex flex-col w-32 shrink-0 gap-2">
+                  <div className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-400 uppercase">
+                    Métrica
                   </div>
-                  <span className="text-[10px] font-black text-[#1B75BB]">R$ {b.ebitda.toLocaleString()}</span>
+                  {heatmapData.metrics.map((metric) => (
+                    <div key={metric} className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-700">
+                      {metric}
+                    </div>
+                  ))}
                 </div>
-              ))}
+
+              {/* Grid de células do heatmap */}
+              <div className="flex-1 overflow-hidden">
+                <div className="flex">
+                  {heatmapData.monthsData.map((monthData) => {
+                    const isTotal = monthData.month === 'TOTAL';
+                    return (
+                    <div key={monthData.month} className={`flex-1 min-w-[60px] flex flex-col gap-2 ${isTotal ? 'ml-3 pl-3 border-l-4 border-[#1B75BB]' : ''}`}>
+                        {/* Header do mês */}
+                        <div className={`h-10 flex items-center justify-center text-sm font-black uppercase ${isTotal ? 'text-[#1B75BB] bg-gradient-to-b from-gray-50 to-white rounded-t-lg' : 'text-gray-500'}`}>
+                          {monthData.month}
+                        </div>
+                        {/* Células de cada métrica */}
+                        {heatmapData.metrics.map((metric) => {
+                          const score = monthData.scores[metric as keyof typeof monthData.scores];
+                          const value = monthData[metric as keyof typeof monthData];
+
+                          // Calcular cor baseada no score (0-100)
+                          let bgColor = '#f3f4f6';
+                          if (score > 70) bgColor = '#7AC5BF';
+                          else if (score > 50) bgColor = '#93C5FD';
+                          else if (score > 30) bgColor = '#FCD34D';
+                          else if (score > 0) bgColor = '#FCA5A5';
+
+                          return (
+                            <div
+                              key={`${monthData.month}-${metric}`}
+                              className={`h-10 flex items-center justify-center mx-1 rounded-lg transition-all ${isTotal ? 'bg-gradient-to-r from-gray-50 to-white shadow-sm' : 'shadow-md hover:scale-105 cursor-pointer'}`}
+                              style={{ backgroundColor: isTotal ? undefined : bgColor }}
+                              title={`${metric}: ${value}${isTotal ? ' (Total do Período)' : ` (Score: ${score.toFixed(0)})`}`}
+                            >
+                              <span className={`text-sm font-black whitespace-nowrap ${isTotal ? 'text-gray-900' : 'text-gray-900'}`}>
+                                {value}{metric === 'Margem %' && '%'}{metric === 'Alunos' && '%'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Legenda */}
+            <div className="mt-6 flex items-center justify-center gap-6 text-xs font-bold text-gray-600">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{backgroundColor: '#FCA5A5'}}></div>
+                  <span>Crítico</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{backgroundColor: '#FCD34D'}}></div>
+                  <span>Atenção</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{backgroundColor: '#93C5FD'}}></div>
+                  <span>Regular</span>
+                </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{backgroundColor: '#7AC5BF'}}></div>
+                <span>Excelente</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      </div>
-    </div>
 
     {/* Modal de Detalhamento de Variação */}
     {showVariationDetail && (
@@ -1043,11 +1231,203 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
     )}
+
+    {/* Modal de Detalhamento dos Alertas */}
+    {showAlertsDetail && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#F44C00] to-[#FF6B35] p-3 rounded-t-xl flex items-center justify-between flex-shrink-0">
+            <div>
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <AlertCircle size={18} />
+                Análise de Alertas
+              </h3>
+              <p className="text-[9px] text-white/80 font-bold mt-0.5">
+                Detalhamento completo dos indicadores que requerem atenção
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAlertsDetail(false)}
+              className="p-1.5 hover:bg-white/20 rounded-lg transition-all"
+            >
+              <X size={18} className="text-white" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-3 space-y-2 overflow-y-auto flex-1">
+            {/* Resumo Executivo */}
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-3 rounded-lg border border-gray-200 flex-shrink-0">
+              <h4 className="text-xs font-black text-gray-900 mb-2 uppercase tracking-wide">
+                Resumo Executivo
+              </h4>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center">
+                  <div className="text-xl font-black text-red-600">
+                    {[
+                      enhancedKpis.defaultRate > 10 ? 1 : 0,
+                      enhancedKpis.teacherCostPercent > 40 ? 1 : 0,
+                      enhancedKpis.energyPerClassroom > 1000 ? 1 : 0,
+                      enhancedKpis.netMargin < 15 ? 1 : 0,
+                      enhancedKpis.maintenancePercent > 8 ? 1 : 0
+                    ].reduce((a, b) => a + b, 0)}
+                  </div>
+                  <p className="text-[9px] text-gray-600 font-bold">Críticos</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-black text-yellow-600">
+                    {[
+                      enhancedKpis.defaultRate > 5 && enhancedKpis.defaultRate <= 10 ? 1 : 0,
+                      enhancedKpis.teacherCostPercent > 38 && enhancedKpis.teacherCostPercent <= 40 ? 1 : 0,
+                      enhancedKpis.energyPerClassroom > 800 && enhancedKpis.energyPerClassroom <= 1000 ? 1 : 0,
+                      enhancedKpis.netMargin >= 15 && enhancedKpis.netMargin < 25 ? 1 : 0,
+                      enhancedKpis.maintenancePercent > 5 && enhancedKpis.maintenancePercent <= 8 ? 1 : 0
+                    ].reduce((a, b) => a + b, 0)}
+                  </div>
+                  <p className="text-[9px] text-gray-600 font-bold">Atenção</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-black text-green-600">
+                    {[
+                      enhancedKpis.defaultRate <= 5 ? 1 : 0,
+                      enhancedKpis.teacherCostPercent <= 38 ? 1 : 0,
+                      enhancedKpis.energyPerClassroom <= 800 ? 1 : 0,
+                      enhancedKpis.netMargin >= 25 ? 1 : 0,
+                      enhancedKpis.maintenancePercent <= 5 ? 1 : 0
+                    ].reduce((a, b) => a + b, 0)}
+                  </div>
+                  <p className="text-[9px] text-gray-600 font-bold">OK</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Detalhamento dos Alertas - Ordenados por Criticidade */}
+            <div className="space-y-2">
+              {(() => {
+                // Criar array de alertas com criticidade
+                const alerts = [
+                  {
+                    name: 'Inadimplência',
+                    value: enhancedKpis.defaultRate.toFixed(1) + '%',
+                    numericValue: enhancedKpis.defaultRate,
+                    meta: '≤ 5%',
+                    status: enhancedKpis.defaultRate > 10 ? 'Acima do aceitável' : enhancedKpis.defaultRate > 5 ? 'Requer atenção' : 'Dentro da meta',
+                    action: enhancedKpis.defaultRate > 5 ? 'Implementar campanha de recuperação de crédito e revisar políticas de cobrança.' : null,
+                    criticality: enhancedKpis.defaultRate > 10 ? 0 : enhancedKpis.defaultRate > 5 ? 1 : 2,
+                    additionalInfo: null
+                  },
+                  {
+                    name: 'Custo de Professores',
+                    value: enhancedKpis.teacherCostPercent.toFixed(1) + '%',
+                    numericValue: enhancedKpis.teacherCostPercent,
+                    meta: '≤ 38% da receita',
+                    status: null,
+                    action: enhancedKpis.teacherCostPercent > 38 ? 'Otimizar quadro docente e revisar carga horária.' : null,
+                    criticality: enhancedKpis.teacherCostPercent > 40 ? 0 : enhancedKpis.teacherCostPercent > 38 ? 1 : 2,
+                    additionalInfo: 'R$ ' + enhancedKpis.teacherCost.toLocaleString('pt-BR')
+                  },
+                  {
+                    name: 'Energia por Sala',
+                    value: 'R$ ' + enhancedKpis.energyPerClassroom.toFixed(0),
+                    numericValue: enhancedKpis.energyPerClassroom,
+                    meta: '≤ R$ 800/sala',
+                    status: null,
+                    action: enhancedKpis.energyPerClassroom > 800 ? 'Implementar medidas de eficiência energética e revisar uso de climatização.' : null,
+                    criticality: enhancedKpis.energyPerClassroom > 1000 ? 0 : enhancedKpis.energyPerClassroom > 800 ? 1 : 2,
+                    additionalInfo: enhancedKpis.numberOfClassrooms + ' salas'
+                  },
+                  {
+                    name: 'Margem EBITDA',
+                    value: enhancedKpis.netMargin.toFixed(1) + '%',
+                    numericValue: enhancedKpis.netMargin,
+                    meta: '≥ 25%',
+                    status: null,
+                    action: enhancedKpis.netMargin < 15 ? 'Plano de recuperação urgente necessário.' : enhancedKpis.netMargin < 25 ? 'Revisar estrutura de custos e oportunidades de receita.' : null,
+                    criticality: enhancedKpis.netMargin < 15 ? 0 : enhancedKpis.netMargin < 25 ? 1 : 2,
+                    additionalInfo: 'R$ ' + enhancedKpis.ebitda.toLocaleString('pt-BR')
+                  },
+                  {
+                    name: 'Manutenção',
+                    value: enhancedKpis.maintenancePercent.toFixed(1) + '%',
+                    numericValue: enhancedKpis.maintenancePercent,
+                    meta: '≤ 5% da receita',
+                    status: null,
+                    action: enhancedKpis.maintenancePercent > 5 ? 'Revisar contratos de manutenção e implementar manutenção preventiva.' : null,
+                    criticality: enhancedKpis.maintenancePercent > 8 ? 0 : enhancedKpis.maintenancePercent > 5 ? 1 : 2,
+                    additionalInfo: 'R$ ' + enhancedKpis.maintenanceCost.toLocaleString('pt-BR')
+                  }
+                ];
+
+                // Ordenar por criticidade (0=crítico, 1=atenção, 2=ok)
+                alerts.sort((a, b) => a.criticality - b.criticality);
+
+                // Renderizar os cards ordenados
+                return alerts.map((alert, index) => (
+                  <div key={index} className={`p-3 rounded-lg border-2 ${
+                    alert.criticality === 0 ? 'bg-red-50 border-red-200' :
+                    alert.criticality === 1 ? 'bg-yellow-50 border-yellow-200' :
+                    'bg-green-50 border-green-200'
+                  }`}>
+                    <div className="flex items-start justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          alert.criticality === 0 ? 'bg-red-500' :
+                          alert.criticality === 1 ? 'bg-yellow-500' :
+                          'bg-green-500'
+                        }`} />
+                        <h5 className="text-xs font-black text-gray-900">{alert.name}</h5>
+                      </div>
+                      <span className={`text-base font-black ${
+                        alert.criticality === 0 ? 'text-red-600' :
+                        alert.criticality === 1 ? 'text-yellow-600' :
+                        'text-green-600'
+                      }`}>
+                        {alert.value}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div>
+                        <p className="text-gray-600 font-medium">Meta:</p>
+                        <p className="font-black text-gray-900">{alert.meta}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 font-medium">{alert.status ? 'Status:' : 'Valor:'}</p>
+                        <p className="font-black text-gray-900">{alert.status || alert.additionalInfo}</p>
+                      </div>
+                    </div>
+                    {alert.action && (
+                      <div className="mt-2 p-2 bg-white/60 rounded">
+                        <p className="text-[9px] font-bold text-gray-700">
+                          <span className="text-[#F44C00]">⚡ Ação:</span> {alert.action}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="bg-gray-50 p-2 rounded-b-xl border-t border-gray-200 flex justify-end flex-shrink-0">
+            <button
+              onClick={() => setShowAlertsDetail(false)}
+              className="px-4 py-2 bg-[#F44C00] text-white rounded-lg font-black text-[10px] uppercase tracking-wider hover:bg-[#d63e00] transition-all"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </div>
+    </div>
     </>
   );
 };
 
-const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon }: any) => {
+const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon, variationType = 'vs Orçado' }: any) => {
   const colorMaps: any = {
     blue: 'text-[#1B75BB] bg-blue-50',
     orange: 'text-[#F44C00] bg-orange-50',
@@ -1056,16 +1436,24 @@ const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, colo
     purple: 'text-purple-600 bg-purple-50',
   };
 
+  // Formatação com "." como separador de milhares e sem decimais para valores >= 1000
+  const formatNumber = (num: number) => {
+    const absNum = Math.abs(num);
+    if (absNum >= 1000) {
+      return num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const formattedValue = useMemo(() => {
-    if (isNumber) return value.toLocaleString();
-    const formatted = Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    return isPercent ? `${formatted}%` : `R$ ${formatted}`;
+    if (isNumber) return formatNumber(value);
+    return isPercent ? `${formatNumber(value)}%` : `R$ ${formatNumber(value)}`;
   }, [value, isPercent, isNumber]);
 
   const formattedTrendAbsolute = useMemo(() => {
     if (trendAbsolute === undefined) return null;
-    if (isNumber) return Math.abs(trendAbsolute).toLocaleString('pt-BR');
-    return `R$ ${Math.abs(trendAbsolute).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    if (isNumber) return formatNumber(Math.abs(trendAbsolute));
+    return `R$ ${formatNumber(Math.abs(trendAbsolute))}`;
   }, [trendAbsolute, isNumber]);
 
   return (
@@ -1076,10 +1464,13 @@ const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, colo
           <span className="text-[8px] font-black text-[#636363] uppercase tracking-widest">{label}</span>
         </div>
         {trend !== undefined && (
-          <div className={`px-2 py-1 rounded text-[11px] font-black flex items-center gap-1 ${trend > 0 ? 'bg-teal-50 text-[#7AC5BF]' : 'bg-orange-50 text-[#F44C00]'}`}>
-            {trend > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-            {formattedTrendAbsolute && <span>{formattedTrendAbsolute} | </span>}
-            {Math.abs(trend).toFixed(1)}%
+          <div className="flex flex-col items-end gap-0.5">
+            <div className={`px-2 py-1 rounded text-[11px] font-black flex items-center gap-1 ${trend > 0 ? 'bg-teal-50 text-[#7AC5BF]' : 'bg-orange-50 text-[#F44C00]'}`}>
+              {trend > 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+              {formattedTrendAbsolute && <span>{formattedTrendAbsolute} | </span>}
+              {Math.abs(trend).toFixed(1)}%
+            </div>
+            <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{variationType}</span>
           </div>
         )}
       </div>
@@ -1124,6 +1515,163 @@ const ConsumptionCard: React.FC<{
       </div>
       <p className="text-2xl font-black text-gray-900 mb-0.5">{value}</p>
       <p className="text-[8px] text-gray-400 font-bold">{desc}</p>
+    </div>
+  );
+};
+
+// Multi-Select Filter Component
+interface MultiSelectFilterProps {
+  label: string;
+  icon: React.ReactNode;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  colorScheme: 'blue' | 'orange';
+}
+
+const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
+  label,
+  icon,
+  options,
+  selected,
+  onChange,
+  colorScheme
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const colors = {
+    blue: {
+      border: 'border-[#1B75BB]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#1B75BB]',
+      bgLight: 'bg-blue-50',
+      text: 'text-[#1B75BB]',
+      ring: 'ring-[#1B75BB]/10'
+    },
+    orange: {
+      border: 'border-[#F44C00]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#F44C00]',
+      bgLight: 'bg-orange-50',
+      text: 'text-[#F44C00]',
+      ring: 'ring-[#F44C00]/10'
+    }
+  };
+
+  const scheme = colors[colorScheme];
+  const hasSelection = selected.length > 0;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(item => item !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  const selectAll = () => {
+    onChange(options);
+  };
+
+  const clearAll = () => {
+    onChange([]);
+  };
+
+  const displayText = selected.length === 0
+    ? 'TODAS'
+    : selected.length === 1
+    ? selected[0].toUpperCase()
+    : `${selected.length} SELECIONADAS`;
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 bg-white px-4 h-[52px] rounded-lg border-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
+          hasSelection ? `${scheme.border} ring-4 ${scheme.ring}` : scheme.borderLight
+        }`}
+      >
+        <div className={`p-1.5 rounded-lg ${hasSelection ? `${scheme.bg} text-white` : `${scheme.bgLight} ${scheme.text}`}`}>
+          {icon}
+        </div>
+        <div className="flex flex-col justify-center">
+          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-black text-[10px] uppercase tracking-tight text-gray-900 min-w-[120px]">
+              {displayText}
+            </span>
+            <ChevronDown size={12} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg border-2 border-gray-200 shadow-xl z-50 min-w-[240px] max-h-[400px] overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* Header with actions */}
+          <div className="p-2 border-b border-gray-100 flex gap-2">
+            <button
+              onClick={selectAll}
+              className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
+            >
+              Selecionar Todas
+            </button>
+            <button
+              onClick={clearAll}
+              className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
+            >
+              Limpar
+            </button>
+          </div>
+
+          {/* Options list */}
+          <div className="overflow-y-auto flex-1">
+            {options.map((option) => {
+              const isSelected = selected.includes(option);
+              return (
+                <label
+                  key={option}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                    isSelected
+                      ? `${scheme.border} ${scheme.bg}`
+                      : 'border-gray-300'
+                  }`}>
+                    {isSelected && <Check size={12} className="text-white" />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleOption(option)}
+                    className="sr-only"
+                  />
+                  <span className="text-xs font-bold text-gray-900">{option}</span>
+                </label>
+              );
+            })}
+          </div>
+
+          {/* Footer with count */}
+          <div className="p-2 border-t border-gray-100 bg-gray-50">
+            <span className="text-[9px] font-bold text-gray-600">
+              {selected.length} de {options.length} selecionada(s)
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -16,8 +16,8 @@ interface UsePermissionsReturn {
   canAccess: (transaction: Transaction) => boolean;
   filterTransactions: (transactions: Transaction[]) => Transaction[];
   hasPermissions: boolean;
-  allowedBrands: string[];
-  allowedBranches: string[];
+  allowedMarcas: string[];
+  allowedFiliais: string[];
   allowedCategories: string[];
 }
 
@@ -61,8 +61,8 @@ export const usePermissions = (): UsePermissionsReturn => {
       canAccess: () => true,
       filterTransactions: (transactions) => transactions,
       hasPermissions: false, // Admin não tem restrições
-      allowedBrands: [],
-      allowedBranches: [],
+      allowedMarcas: [],
+      allowedFiliais: [],
       allowedCategories: []
     };
   }
@@ -75,18 +75,18 @@ export const usePermissions = (): UsePermissionsReturn => {
       canAccess: () => true,
       filterTransactions: (transactions) => transactions,
       hasPermissions: false,
-      allowedBrands: [],
-      allowedBranches: [],
+      allowedMarcas: [],
+      allowedFiliais: [],
       allowedCategories: []
     };
   }
 
   // Extrair valores permitidos
-  const allowedBrands = permissions
+  const allowedMarcas = permissions
     .filter(p => p.permission_type === 'cia')
     .map(p => p.permission_value);
 
-  const allowedBranches = permissions
+  const allowedFiliais = permissions
     .filter(p => p.permission_type === 'filial')
     .map(p => p.permission_value);
 
@@ -97,15 +97,15 @@ export const usePermissions = (): UsePermissionsReturn => {
   // Função para verificar se o usuário pode acessar uma transação
   const canAccess = (transaction: Transaction): boolean => {
     // Se tem permissão de filial configurada, verificar
-    if (allowedBranches.length > 0) {
-      if (!transaction.branch || !allowedBranches.includes(transaction.branch)) {
+    if (allowedFiliais.length > 0) {
+      if (!transaction.filial || !allowedFiliais.includes(transaction.filial)) {
         return false;
       }
     }
 
-    // Se tem permissão de CIA (brand) configurada, verificar
-    if (allowedBrands.length > 0) {
-      if (!transaction.brand || !allowedBrands.includes(transaction.brand)) {
+    // Se tem permissão de CIA (marca) configurada, verificar
+    if (allowedMarcas.length > 0) {
+      if (!transaction.marca || !allowedMarcas.includes(transaction.marca)) {
         return false;
       }
     }
@@ -132,8 +132,8 @@ export const usePermissions = (): UsePermissionsReturn => {
     canAccess,
     filterTransactions,
     hasPermissions: true,
-    allowedBrands,
-    allowedBranches,
+    allowedMarcas,
+    allowedFiliais,
     allowedCategories: allowedCentroCusto
   };
 };

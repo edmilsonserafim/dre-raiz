@@ -2,11 +2,12 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Transaction } from '../types';
 import { DRE_STRUCTURE, TAG_STRUCTURE } from '../constants';
-import { 
-  ChevronRight, 
-  ChevronDown, 
+import {
+  ChevronRight,
+  ChevronDown,
   Activity,
   Calendar,
+  CalendarDays,
   Table as TableIcon,
   Percent,
   TrendingUpDown,
@@ -18,38 +19,70 @@ import {
   CheckSquare,
   Building2,
   Flag,
-  FilterX
+  FilterX,
+  ArrowLeftRight
 } from 'lucide-react';
 
 interface DREViewProps {
   transactions: Transaction[];
-  onDrillDown: (category?: string, monthIdx?: number, scenario?: string, tags?: any) => void;
+  onDrillDown: (drillDownData: {
+    categories: string[];
+    monthIdx?: number;
+    scenario?: string;
+    filters?: Record<string, string>;
+  }) => void;
 }
 
 const DRE_DIMENSIONS = [
   { id: 'tag01', label: 'C. Custo' },
   { id: 'tag02', label: 'Segmento' },
   { id: 'tag03', label: 'Projeto' },
-  { id: 'brand', label: 'Marca' },
-  { id: 'branch', label: 'Unidade' },
+  { id: 'marca', label: 'Marca' },
+  { id: 'filial', label: 'Unidade' },
   { id: 'vendor', label: 'Fornecedor' },
   { id: 'ticket', label: 'Ticket' },
 ];
 
 const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
-  const [referenceMonthIdx, setReferenceMonthIdx] = useState<number>(4);
+  const [selectedMonthStart, setSelectedMonthStart] = useState<number>(() => {
+    const saved = sessionStorage.getItem('dreMonthStart');
+    return saved ? JSON.parse(saved) : 0;
+  });
+  const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(() => {
+    const saved = sessionStorage.getItem('dreMonthEnd');
+    return saved ? JSON.parse(saved) : 11;
+  });
 
   // Estados de Filtros Multi-seleção
-  const [selectedTags01, setSelectedTags01] = useState<string[]>([]);
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
+  const [selectedTags01, setSelectedTags01] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreTags01');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedMarcas, setSelectedMarcas] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreBrands');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedFiliais, setSelectedFiliais] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreBranches');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Estados para controlar colunas visíveis (novo sistema de filtros)
   const [showReal, setShowReal] = useState<boolean>(true);
   const [showOrcado, setShowOrcado] = useState<boolean>(true);
   const [showA1, setShowA1] = useState<boolean>(true);
-  const [showDeltaPerc, setShowDeltaPerc] = useState<boolean>(true);
-  const [showDeltaAbs, setShowDeltaAbs] = useState<boolean>(false);
+  const [showDeltaPercOrcado, setShowDeltaPercOrcado] = useState<boolean>(false);
+  const [showDeltaPercA1, setShowDeltaPercA1] = useState<boolean>(false);
+  const [showDeltaAbsOrcado, setShowDeltaAbsOrcado] = useState<boolean>(false);
+  const [showDeltaAbsA1, setShowDeltaAbsA1] = useState<boolean>(false);
+
+  // Sistema de ordem de seleção - todos os elementos (cenários + deltas)
+  const [selectionOrder, setSelectionOrder] = useState<string[]>([
+    'Real', 'Orçado', 'A-1', 'DeltaPercOrcado', 'DeltaPercA1', 'DeltaAbsOrcado', 'DeltaAbsA1'
+  ]);
+
+  // Modo de visualização: 'scenario' (por cenário) ou 'month' (por mês)
+  const [viewMode, setViewMode] = useState<'scenario' | 'month'>('scenario');
   
   // Estados de UI (Dropdowns abertos)
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
@@ -65,7 +98,69 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
   const brandRef = useRef<HTMLDivElement>(null);
   const branchRef = useRef<HTMLDivElement>(null);
 
+  // Salvar filtros da DRE no sessionStorage quando mudarem
+  useEffect(() => {
+    sessionStorage.setItem('dreMonthStart', JSON.stringify(selectedMonthStart));
+  }, [selectedMonthStart]);
+
+  useEffect(() => {
+    sessionStorage.setItem('dreMonthEnd', JSON.stringify(selectedMonthEnd));
+  }, [selectedMonthEnd]);
+
+  useEffect(() => {
+    sessionStorage.setItem('dreTags01', JSON.stringify(selectedTags01));
+  }, [selectedTags01]);
+
+  useEffect(() => {
+    sessionStorage.setItem('dreBrands', JSON.stringify(selectedMarcas));
+  }, [selectedMarcas]);
+
+  useEffect(() => {
+    sessionStorage.setItem('dreBranches', JSON.stringify(selectedFiliais));
+  }, [selectedFiliais]);
+
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+
+  // Meses filtrados baseado no range selecionado
+  const filteredMonths = useMemo(() => {
+    return months.slice(selectedMonthStart, selectedMonthEnd + 1);
+  }, [selectedMonthStart, selectedMonthEnd]);
+
+  const filteredMonthIndices = useMemo(() => {
+    return Array.from({ length: selectedMonthEnd - selectedMonthStart + 1 }, (_, i) => selectedMonthStart + i);
+  }, [selectedMonthStart, selectedMonthEnd]);
+
+  // Função para gerenciar toggle com tracking de ordem (funciona para cenários e deltas)
+  const toggleElement = (element: string, currentState: boolean, setState: (val: boolean) => void) => {
+    if (!currentState) {
+      // Está sendo ativado - adiciona ao final da ordem
+      setSelectionOrder(prev => [...prev.filter(s => s !== element), element]);
+    } else {
+      // Está sendo desativado - remove da ordem
+      setSelectionOrder(prev => prev.filter(s => s !== element));
+    }
+    setState(!currentState);
+  };
+
+  // Calcula todos os elementos ativos (cenários + deltas) na ordem de seleção
+  const activeElements = useMemo(() => {
+    const active = [];
+    if (showReal) active.push('Real');
+    if (showOrcado) active.push('Orçado');
+    if (showA1) active.push('A-1');
+    if (showDeltaPercOrcado) active.push('DeltaPercOrcado');
+    if (showDeltaPercA1) active.push('DeltaPercA1');
+    if (showDeltaAbsOrcado) active.push('DeltaAbsOrcado');
+    if (showDeltaAbsA1) active.push('DeltaAbsA1');
+
+    // Ordena pela ordem de seleção
+    return active.sort((a, b) => selectionOrder.indexOf(a) - selectionOrder.indexOf(b));
+  }, [showReal, showOrcado, showA1, showDeltaPercOrcado, showDeltaPercA1, showDeltaAbsOrcado, showDeltaAbsA1, selectionOrder]);
+
+  // Calcula apenas os cenários ativos (para cálculos)
+  const activeScenarios = useMemo(() => {
+    return activeElements.filter(el => ['Real', 'Orçado', 'A-1'].includes(el));
+  }, [activeElements]);
 
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
@@ -79,17 +174,17 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
   }, []);
 
   // Opções dinâmicas baseadas nos dados recebidos
-  const availableBrands = useMemo(() => 
-    Array.from(new Set(transactions.map(t => t.brand).filter(Boolean))).sort() as string[]
+  const availableBrands = useMemo(() =>
+    Array.from(new Set(transactions.map(t => t.marca).filter(Boolean))).sort() as string[]
   , [transactions]);
 
   const availableBranches = useMemo(() => {
     let filtered = transactions;
-    if (selectedBrands.length > 0) {
-      filtered = transactions.filter(t => selectedBrands.includes(t.brand || ''));
+    if (selectedMarcas.length > 0) {
+      filtered = transactions.filter(t => selectedMarcas.includes(t.marca || ''));
     }
-    return Array.from(new Set(filtered.map(t => t.branch).filter(Boolean))).sort() as string[];
-  }, [transactions, selectedBrands]);
+    return Array.from(new Set(filtered.map(t => t.filial).filter(Boolean))).sort() as string[];
+  }, [transactions, selectedMarcas]);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -114,21 +209,21 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
 
   const clearAllFilters = () => {
     setSelectedTags01([]);
-    setSelectedBrands([]);
-    setSelectedBranches([]);
+    setSelectedMarcas([]);
+    setSelectedFiliais([]);
   };
 
-  const hasAnyFilterActive = selectedTags01.length > 0 || selectedBrands.length > 0 || selectedBranches.length > 0;
+  const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarcas.length > 0 || selectedFiliais.length > 0;
 
   // Lógica de filtragem global para a DRE
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const matchTag = selectedTags01.length === 0 || selectedTags01.includes(t.tag01 || '');
-      const matchBrand = selectedBrands.length === 0 || selectedBrands.includes(t.brand || '');
-      const matchBranch = selectedBranches.length === 0 || selectedBranches.includes(t.branch || '');
-      return matchTag && matchBrand && matchBranch;
+      const matchMarca = selectedMarcas.length === 0 || selectedMarcas.includes(t.marca || '');
+      const matchFilial = selectedFiliais.length === 0 || selectedFiliais.includes(t.filial || '');
+      return matchTag && matchMarca && matchFilial;
     });
-  }, [transactions, selectedTags01, selectedBrands, selectedBranches]);
+  }, [transactions, selectedTags01, selectedMarcas, selectedFiliais]);
 
   const dataMap = useMemo(() => {
     const map: Record<string, Record<string, number[]>> = { Real: {}, Orçado: {}, 'A-1': {} };
@@ -193,31 +288,43 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
   };
 
   const renderRow = (
-    id: string, 
-    label: string, 
-    level: number, 
+    id: string,
+    label: string,
+    level: number,
     categories: string[],
     hasChildren: boolean = false,
     accumulatedFilters: Record<string, string> = {}
   ) => {
     const isExpanded = expandedRows[id];
-    
-    const valsReal = level <= 3 
-      ? getValues('Real', categories) 
-      : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Real');
-    
-    const valsBudget = level <= 3 
-      ? getValues('Orçado', categories) 
-      : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Orçado');
 
-    const valsA1 = level <= 3 
-      ? getValues('A-1', categories) 
-      : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'A-1');
-    
-    const ytdReal = valsReal.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
-    const ytdBudget = valsBudget.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
-    const ytdA1 = valsA1.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
-    
+    // Obter valores para todos os cenários
+    const scenarioValues: Record<string, number[]> = {
+      'Real': level <= 3
+        ? getValues('Real', categories)
+        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Real'),
+      'Orçado': level <= 3
+        ? getValues('Orçado', categories)
+        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Orçado'),
+      'A-1': level <= 3
+        ? getValues('A-1', categories)
+        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'A-1')
+    };
+
+    // Calcular YTDs para todos os cenários
+    const scenarioYTDs: Record<string, number> = {
+      'Real': scenarioValues['Real'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0),
+      'Orçado': scenarioValues['Orçado'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0),
+      'A-1': scenarioValues['A-1'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0)
+    };
+
+    // Manter variáveis legadas para compatibilidade
+    const valsReal = scenarioValues['Real'];
+    const valsBudget = scenarioValues['Orçado'];
+    const valsA1 = scenarioValues['A-1'];
+    const ytdReal = scenarioYTDs['Real'];
+    const ytdBudget = scenarioYTDs['Orçado'];
+    const ytdA1 = scenarioYTDs['A-1'];
+
     const varBudgetPerc = ytdBudget !== 0 ? ((ytdReal - ytdBudget) / Math.abs(ytdBudget)) * 100 : 0;
     const varA1Perc = ytdA1 !== 0 ? ((ytdReal - ytdA1) / Math.abs(ytdA1)) * 100 : 0;
     
@@ -235,9 +342,9 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
 
     return (
       <React.Fragment key={id}>
-        <tr className={`${bgClass} transition-all text-[9px] h-8 group`}>
-          <td className={`sticky left-0 z-30 border-r border-gray-200 shadow-[1px_0_0_rgba(0,0,0,0.1)] w-[20%] ${level === 1 ? 'bg-[#152e55]' : 'bg-inherit'} group-hover:bg-yellow-50`}>
-            <div className="flex items-center gap-1 px-2 overflow-hidden" style={{ paddingLeft }}>
+        <tr className={`${bgClass} transition-all text-[11px] h-8 group`}>
+          <td className={`sticky left-0 z-30 ${viewMode === 'scenario' ? 'border-r-2 border-r-gray-300' : ''} shadow-[2px_0_4px_rgba(0,0,0,0.1)] w-[280px] ${level === 1 ? 'bg-[#152e55]' : 'bg-inherit'} group-hover:bg-yellow-50`}>
+            <div className="flex items-center gap-1 px-1.5 overflow-hidden" style={{ paddingLeft }}>
               {hasChildren && (
                 <button onClick={() => toggleRow(id)} className={`p-0.5 rounded-none shrink-0 ${level === 1 ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
                   {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
@@ -246,30 +353,277 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
               <span className={`truncate ${level === 1 ? 'uppercase tracking-tighter' : ''}`}>{label || 'Não Informado'}</span>
             </div>
           </td>
-          {months.map((_, i) => (
-            <td 
-              key={i} 
-              onDoubleClick={() => onDrillDown(label, i, 'Real', { tag01: selectedTags01.length === 1 ? selectedTags01[0] : 'all' })}
-              className={`px-1 text-right font-mono font-bold border-r border-gray-100 w-[3.5%] cursor-pointer hover:bg-yellow-100/60 transition-colors ${i > referenceMonthIdx ? 'opacity-20' : (level === 1 ? 'text-white' : 'text-gray-900')}`}
-            >
-              {valsReal[i] === 0 ? '-' : Math.round(valsReal[i]).toLocaleString()}
-            </td>
-          ))}
-          <td className={`px-1 text-right font-mono font-black border-l border-gray-300 w-[10%] hover:bg-yellow-200/40 transition-colors ${level === 1 ? 'text-white bg-[#1B75BB]' : 'bg-blue-50 text-[#152e55]'}`}>
-            {Math.round(ytdReal).toLocaleString()}
-          </td>
-          <td className={`px-1 text-right font-mono font-bold w-[6%] hover:bg-yellow-50 transition-colors ${level === 1 ? 'text-white bg-white/5' : 'text-gray-500 bg-gray-50/30'}`}>
-            {ytdBudget !== 0 ? Math.round(ytdBudget).toLocaleString() : '-'}
-          </td>
-          <td className={`px-0.5 text-center font-black w-[3%] border-r border-gray-100 ${level === 1 ? 'text-white' : (varBudgetPerc > 0 ? 'text-emerald-600' : varBudgetPerc < 0 ? 'text-rose-600' : 'text-gray-400')}`}>
-            {varBudgetPerc !== 0 ? `${varBudgetPerc > 0 ? '+' : ''}${varBudgetPerc.toFixed(0)}%` : '-'}
-          </td>
-          <td className={`px-1 text-right font-mono font-bold w-[6%] hover:bg-yellow-50 transition-colors ${level === 1 ? 'text-white bg-white/5' : 'text-gray-500 bg-gray-50/30'}`}>
-            {ytdA1 !== 0 ? Math.round(ytdA1).toLocaleString() : '-'}
-          </td>
-          <td className={`px-0.5 text-center font-black w-[3%] ${level === 1 ? 'text-white' : (varA1Perc > 0 ? 'text-emerald-600' : varA1Perc < 0 ? 'text-rose-600' : 'text-gray-400')}`}>
-            {varA1Perc !== 0 ? `${varA1Perc > 0 ? '+' : ''}${varA1Perc.toFixed(0)}%` : '-'}
-          </td>
+
+          {/* Modo: Por Cenário */}
+          {viewMode === 'scenario' && activeElements.map((element, elementIndex) => {
+            // Verifica se é um cenário ou um delta
+            const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+            const isDelta = element.startsWith('Delta');
+
+            if (isScenario) {
+              // Renderizar cenário
+              const values = scenarioValues[element];
+              const ytd = scenarioYTDs[element];
+
+              const colors = {
+                'Real': { text: level === 1 ? 'text-white' : 'text-gray-900', bg: level === 1 ? 'bg-[#1B75BB]' : 'bg-blue-50 text-[#152e55]' },
+                'Orçado': { text: level === 1 ? 'text-white' : 'text-gray-600', bg: level === 1 ? 'bg-green-600' : 'bg-green-50 text-green-900' },
+                'A-1': { text: level === 1 ? 'text-white' : 'text-gray-600', bg: level === 1 ? 'bg-purple-600' : 'bg-purple-50 text-purple-900' }
+              };
+
+              return (
+                <React.Fragment key={`element-${element}`}>
+                  {/* Colunas mensais do cenário */}
+                  {filteredMonthIndices.map((i, idx) => {
+                    const isLastMonth = idx === filteredMonthIndices.length - 1;
+                    return (
+                      <td
+                        key={`${element}-${i}`}
+                        onDoubleClick={() => onDrillDown({
+                          categories,
+                          monthIdx: i,
+                          scenario: element,
+                          filters: {
+                            ...accumulatedFilters,
+                            ...(selectedTags01.length > 0 ? { tag01: selectedTags01 } : {}),
+                            ...(selectedMarcas.length > 0 ? { marca: selectedMarcas } : {}),
+                            ...(selectedFiliais.length > 0 ? { filial: selectedFiliais } : {})
+                          }
+                        })}
+                        className={`px-1 text-right font-mono font-bold cursor-pointer hover:bg-yellow-100/60 transition-colors w-[80px] ${colors[element as keyof typeof colors].text} ${isLastMonth ? '' : 'border-r border-gray-100'}`}
+                      >
+                        {values[i] === 0 ? '-' : Math.round(values[i]).toLocaleString()}
+                      </td>
+                    );
+                  })}
+
+                  {/* Coluna YTD */}
+                  <td className={`px-1 text-right font-mono font-black border-l border-gray-300 border-r-2 border-r-gray-300 hover:bg-yellow-200/40 transition-colors w-[100px] ${colors[element as keyof typeof colors].bg}`}>
+                    {Math.round(ytd).toLocaleString()}
+                  </td>
+                </React.Fragment>
+              );
+            } else if (isDelta) {
+              // Renderizar delta
+              const baseScenario = 'Real'; // Base sempre Real
+              let compareScenario = '';
+              const isPercentual = element.includes('Perc');
+
+              if (element === 'DeltaPercOrcado' || element === 'DeltaAbsOrcado') {
+                compareScenario = 'Orçado';
+              } else if (element === 'DeltaPercA1' || element === 'DeltaAbsA1') {
+                compareScenario = 'A-1';
+              }
+
+              // Verificar se os dados existem
+              if (!compareScenario || !scenarioValues[baseScenario] || !scenarioValues[compareScenario]) {
+                return null;
+              }
+
+              const baseValues = scenarioValues[baseScenario];
+              const compareValues = scenarioValues[compareScenario];
+              const baseYTD = scenarioYTDs[baseScenario];
+              const compareYTD = scenarioYTDs[compareScenario];
+
+              return (
+                <React.Fragment key={`element-${element}`}>
+                  {/* Colunas mensais de delta */}
+                  {filteredMonthIndices.map((i, idx) => {
+                    const baseVal = baseValues[i];
+                    const compareVal = compareValues[i];
+
+                    if (isPercentual) {
+                      const deltaPerc = compareVal !== 0 ? ((baseVal - compareVal) / Math.abs(compareVal)) * 100 : 0;
+                      return (
+                        <td key={`${element}-${i}`} className={`px-0.5 text-center font-black text-[11px] w-[70px] ${level === 1 ? 'text-white bg-white/10' : (deltaPerc > 0 ? 'text-emerald-600' : deltaPerc < 0 ? 'text-rose-600' : 'text-gray-400')}`}>
+                          {deltaPerc !== 0 ? `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%` : '-'}
+                        </td>
+                      );
+                    } else {
+                      const deltaAbs = baseVal - compareVal;
+                      return (
+                        <td key={`${element}-${i}`} className={`px-0.5 text-right font-mono font-bold text-[11px] hover:bg-yellow-50 transition-colors w-[85px] ${level === 1 ? 'text-white bg-white/10' : (deltaAbs > 0 ? 'text-emerald-600' : deltaAbs < 0 ? 'text-rose-600' : 'text-gray-400')}`}>
+                          {deltaAbs !== 0 ? `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}` : '-'}
+                        </td>
+                      );
+                    }
+                  })}
+
+                  {/* Coluna YTD do delta */}
+                  {isPercentual ? (
+                    (() => {
+                      const deltaPercYTD = compareYTD !== 0 ? ((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 : 0;
+                      const deltaBgColor = element.includes('Orcado') ? 'bg-green-50 text-green-900' : 'bg-purple-50 text-purple-900';
+                      return (
+                        <td className={`px-1 text-center font-mono font-black border-r-2 border-r-gray-300 hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor}`}>
+                          {deltaPercYTD !== 0 ? `${deltaPercYTD > 0 ? '+' : ''}${deltaPercYTD.toFixed(0)}%` : '-'}
+                        </td>
+                      );
+                    })()
+                  ) : (
+                    (() => {
+                      const deltaAbsYTD = baseYTD - compareYTD;
+                      const deltaBgColor = element.includes('Orcado') ? 'bg-green-50 text-green-900' : 'bg-purple-50 text-purple-900';
+                      return (
+                        <td className={`px-1 text-right font-mono font-black border-r-2 border-r-gray-300 hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor}`}>
+                          {deltaAbsYTD !== 0 ? `${deltaAbsYTD > 0 ? '+' : ''}${Math.round(deltaAbsYTD).toLocaleString()}` : '-'}
+                        </td>
+                      );
+                    })()
+                  )}
+                </React.Fragment>
+              );
+            }
+
+            return null;
+          })}
+
+          {/* Modo: Por Mês */}
+          {viewMode === 'month' && (
+            <>
+              {filteredMonthIndices.map((monthIdx) => {
+                const colors = {
+                  'Real': { text: level === 1 ? 'text-white' : 'text-gray-900' },
+                  'Orçado': { text: level === 1 ? 'text-white' : 'text-gray-600' },
+                  'A-1': { text: level === 1 ? 'text-white' : 'text-gray-600' }
+                };
+
+                return (
+                  <React.Fragment key={`month-${monthIdx}`}>
+                    {activeElements.map((element, elemIdx) => {
+                      const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                      const isDelta = element.startsWith('Delta');
+                      const isFirstOfMonth = elemIdx === 0;
+                      const monthSeparator = isFirstOfMonth ? 'border-l-2 border-l-gray-300' : '';
+
+                      if (isScenario) {
+                        const values = scenarioValues[element];
+                        const value = values[monthIdx];
+
+                        return (
+                          <td
+                            key={`month-${monthIdx}-${element}`}
+                            onDoubleClick={() => onDrillDown({
+                              categories,
+                              monthIdx,
+                              scenario: element,
+                              filters: {
+                                ...accumulatedFilters,
+                                ...(selectedTags01.length > 0 ? { tag01: selectedTags01 } : {}),
+                                ...(selectedMarcas.length > 0 ? { marca: selectedMarcas } : {}),
+                                ...(selectedFiliais.length > 0 ? { filial: selectedFiliais } : {})
+                              }
+                            })}
+                            className={`px-1 text-right font-mono font-bold cursor-pointer hover:bg-yellow-100/60 transition-colors w-[80px] ${colors[element as keyof typeof colors].text} ${monthSeparator}`}
+                          >
+                            {value === 0 ? '-' : Math.round(value).toLocaleString()}
+                          </td>
+                        );
+                      } else if (isDelta) {
+                        const baseScenario = 'Real';
+                        let compareScenario = '';
+                        const isPercentual = element.includes('Perc');
+
+                        if (element === 'DeltaPercOrcado' || element === 'DeltaAbsOrcado') {
+                          compareScenario = 'Orçado';
+                        } else if (element === 'DeltaPercA1' || element === 'DeltaAbsA1') {
+                          compareScenario = 'A-1';
+                        }
+
+                        // Verificar se os dados existem
+                        if (!compareScenario || !scenarioValues[baseScenario] || !scenarioValues[compareScenario]) {
+                          return null;
+                        }
+
+                        const baseValues = scenarioValues[baseScenario];
+                        const compareValues = scenarioValues[compareScenario];
+                        const baseVal = baseValues[monthIdx];
+                        const compareVal = compareValues[monthIdx];
+
+                        if (isPercentual) {
+                          const deltaPerc = compareVal !== 0 ? ((baseVal - compareVal) / Math.abs(compareVal)) * 100 : 0;
+                          return (
+                            <td key={`month-${monthIdx}-${element}`} className={`px-0.5 text-center font-black text-[10px] w-[70px] ${level === 1 ? 'text-white bg-white/10' : (deltaPerc > 0 ? 'text-emerald-600' : deltaPerc < 0 ? 'text-rose-600' : 'text-gray-400')} ${monthSeparator}`}>
+                              {deltaPerc !== 0 ? `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%` : '-'}
+                            </td>
+                          );
+                        } else {
+                          const deltaAbs = baseVal - compareVal;
+                          return (
+                            <td key={`month-${monthIdx}-${element}`} className={`px-0.5 text-right font-mono font-bold text-[11px] hover:bg-yellow-50 transition-colors w-[85px] ${level === 1 ? 'text-white bg-white/10' : (deltaAbs > 0 ? 'text-emerald-600' : deltaAbs < 0 ? 'text-rose-600' : 'text-gray-400')} ${monthSeparator}`}>
+                              {deltaAbs !== 0 ? `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}` : '-'}
+                            </td>
+                          );
+                        }
+                      }
+
+                      return null;
+                    })}
+                  </React.Fragment>
+                );
+              })}
+              {/* YTDs */}
+              {activeElements.map((element, elemIdx) => {
+                const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                const isDelta = element.startsWith('Delta');
+                const isFirstOfYTD = elemIdx === 0;
+                const ytdSeparator = isFirstOfYTD ? 'border-l-2 border-l-gray-300' : '';
+                const colors = {
+                  'Real': { text: level === 1 ? 'text-white' : 'text-gray-900', bg: level === 1 ? 'bg-[#1B75BB]' : 'bg-blue-50 text-[#152e55]' },
+                  'Orçado': { text: level === 1 ? 'text-white' : 'text-gray-600', bg: level === 1 ? 'bg-green-600' : 'bg-green-50 text-green-900' },
+                  'A-1': { text: level === 1 ? 'text-white' : 'text-gray-600', bg: level === 1 ? 'bg-purple-600' : 'bg-purple-50 text-purple-900' }
+                };
+
+                if (isScenario) {
+                  const ytd = scenarioYTDs[element];
+
+                  return (
+                    <td key={`ytd-${element}`} className={`px-1 text-right font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${colors[element as keyof typeof colors].bg} ${ytdSeparator}`}>
+                      {Math.round(ytd).toLocaleString()}
+                    </td>
+                  );
+                } else if (isDelta) {
+                  const baseScenario = 'Real';
+                  let compareScenario = '';
+                  const isPercentual = element.includes('Perc');
+
+                  if (element === 'DeltaPercOrcado' || element === 'DeltaAbsOrcado') {
+                    compareScenario = 'Orçado';
+                  } else if (element === 'DeltaPercA1' || element === 'DeltaAbsA1') {
+                    compareScenario = 'A-1';
+                  }
+
+                  // Verificar se os dados existem
+                  if (!compareScenario || !scenarioYTDs[baseScenario] || !scenarioYTDs[compareScenario]) {
+                    return null;
+                  }
+
+                  const baseYTD = scenarioYTDs[baseScenario];
+                  const compareYTD = scenarioYTDs[compareScenario];
+
+                  const deltaBgColor = element.includes('Orcado') ? 'bg-green-50 text-green-900' : 'bg-purple-50 text-purple-900';
+
+                  if (isPercentual) {
+                    const deltaPerc = compareYTD !== 0 ? ((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 : 0;
+                    return (
+                      <td key={`ytd-${element}`} className={`px-1 text-center font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator}`}>
+                        {deltaPerc !== 0 ? `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%` : '-'}
+                      </td>
+                    );
+                  } else {
+                    const deltaAbs = baseYTD - compareYTD;
+                    return (
+                      <td key={`ytd-${element}`} className={`px-1 text-right font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator}`}>
+                        {deltaAbs !== 0 ? `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}` : '-'}
+                      </td>
+                    );
+                  }
+                }
+
+                return null;
+              })}
+            </>
+          )}
         </tr>
         
         {isExpanded && hasChildren && (() => {
@@ -317,62 +671,269 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
   };
 
   const renderCalculationLine = (label: string, posCategories: string[], negCategories: string[][], color: string) => {
-    const calcReal = new Array(12).fill(0);
-    const calcBudget = new Array(12).fill(0);
-    const calcA1 = new Array(12).fill(0);
+    // Calcular para todos os cenários
+    const calcValues: Record<string, number[]> = {
+      'Real': new Array(12).fill(0),
+      'Orçado': new Array(12).fill(0),
+      'A-1': new Array(12).fill(0)
+    };
 
     const baseReal = getValues('Real', posCategories);
     const baseBudget = getValues('Orçado', posCategories);
     const baseA1 = getValues('A-1', posCategories);
 
-    for(let i=0; i<12; i++) {
-      calcReal[i] = baseReal[i];
-      calcBudget[i] = baseBudget[i];
-      calcA1[i] = baseA1[i];
+    for (let i = 0; i < 12; i++) {
+      calcValues['Real'][i] = baseReal[i];
+      calcValues['Orçado'][i] = baseBudget[i];
+      calcValues['A-1'][i] = baseA1[i];
       negCategories.forEach(cats => {
         const negReal = getValues('Real', cats);
         const negBudget = getValues('Orçado', cats);
         const negA1 = getValues('A-1', cats);
-        calcReal[i] -= negReal[i];
-        calcBudget[i] -= negBudget[i];
-        calcA1[i] -= negA1[i];
+        calcValues['Real'][i] -= negReal[i];
+        calcValues['Orçado'][i] -= negBudget[i];
+        calcValues['A-1'][i] -= negA1[i];
       });
     }
 
-    const ytdReal = calcReal.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
-    const ytdBudget = calcBudget.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
-    const ytdA1 = calcA1.slice(0, referenceMonthIdx + 1).reduce((a, b) => a + b, 0);
+    // Calcular YTDs
+    const calcYTDs: Record<string, number> = {
+      'Real': calcValues['Real'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0),
+      'Orçado': calcValues['Orçado'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0),
+      'A-1': calcValues['A-1'].slice(0, selectedMonthEnd + 1).reduce((a, b) => a + b, 0)
+    };
+
+    // Manter variáveis legadas para compatibilidade
+    const calcReal = calcValues['Real'];
+    const calcBudget = calcValues['Orçado'];
+    const calcA1 = calcValues['A-1'];
+    const ytdReal = calcYTDs['Real'];
+    const ytdBudget = calcYTDs['Orçado'];
+    const ytdA1 = calcYTDs['A-1'];
 
     const varBudgetPerc = ytdBudget !== 0 ? ((ytdReal - ytdBudget) / Math.abs(ytdBudget)) * 100 : 0;
     const varA1Perc = ytdA1 !== 0 ? ((ytdReal - ytdA1) / Math.abs(ytdA1)) * 100 : 0;
 
     return (
-      <tr className={`${color} text-white text-[10px] font-black h-9 shadow-sm group`}>
-        <td className="sticky left-0 bg-inherit z-30 border-r border-white/10 shadow-[1px_0_0_rgba(255,255,255,0.1)] w-[20%] group-hover:bg-yellow-400 group-hover:text-black transition-colors">
-          <div className="flex items-center gap-2 px-4 uppercase tracking-tighter truncate font-black">
+      <tr className={`${color} text-white text-[11px] font-black h-8 shadow-sm group`}>
+        <td className="sticky left-0 bg-inherit z-30 border-r border-white/10 shadow-[2px_0_4px_rgba(0,0,0,0.2)] w-[280px] group-hover:bg-yellow-400 group-hover:text-black transition-colors">
+          <div className="flex items-center gap-1.5 px-3 uppercase tracking-tighter truncate font-black">
             <Activity size={12} /> {label}
           </div>
         </td>
-        {months.map((_, i) => (
-          <td key={i} className={`px-1 text-right font-mono border-r border-white/5 w-[3.5%] hover:bg-yellow-100/40 transition-colors ${i > referenceMonthIdx ? 'opacity-20' : ''}`}>
-            {Math.round(calcReal[i]).toLocaleString()}
-          </td>
-        ))}
-        <td className="px-1 text-right font-mono border-l border-white/20 bg-black/10 w-[10%] hover:bg-yellow-200 transition-colors">
-          {Math.round(ytdReal).toLocaleString()}
-        </td>
-        <td className="px-1 text-right font-mono border-l border-white/5 bg-black/5 opacity-80 w-[6%] hover:bg-yellow-50 transition-colors">
-          {Math.round(ytdBudget).toLocaleString()}
-        </td>
-        <td className={`px-0.5 text-center border-r border-white/10 text-[9px] w-[3%] font-black ${varBudgetPerc >= 0 ? 'text-emerald-300' : 'text-rose-100'}`}>
-          {varBudgetPerc === 0 ? '-' : `${varBudgetPerc > 0 ? '+' : ''}${varBudgetPerc.toFixed(0)}%`}
-        </td>
-        <td className="px-1 text-right font-mono border-l border-white/5 bg-black/5 opacity-80 w-[6%] hover:bg-yellow-50 transition-colors">
-          {Math.round(ytdA1).toLocaleString()}
-        </td>
-        <td className={`px-0.5 text-center text-[9px] w-[3%] font-black ${varA1Perc >= 0 ? 'text-emerald-300' : 'text-rose-100'}`}>
-          {varA1Perc === 0 ? '-' : `${varA1Perc > 0 ? '+' : ''}${varA1Perc.toFixed(0)}%`}
-        </td>
+
+        {/* Modo: Por Cenário */}
+        {viewMode === 'scenario' && activeElements.map((element, elementIndex) => {
+          const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+          const isDelta = element.startsWith('Delta');
+
+          if (isScenario) {
+            const values = calcValues[element];
+            const ytd = calcYTDs[element];
+
+            return (
+              <React.Fragment key={`calc-scenario-${element}`}>
+                {/* Colunas mensais do cenário */}
+                {filteredMonthIndices.map((i, idx) => {
+                  const isLastMonth = idx === filteredMonthIndices.length - 1;
+                  return (
+                    <td key={`calc-${element}-${i}`} className={`px-1 text-right font-mono hover:bg-yellow-100/40 transition-colors w-[80px] ${isLastMonth ? '' : 'border-r border-white/5'}`}>
+                      {Math.round(values[i]).toLocaleString()}
+                    </td>
+                  );
+                })}
+
+                {/* Coluna YTD */}
+                <td className="px-1 text-right font-mono border-l border-white/20 border-r-2 border-r-gray-300 bg-black/10 hover:bg-yellow-200 transition-colors w-[100px]">
+                  {Math.round(ytd).toLocaleString()}
+                </td>
+              </React.Fragment>
+            );
+          } else if (isDelta) {
+            const baseScenario = 'Real';
+            let compareScenario = '';
+            const isPercentual = element.includes('Perc');
+
+            if (element.includes('Orcado')) {
+              compareScenario = 'Orçado';
+            } else if (element.includes('A1')) {
+              compareScenario = 'A-1';
+            }
+
+            // Verificar se os dados existem
+            if (!compareScenario || !calcValues[baseScenario] || !calcValues[compareScenario]) {
+              return null;
+            }
+
+            const baseValues = calcValues[baseScenario];
+            const compareValues = calcValues[compareScenario];
+            const baseYTD = calcYTDs[baseScenario];
+            const compareYTD = calcYTDs[compareScenario];
+
+            return (
+              <React.Fragment key={`calc-delta-${element}`}>
+                {/* Deltas mensais */}
+                {filteredMonthIndices.map((i, idx) => {
+                  const baseVal = baseValues[i];
+                  const compareVal = compareValues[i];
+                  const isLastMonth = idx === filteredMonthIndices.length - 1;
+
+                  if (isPercentual) {
+                    const deltaPerc = compareVal !== 0 ? ((baseVal - compareVal) / Math.abs(compareVal)) * 100 : 0;
+                    return (
+                      <td key={`calc-delta-${element}-${i}`} className={`px-0.5 text-center text-[11px] font-black w-[70px] ${deltaPerc >= 0 ? 'text-emerald-300' : 'text-rose-100'} ${isLastMonth ? '' : 'border-l border-white/10'}`}>
+                        {deltaPerc === 0 ? '-' : `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%`}
+                      </td>
+                    );
+                  } else {
+                    const deltaAbs = baseVal - compareVal;
+                    return (
+                      <td key={`calc-delta-${element}-${i}`} className={`px-0.5 text-right font-mono text-[11px] font-black w-[85px] ${deltaAbs >= 0 ? 'text-emerald-300' : 'text-rose-100'} ${isLastMonth ? '' : 'border-l border-white/5'}`}>
+                        {deltaAbs === 0 ? '-' : `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}`}
+                      </td>
+                    );
+                  }
+                })}
+
+                {/* Delta YTD */}
+                {isPercentual ? (
+                  <td className={`px-0.5 text-center border-l border-white/20 border-r-2 border-r-gray-300 bg-black/10 text-[11px] font-black w-[100px] ${compareYTD !== 0 ? ((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 >= 0 ? 'text-emerald-300' : 'text-rose-100' : 'text-gray-400'}`}>
+                    {compareYTD === 0 ? '-' : `${((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 > 0 ? '+' : ''}${(((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100).toFixed(0)}%`}
+                  </td>
+                ) : (
+                  <td className={`px-0.5 text-right font-mono border-l border-white/20 border-r-2 border-r-gray-300 bg-black/10 text-[11px] font-black w-[100px] ${(baseYTD - compareYTD) >= 0 ? 'text-emerald-300' : 'text-rose-100'}`}>
+                    {(baseYTD - compareYTD) === 0 ? '-' : `${(baseYTD - compareYTD) > 0 ? '+' : ''}${Math.round(baseYTD - compareYTD).toLocaleString()}`}
+                  </td>
+                )}
+              </React.Fragment>
+            );
+          }
+
+          return null;
+        })}
+
+        {/* Modo: Por Mês */}
+        {viewMode === 'month' && (
+          <>
+            {filteredMonthIndices.map((monthIdx) => {
+              return (
+                <React.Fragment key={`calc-month-${monthIdx}`}>
+                  {activeElements.map((element, elemIdx) => {
+                    const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                    const isDelta = element.startsWith('Delta');
+                    const isFirstOfMonth = elemIdx === 0;
+                    const monthSeparator = isFirstOfMonth ? 'border-l-2 border-l-white/30' : '';
+
+                    if (isScenario) {
+                      const values = calcValues[element];
+                      const value = values[monthIdx];
+
+                      return (
+                        <td
+                          key={`calc-month-${monthIdx}-${element}`}
+                          className={`px-1 text-right font-mono hover:bg-yellow-100/40 transition-colors w-[80px] ${monthSeparator}`}
+                        >
+                          {Math.round(value).toLocaleString()}
+                        </td>
+                      );
+                    } else if (isDelta) {
+                      const baseScenario = 'Real';
+                      let compareScenario = '';
+                      const isPercentual = element.includes('Perc');
+
+                      if (element.includes('Orcado')) {
+                        compareScenario = 'Orçado';
+                      } else if (element.includes('A1')) {
+                        compareScenario = 'A-1';
+                      }
+
+                      // Verificar se os dados existem
+                      if (!compareScenario || !calcValues[baseScenario] || !calcValues[compareScenario]) {
+                        return null;
+                      }
+
+                      const baseValues = calcValues[baseScenario];
+                      const compareValues = calcValues[compareScenario];
+                      const baseVal = baseValues[monthIdx];
+                      const compareVal = compareValues[monthIdx];
+
+                      if (isPercentual) {
+                        const deltaPerc = compareVal !== 0 ? ((baseVal - compareVal) / Math.abs(compareVal)) * 100 : 0;
+                        return (
+                          <td key={`calc-month-${monthIdx}-${element}`} className={`px-0.5 text-center text-[11px] font-black w-[70px] ${deltaPerc >= 0 ? 'text-emerald-300' : 'text-rose-100'} ${monthSeparator}`}>
+                            {deltaPerc === 0 ? '-' : `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%`}
+                          </td>
+                        );
+                      } else {
+                        const deltaAbs = baseVal - compareVal;
+                        return (
+                          <td key={`calc-month-${monthIdx}-${element}`} className={`px-0.5 text-right font-mono text-[11px] font-black w-[85px] ${deltaAbs >= 0 ? 'text-emerald-300' : 'text-rose-100'} ${monthSeparator}`}>
+                            {deltaAbs === 0 ? '-' : `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}`}
+                          </td>
+                        );
+                      }
+                    }
+
+                    return null;
+                  })}
+                </React.Fragment>
+              );
+            })}
+            {/* YTDs */}
+            {activeElements.map((element, elemIdx) => {
+              const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+              const isDelta = element.startsWith('Delta');
+              const isFirstOfYTD = elemIdx === 0;
+              const ytdSeparator = isFirstOfYTD ? 'border-l-2 border-l-white/30' : 'border-l border-white/20';
+
+              if (isScenario) {
+                const ytd = calcYTDs[element];
+
+                return (
+                  <td key={`calc-ytd-${element}`} className={`px-1 text-right font-mono ${ytdSeparator} bg-black/10 hover:bg-yellow-200 transition-colors w-[100px]`}>
+                    {Math.round(ytd).toLocaleString()}
+                  </td>
+                );
+              } else if (isDelta) {
+                const baseScenario = 'Real';
+                let compareScenario = '';
+                const isPercentual = element.includes('Perc');
+
+                if (element.includes('Orcado')) {
+                  compareScenario = 'Orçado';
+                } else if (element.includes('A1')) {
+                  compareScenario = 'A-1';
+                }
+
+                // Verificar se os dados existem
+                if (!compareScenario || !calcYTDs[baseScenario] || !calcYTDs[compareScenario]) {
+                  return null;
+                }
+
+                const baseYTD = calcYTDs[baseScenario];
+                const compareYTD = calcYTDs[compareScenario];
+
+                if (isPercentual) {
+                  const deltaPerc = compareYTD !== 0 ? ((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 : 0;
+                  return (
+                    <td key={`calc-ytd-${element}`} className={`px-0.5 text-center ${ytdSeparator} bg-black/10 text-[10px] font-black w-[100px] ${deltaPerc >= 0 ? 'text-emerald-300' : 'text-rose-100'}`}>
+                      {deltaPerc === 0 ? '-' : `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%`}
+                    </td>
+                  );
+                } else {
+                  const deltaAbs = baseYTD - compareYTD;
+                  return (
+                    <td key={`calc-ytd-${element}`} className={`px-0.5 text-right font-mono ${ytdSeparator} bg-black/10 text-[10px] font-black w-[100px] ${deltaAbs >= 0 ? 'text-emerald-300' : 'text-rose-100'}`}>
+                      {deltaAbs === 0 ? '-' : `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}`}
+                    </td>
+                  );
+                }
+              }
+
+              return null;
+            })}
+          </>
+        )}
       </tr>
     );
   };
@@ -452,26 +1013,26 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 pb-12">
-      <header className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#152e55] text-white p-3 rounded-2xl shadow-xl shadow-blue-50/50">
-            <TableIcon size={24} />
+    <div className="space-y-2 animate-in fade-in duration-500 pb-2">
+      <header className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center gap-2">
+        <div className="flex items-center gap-2">
+          <div className="bg-[#152e55] text-white p-2 rounded-xl shadow-lg shadow-blue-50/50">
+            <TableIcon size={18} />
           </div>
           <div>
-            <h2 className="text-xl font-black text-gray-900 leading-tight">Análise de Resultado Estrutural</h2>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">DRE Fixa • Filtros Inteligentes de Grupo</p>
+            <h2 className="text-base font-black text-gray-900 leading-tight">Análise de Resultado Estrutural</h2>
+            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">DRE • Filtros Inteligentes de Grupo</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Botão de Limpar Filtros */}
           {hasAnyFilterActive && (
-            <button 
+            <button
               onClick={clearAllFilters}
-              className="flex items-center gap-2 bg-rose-50 text-rose-600 px-4 py-2.5 rounded-2xl border border-rose-100 font-black text-[9px] uppercase tracking-widest hover:bg-rose-100 transition-all shadow-sm"
+              className="flex items-center gap-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 font-black text-[8px] uppercase tracking-widest hover:bg-rose-100 transition-all shadow-sm"
             >
-              <FilterX size={16} /> Limpar Filtros
+              <FilterX size={14} /> Limpar Filtros
             </button>
           )}
 
@@ -491,20 +1052,20 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
           />
 
           {/* Dropdown de Marca */}
-          <MultiSelectDropdown 
+          <MultiSelectDropdown
             label="Marca"
-            summary={getSummary(selectedBrands, availableBrands, "MARCA")}
+            summary={getSummary(selectedMarcas, availableBrands, "MARCA")}
             isOpen={isBrandFilterOpen}
             setOpen={setIsBrandFilterOpen}
             options={availableBrands}
-            selected={selectedBrands}
+            selected={selectedMarcas}
             toggle={(opt: string) => {
-              toggleFilter(selectedBrands, setSelectedBrands, opt);
-              setSelectedBranches([]); 
+              toggleFilter(selectedMarcas, setSelectedMarcas, opt);
+              setSelectedFiliais([]);
             }}
             allSelect={() => {
-              selectAll(selectedBrands, setSelectedBrands, availableBrands);
-              setSelectedBranches([]);
+              selectAll(selectedMarcas, setSelectedMarcas, availableBrands);
+              setSelectedFiliais([]);
             }}
             icon={Flag}
             color="[#1B75BB]"
@@ -512,197 +1073,544 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
           />
 
           {/* Dropdown de Filial */}
-          <MultiSelectDropdown 
+          <MultiSelectDropdown
             label="Filial"
-            summary={getSummary(selectedBranches, availableBranches, "FILIAL")}
+            summary={getSummary(selectedFiliais, availableBranches, "FILIAL")}
             isOpen={isBranchFilterOpen}
             setOpen={setIsBranchFilterOpen}
             options={availableBranches}
-            selected={selectedBranches}
-            toggle={(opt: string) => toggleFilter(selectedBranches, setSelectedBranches, opt)}
-            allSelect={() => selectAll(selectedBranches, setSelectedBranches, availableBranches)}
+            selected={selectedFiliais}
+            toggle={(opt: string) => toggleFilter(selectedFiliais, setSelectedFiliais, opt)}
+            allSelect={() => selectAll(selectedFiliais, setSelectedFiliais, availableBranches)}
             icon={Building2}
             color="[#F44C00]"
             refObj={branchRef}
           />
 
-          <div className="h-10 w-px bg-gray-200 mx-1 hidden 2xl:block" />
+          <div className="h-8 w-px bg-gray-200 mx-1 hidden 2xl:block" />
 
-          {/* Período Select */}
-          <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border-2 border-gray-100 shadow-sm">
-            <div className="p-2 rounded-xl bg-gray-50 text-gray-400">
-              <Calendar size={16} />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Período</span>
-              <select 
-                value={referenceMonthIdx} 
-                onChange={e => setReferenceMonthIdx(Number(e.target.value))} 
-                className="font-black text-[10px] uppercase tracking-tight outline-none bg-transparent cursor-pointer text-gray-900"
+          {/* Controles de Período */}
+          <div className="flex items-center gap-1.5">
+            {/* Atalhos rápidos */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(11); }}
+                className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded transition-all ${
+                  selectedMonthStart === 0 && selectedMonthEnd === 11
+                    ? 'bg-[#1B75BB] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="Ano completo"
               >
-                {months.map((m, i) => <option key={m} value={i}>ATÉ {m}</option>)}
-              </select>
+                Ano
+              </button>
+              <button
+                onClick={() => { setSelectedMonthStart(0); setSelectedMonthEnd(2); }}
+                className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded transition-all ${
+                  selectedMonthStart === 0 && selectedMonthEnd === 2
+                    ? 'bg-[#1B75BB] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="1º Trimestre"
+              >
+                1T
+              </button>
+              <button
+                onClick={() => { setSelectedMonthStart(3); setSelectedMonthEnd(5); }}
+                className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded transition-all ${
+                  selectedMonthStart === 3 && selectedMonthEnd === 5
+                    ? 'bg-[#1B75BB] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="2º Trimestre"
+              >
+                2T
+              </button>
+              <button
+                onClick={() => { setSelectedMonthStart(6); setSelectedMonthEnd(8); }}
+                className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded transition-all ${
+                  selectedMonthStart === 6 && selectedMonthEnd === 8
+                    ? 'bg-[#1B75BB] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="3º Trimestre"
+              >
+                3T
+              </button>
+              <button
+                onClick={() => { setSelectedMonthStart(9); setSelectedMonthEnd(11); }}
+                className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded transition-all ${
+                  selectedMonthStart === 9 && selectedMonthEnd === 11
+                    ? 'bg-[#1B75BB] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="4º Trimestre"
+              >
+                4T
+              </button>
+            </div>
+
+            {/* Seletores de mês */}
+            <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2 py-1 rounded-lg shadow-sm">
+              <Calendar size={12} className="text-[#F44C00]" />
+              <div className="flex items-center gap-1">
+                <select
+                  className="bg-transparent text-[10px] font-bold text-gray-900 outline-none cursor-pointer"
+                  value={selectedMonthStart}
+                  onChange={(e) => {
+                    const newStart = parseInt(e.target.value);
+                    setSelectedMonthStart(newStart);
+                    if (selectedMonthEnd < newStart) {
+                      setSelectedMonthEnd(newStart);
+                    }
+                  }}
+                >
+                  {months.map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+                <span className="text-[9px] text-gray-400 font-bold">até</span>
+                <select
+                  className="bg-transparent text-[10px] font-bold text-gray-900 outline-none cursor-pointer"
+                  value={selectedMonthEnd}
+                  onChange={(e) => {
+                    const newEnd = parseInt(e.target.value);
+                    setSelectedMonthEnd(newEnd);
+                    if (selectedMonthStart > newEnd) {
+                      setSelectedMonthStart(newEnd);
+                    }
+                  }}
+                >
+                  {months.map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Painel de Seleção de Colunas Visíveis */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 px-5 py-4 rounded-2xl border border-blue-100 shadow-sm">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2 rounded-xl bg-blue-500 text-white">
-            <TableIcon size={16} />
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 px-3 py-2 rounded-xl border border-blue-100 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          {/* Título */}
+          <div className="flex items-center gap-1.5">
+            <div className="p-1 rounded-lg bg-blue-500 text-white">
+              <TableIcon size={12} />
+            </div>
+            <h3 className="text-[10px] font-black text-gray-900 uppercase tracking-tight">Colunas Visíveis</h3>
           </div>
-          <div>
-            <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Colunas Visíveis</h3>
-            <p className="text-[9px] text-gray-500 font-semibold">Selecione quais métricas deseja visualizar na tabela DRE</p>
+
+          {/* Cards em linha horizontal */}
+          <div className="flex items-center gap-1.5">
+            {/* Real */}
+            <button
+              onClick={() => toggleElement('Real', showReal, setShowReal)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showReal
+                  ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+              }`}
+            >
+              {showReal ? <CheckSquare size={10} strokeWidth={3} /> : <Square size={10} strokeWidth={3} />}
+              <span className="text-[9px] font-black uppercase">Real</span>
+              {showReal && activeElements.indexOf('Real') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('Real') + 1}º</span>
+              )}
+            </button>
+
+            {/* Orçado */}
+            <button
+              onClick={() => toggleElement('Orçado', showOrcado, setShowOrcado)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showOrcado
+                  ? 'bg-green-500 text-white border-green-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+              }`}
+            >
+              {showOrcado ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[10px] font-black uppercase">Orçado</span>
+              {showOrcado && activeElements.indexOf('Orçado') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('Orçado') + 1}º</span>
+              )}
+            </button>
+
+            {/* A-1 */}
+            <button
+              onClick={() => toggleElement('A-1', showA1, setShowA1)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showA1
+                  ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+              }`}
+            >
+              {showA1 ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[10px] font-black uppercase">A-1</span>
+              {showA1 && activeElements.indexOf('A-1') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('A-1') + 1}º</span>
+              )}
+            </button>
+
+            {/* Δ % vs Orçado */}
+            <button
+              onClick={() => toggleElement('DeltaPercOrcado', showDeltaPercOrcado, setShowDeltaPercOrcado)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showDeltaPercOrcado
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'
+              }`}
+              title="Variação % vs Orçado"
+            >
+              {showDeltaPercOrcado ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[9px] font-black uppercase">Δ% Or</span>
+              {showDeltaPercOrcado && activeElements.indexOf('DeltaPercOrcado') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaPercOrcado') + 1}º</span>
+              )}
+            </button>
+
+            {/* Δ % vs A-1 */}
+            <button
+              onClick={() => toggleElement('DeltaPercA1', showDeltaPercA1, setShowDeltaPercA1)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showDeltaPercA1
+                  ? 'bg-orange-600 text-white border-orange-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-orange-400'
+              }`}
+              title="Variação % vs A-1"
+            >
+              {showDeltaPercA1 ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[9px] font-black uppercase">Δ% A-1</span>
+              {showDeltaPercA1 && activeElements.indexOf('DeltaPercA1') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaPercA1') + 1}º</span>
+              )}
+            </button>
+
+            {/* Δ R$ vs Orçado */}
+            <button
+              onClick={() => toggleElement('DeltaAbsOrcado', showDeltaAbsOrcado, setShowDeltaAbsOrcado)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showDeltaAbsOrcado
+                  ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-rose-300'
+              }`}
+              title="Variação R$ vs Orçado"
+            >
+              {showDeltaAbsOrcado ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[9px] font-black uppercase">ΔR$ Or</span>
+              {showDeltaAbsOrcado && activeElements.indexOf('DeltaAbsOrcado') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaAbsOrcado') + 1}º</span>
+              )}
+            </button>
+
+            {/* Δ R$ vs A-1 */}
+            <button
+              onClick={() => toggleElement('DeltaAbsA1', showDeltaAbsA1, setShowDeltaAbsA1)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 transition-all ${
+                showDeltaAbsA1
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-rose-400'
+              }`}
+              title="Variação R$ vs A-1"
+            >
+              {showDeltaAbsA1 ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+              <span className="text-[9px] font-black uppercase">ΔR$ A-1</span>
+              {showDeltaAbsA1 && activeElements.indexOf('DeltaAbsA1') >= 0 && (
+                <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaAbsA1') + 1}º</span>
+              )}
+            </button>
+
+            {/* Separador */}
+            <div className="h-8 w-px bg-gray-300" />
+
+            {/* Toggle visualização: Por Cenário vs Por Mês */}
+            <button
+              onClick={() => setViewMode(viewMode === 'scenario' ? 'month' : 'scenario')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition-all"
+              title="Alternar entre visualização por cenário ou por mês"
+            >
+              <ArrowLeftRight size={14} className="text-indigo-600" />
+              <span className="text-[10px] font-black uppercase text-indigo-900">
+                {viewMode === 'scenario' ? 'Por Cenário' : 'Por Mês'}
+              </span>
+            </button>
+
+            {/* Aviso compacto */}
+            {!showReal && !showOrcado && !showA1 && (
+              <span className="text-[9px] font-bold text-yellow-800 bg-yellow-50 px-2 py-1 rounded">⚠️ Selecione ao menos 1 cenário</span>
+            )}
           </div>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-          {/* Real */}
-          <button
-            onClick={() => setShowReal(!showReal)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
-              showReal
-                ? 'bg-blue-500 text-white border-blue-500 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-            }`}
-          >
-            {showReal ? <CheckSquare size={16} strokeWidth={3} /> : <Square size={16} strokeWidth={3} />}
-            <span className="text-xs font-black uppercase">Real</span>
-          </button>
-
-          {/* Orçado */}
-          <button
-            onClick={() => setShowOrcado(!showOrcado)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
-              showOrcado
-                ? 'bg-green-500 text-white border-green-500 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
-            }`}
-          >
-            {showOrcado ? <CheckSquare size={16} strokeWidth={3} /> : <Square size={16} strokeWidth={3} />}
-            <span className="text-xs font-black uppercase">Orçado</span>
-          </button>
-
-          {/* A-1 */}
-          <button
-            onClick={() => setShowA1(!showA1)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
-              showA1
-                ? 'bg-purple-500 text-white border-purple-500 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
-            }`}
-          >
-            {showA1 ? <CheckSquare size={16} strokeWidth={3} /> : <Square size={16} strokeWidth={3} />}
-            <span className="text-xs font-black uppercase">A-1</span>
-          </button>
-
-          {/* Δ % */}
-          <button
-            onClick={() => setShowDeltaPerc(!showDeltaPerc)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
-              showDeltaPerc
-                ? 'bg-orange-500 text-white border-orange-500 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'
-            }`}
-          >
-            {showDeltaPerc ? <CheckSquare size={16} strokeWidth={3} /> : <Square size={16} strokeWidth={3} />}
-            <span className="text-xs font-black uppercase">Δ %</span>
-          </button>
-
-          {/* Δ R$ */}
-          <button
-            onClick={() => setShowDeltaAbs(!showDeltaAbs)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
-              showDeltaAbs
-                ? 'bg-rose-500 text-white border-rose-500 shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-rose-300'
-            }`}
-          >
-            {showDeltaAbs ? <CheckSquare size={16} strokeWidth={3} /> : <Square size={16} strokeWidth={3} />}
-            <span className="text-xs font-black uppercase">Δ R$</span>
-          </button>
-        </div>
-
-        {/* Aviso se nenhuma coluna selecionada */}
-        {!showReal && !showOrcado && !showA1 && (
-          <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <p className="text-xs font-bold text-yellow-800">⚠️ Selecione pelo menos um cenário (Real, Orçado ou A-1)</p>
-          </div>
-        )}
       </div>
 
       {/* Seção de Níveis Analíticos Dinâmicos */}
-      <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-gray-100 shadow-sm">
-        <div className={`p-2 rounded-xl transition-colors ${dynamicPath.length > 0 ? 'bg-[#F44C00] text-white' : 'bg-gray-50 text-gray-400'}`}>
-          <Layers size={16} />
+      <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-100 shadow-sm">
+        <div className={`p-1.5 rounded-lg transition-colors ${dynamicPath.length > 0 ? 'bg-[#F44C00] text-white' : 'bg-gray-50 text-gray-400'}`}>
+          <Layers size={14} />
         </div>
-        <div className="flex flex-col pr-4 mr-2 border-r border-gray-100 shrink-0">
-          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">Drill-down Profundo</span>
-          <span className="text-[10px] font-black text-gray-900 uppercase">Níveis 4 a 8</span>
+        <div className="flex flex-col pr-3 mr-2 border-r border-gray-100 shrink-0">
+          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Drill-down Profundo</span>
+          <span className="text-[9px] font-black text-gray-900 uppercase">Níveis 4 a 8</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {DRE_DIMENSIONS.map(dim => {
             const index = dynamicPath.indexOf(dim.id);
             const isActive = index !== -1;
             return (
-              <button 
+              <button
                 key={dim.id}
                 onClick={() => toggleDimension(dim.id)}
-                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 border ${
-                  isActive 
-                    ? 'bg-[#F44C00] text-white border-[#F44C00] shadow-md' 
+                className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all flex items-center gap-1.5 border ${
+                  isActive
+                    ? 'bg-[#F44C00] text-white border-[#F44C00] shadow-sm'
                     : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
                 }`}
               >
-                {isActive && <span className="bg-white/20 px-1 rounded-md text-[8px]">{index + 1}º</span>}
+                {isActive && <span className="bg-white/20 px-0.5 rounded text-[7px]">{index + 1}º</span>}
                 {dim.label}
               </button>
             );
           })}
           {dynamicPath.length > 0 && (
-            <button onClick={() => setDynamicPath([])} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg ml-2">
-              <X size={14} />
+            <button onClick={() => setDynamicPath([])} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg ml-1">
+              <X size={12} />
             </button>
           )}
         </div>
       </div>
 
       <div className="bg-white rounded-none border border-gray-100 shadow-2xl overflow-hidden relative">
-        <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
-          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1500px]">
+        <div className="overflow-x-scroll max-h-[calc(100vh-260px)] overflow-y-auto dre-scrollbar">
+          <table className="border-separate border-spacing-0 text-left table-fixed">
             <thead className="sticky top-0 z-50">
-              <tr className="bg-[#152e55] text-white h-9">
-                <th rowSpan={2} className="sticky left-0 z-[60] bg-[#152e55] px-4 py-1.5 text-[9px] font-black uppercase w-[20%] border-r border-white/10">Contas Gerenciais</th>
-                <th colSpan={12} className="px-2 py-1 text-center text-[8px] font-black border-b border-white/10 uppercase tracking-widest bg-[#1B75BB]">Evolução Mensal (Real)</th>
-                <th rowSpan={2} className="px-2 py-1.5 text-center text-[9px] font-black border-l border-white/20 w-[10%] bg-[#1B75BB]">YTD REAL</th>
-                <th colSpan={2} className="px-2 py-1 text-center text-[8px] font-black border-l border-white/10 bg-[#3a3a3a] uppercase">Meta (Budget)</th>
-                <th colSpan={2} className="px-2 py-1 text-center text-[8px] font-black border-l border-white/10 bg-[#2b2b2b] uppercase">Ano Ant. (A-1)</th>
+              <tr className="bg-[#152e55] text-white h-7">
+                <th rowSpan={2} className={`sticky left-0 z-[60] bg-[#152e55] px-3 py-1 text-[9px] font-black uppercase ${viewMode === 'scenario' ? 'border-r-2 border-r-gray-300' : ''} w-[280px]`}>Contas Gerenciais</th>
+
+                {/* Modo: Por Cenário */}
+                {viewMode === 'scenario' && activeElements.map((element) => {
+                  const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                  const isDelta = element.startsWith('Delta');
+
+                  if (isScenario) {
+                    const scenarioLabels = {
+                      'Real': 'REAL',
+                      'Orçado': 'ORÇADO',
+                      'A-1': 'A-1'
+                    };
+
+                    const scenarioColors = {
+                      'Real': '#1B75BB',
+                      'Orçado': '#16a34a',
+                      'A-1': '#9333ea'
+                    };
+
+                    return (
+                      <React.Fragment key={`header-${element}`}>
+                        {/* Colunas do cenário */}
+                        <th colSpan={filteredMonths.length} className="px-1.5 py-0.5 text-center text-[9px] font-black border-b border-white/10 uppercase tracking-widest" style={{ backgroundColor: scenarioColors[element as keyof typeof scenarioColors] }}>
+                          Evolução Mensal ({scenarioLabels[element as keyof typeof scenarioLabels]})
+                        </th>
+                        <th rowSpan={2} className="px-1.5 py-1 text-center text-[9px] font-black border-l border-white/20 border-r-2 border-r-gray-300 w-[100px]" style={{ backgroundColor: scenarioColors[element as keyof typeof scenarioColors] }}>
+                          YTD {scenarioLabels[element as keyof typeof scenarioLabels]}
+                        </th>
+                      </React.Fragment>
+                    );
+                  } else if (isDelta) {
+                    const isPercentual = element.includes('Perc');
+                    let compareLabel = '';
+                    let deltaColor = '#22c55e';
+
+                    if (element.includes('Orcado')) {
+                      compareLabel = 'Or';
+                      deltaColor = '#22c55e';
+                    } else if (element.includes('A1')) {
+                      compareLabel = 'A-1';
+                      deltaColor = '#a855f7';
+                    }
+
+                    return (
+                      <React.Fragment key={`header-${element}`}>
+                        <th colSpan={filteredMonths.length} className="px-1.5 py-0.5 text-center text-[9px] font-black border-b border-white/10 uppercase tracking-widest" style={{ backgroundColor: deltaColor }}>
+                          Δ{compareLabel} {isPercentual ? '%' : 'R$'} (Mensal)
+                        </th>
+                        <th rowSpan={2} className="px-1.5 py-1 text-center text-[9px] font-black border-l border-white/20 border-r-2 border-r-gray-300 w-[100px]" style={{ backgroundColor: deltaColor }}>
+                          YTD Δ{compareLabel}
+                        </th>
+                      </React.Fragment>
+                    );
+                  }
+
+                  return null;
+                })}
+
+                {/* Modo: Por Mês */}
+                {viewMode === 'month' && (
+                  <>
+                    {filteredMonths.map((month, monthIndex) => {
+                      const monthIdx = selectedMonthStart + monthIndex;
+                      return (
+                        <React.Fragment key={`month-header-${month}`}>
+                          {/* Cada mês tem colunas para todos os elementos ativos */}
+                          <th colSpan={activeElements.length} className={`px-1.5 py-0.5 text-center text-[9px] font-black border-b border-white/10 uppercase tracking-widest bg-[#1B75BB] border-l-2 border-l-gray-300`}>
+                            {month} / 2024
+                          </th>
+                        </React.Fragment>
+                      );
+                    })}
+                    {/* Coluna YTD Total */}
+                    <th colSpan={activeElements.length} className="px-1.5 py-0.5 text-center text-[9px] font-black border-b border-white/10 border-l-2 border-l-gray-300 uppercase tracking-widest bg-[#152e55]">
+                      YTD Total
+                    </th>
+                  </>
+                )}
               </tr>
-              <tr className="bg-[#1B75BB] text-white h-6">
-                {months.map(m => (
-                  <th key={m} className="px-1 py-1 text-center text-[7px] font-black w-[3.5%] border-r border-white/5">{m}</th>
-                ))}
-                <th className="px-1 py-1 text-center text-[7px] w-[6%] border-l border-white/10">VALOR</th>
-                <th className="px-1 py-1 text-center text-[7px] w-[3%] border-r border-white/10">VAR%</th>
-                <th className="px-1 py-1 text-center text-[7px] w-[6%] border-l border-white/10">VALOR</th>
-                <th className="px-1 py-1 text-center text-[7px] w-[3%]">VAR%</th>
+              <tr className="bg-[#1B75BB] text-white h-5">
+                {/* Segunda linha do header com os meses */}
+                {viewMode === 'scenario' && activeElements.map((element) => {
+                  const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                  const isDelta = element.startsWith('Delta');
+
+                  if (isScenario) {
+                    const scenarioColors = {
+                      'Real': '#1B75BB',
+                      'Orçado': '#16a34a',
+                      'A-1': '#9333ea'
+                    };
+
+                    return (
+                      <React.Fragment key={`months-${element}`}>
+                        {/* Meses do cenário */}
+                        {filteredMonths.map((m, idx) => {
+                          const isLastMonth = idx === filteredMonths.length - 1;
+                          return (
+                            <th key={`${element}-${m}`} className={`px-1 py-1 text-center text-[9px] font-black w-[80px] ${isLastMonth ? '' : 'border-r border-white/5'}`} style={{ backgroundColor: scenarioColors[element as keyof typeof scenarioColors] }}>
+                              {m}
+                            </th>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  } else if (isDelta) {
+                    const isPercentual = element.includes('Perc');
+                    let deltaColor = '#22c55e';
+
+                    if (element.includes('Orcado')) {
+                      deltaColor = '#22c55e';
+                    } else if (element.includes('A1')) {
+                      deltaColor = '#a855f7';
+                    }
+
+                    const colWidth = isPercentual ? 'w-[70px]' : 'w-[85px]';
+                    return (
+                      <React.Fragment key={`months-${element}`}>
+                        {/* Meses das colunas delta */}
+                        {filteredMonths.map((m, idx) => {
+                          const isLastMonth = idx === filteredMonths.length - 1;
+                          return (
+                            <th key={`${element}-${m}`} className={`px-1 py-1 text-center text-[9px] font-black ${colWidth} ${isLastMonth ? '' : 'border-r border-white/5'}`} style={{ backgroundColor: deltaColor }}>
+                              {m}
+                            </th>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  }
+
+                  return null;
+                })}
+
+                {/* Segunda linha para modo por mês: cenários dentro de cada mês */}
+                {viewMode === 'month' && (
+                  <>
+                    {filteredMonths.map((month, monthIndex) => {
+                      const scenarioColors = {
+                        'Real': '#1B75BB',
+                        'Orçado': '#16a34a',
+                        'A-1': '#9333ea'
+                      };
+
+                      const scenarioLabels = {
+                        'Real': 'Real',
+                        'Orçado': 'Orç',
+                        'A-1': 'A-1'
+                      };
+
+                      return (
+                        <React.Fragment key={`month-scenarios-${month}`}>
+                          {activeElements.map((element, elemIdx) => {
+                            const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                            const isFirstOfMonth = elemIdx === 0;
+                            const borderClass = isFirstOfMonth ? 'border-l-2 border-l-gray-300' : '';
+
+                            if (isScenario) {
+                              return (
+                                <th key={`${month}-${element}`} className={`px-1 py-1 text-center text-[9px] font-black w-[80px] ${borderClass}`} style={{ backgroundColor: '#1B75BB' }}>
+                                  {scenarioLabels[element as keyof typeof scenarioLabels]}
+                                </th>
+                              );
+                            } else {
+                              const isPercentual = element.includes('Perc');
+                              const compareLabel = element.includes('Orcado') ? 'ΔOr' : 'ΔA1';
+                              const colWidth = isPercentual ? 'w-[70px]' : 'w-[85px]';
+                              return (
+                                <th key={`${month}-${element}`} className={`px-1 py-1 text-center text-[9px] font-black ${colWidth} ${borderClass}`} style={{ backgroundColor: '#1B75BB' }}>
+                                  {compareLabel}{isPercentual ? '%' : 'R$'}
+                                </th>
+                              );
+                            }
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
+                    {/* YTDs */}
+                    {activeElements.map((element, elemIdx) => {
+                      const isScenario = ['Real', 'Orçado', 'A-1'].includes(element);
+                      const isFirstOfYTD = elemIdx === 0;
+                      const borderClass = isFirstOfYTD ? 'border-l-2 border-l-gray-300' : '';
+
+                      if (isScenario) {
+                        const scenarioLabels = {
+                          'Real': 'Real',
+                          'Orçado': 'Orç',
+                          'A-1': 'A-1'
+                        };
+
+                        return (
+                          <th key={`ytd-${element}`} className={`px-1 py-1 text-center text-[9px] font-black border-r border-white/5 bg-[#152e55] w-[100px] ${borderClass}`}>
+                            {scenarioLabels[element as keyof typeof scenarioLabels]}
+                          </th>
+                        );
+                      } else {
+                        const isPercentual = element.includes('Perc');
+                        const compareLabel = element.includes('Orcado') ? 'ΔOr' : 'ΔA1';
+                        const colWidth = 'w-[100px]';
+
+                        return (
+                          <th key={`ytd-${element}`} className={`px-1 py-1 text-center text-[9px] font-black border-r border-white/5 ${colWidth} ${borderClass}`} style={{ backgroundColor: '#152e55' }}>
+                            {compareLabel}{isPercentual ? '%' : 'R$'}
+                          </th>
+                        );
+                      }
+                    })}
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white">
               {renderRow('01', DRE_STRUCTURE.REVENUE.label, 1, Object.values(DRE_STRUCTURE.REVENUE.children).flatMap(c => c.items), true)}
               {renderRow('02', DRE_STRUCTURE.VARIABLE_COST.label, 1, Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items), true)}
-              
+              {renderRow('03', DRE_STRUCTURE.FIXED_COST.label, 1, Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items), true)}
+
               {renderCalculationLine(
-                '06. MARGEM DE CONTRIBUIÇÃO', 
+                '06. MARGEM DE CONTRIBUIÇÃO',
                 Object.values(DRE_STRUCTURE.REVENUE.children).flatMap(c => c.items),
-                [Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items)],
+                [
+                  Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items),
+                  Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items)
+                ],
                 'bg-[#F44C00]'
               )}
 
-              {renderRow('03', DRE_STRUCTURE.FIXED_COST.label, 1, Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items), true)}
               {renderRow('04', DRE_STRUCTURE.SGA.label, 1, Object.values(DRE_STRUCTURE.SGA.children).flatMap(c => c.items), true)}
 
               {renderCalculationLine(
@@ -719,37 +1627,37 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
           </table>
         </div>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-blue-50 border border-blue-100 p-4 rounded-3xl flex items-start gap-4 shadow-sm">
-          <div className="bg-white p-2 rounded-2xl shadow-sm text-[#152e55]">
-            <Building2 size={20} />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="bg-blue-50 border border-blue-100 p-2 rounded-xl flex items-start gap-2 shadow-sm">
+          <div className="bg-white p-1.5 rounded-lg shadow-sm text-[#152e55]">
+            <Building2 size={14} />
           </div>
-          <div className="space-y-1">
-            <h4 className="text-[11px] font-black text-blue-900 uppercase tracking-wider">Filtragem Multidimensional</h4>
-            <p className="text-[10px] font-medium text-blue-800 leading-snug">
+          <div className="space-y-0.5">
+            <h4 className="text-[9px] font-black text-blue-900 uppercase tracking-wider">Filtragem Multidimensional</h4>
+            <p className="text-[8px] font-medium text-blue-800 leading-snug">
               Agora você pode cruzar marcas e unidades simultaneamente com indicações visuais amarelas para seleções ativas.
             </p>
           </div>
         </div>
-        <div className="bg-orange-50 border border-orange-100 p-4 rounded-3xl flex items-start gap-4 shadow-sm">
-          <div className="bg-white p-2 rounded-2xl shadow-sm text-[#F44C00]">
-            <TrendingUpDown size={20} />
+        <div className="bg-orange-50 border border-orange-100 p-2 rounded-xl flex items-start gap-2 shadow-sm">
+          <div className="bg-white p-1.5 rounded-lg shadow-sm text-[#F44C00]">
+            <TrendingUpDown size={14} />
           </div>
-          <div className="space-y-1">
-            <h4 className="text-[11px] font-black text-orange-900 uppercase tracking-wider">Consolidação em Tempo Real</h4>
-            <p className="text-[10px] font-medium text-orange-800 leading-snug">
+          <div className="space-y-0.5">
+            <h4 className="text-[9px] font-black text-orange-900 uppercase tracking-wider">Consolidação em Tempo Real</h4>
+            <p className="text-[8px] font-medium text-orange-800 leading-snug">
               O sistema recalcula orçamentos (Budget) e realizados de anos anteriores (A-1) para qualquer combinação de filtros selecionada.
             </p>
           </div>
         </div>
-        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-3xl flex items-start gap-4 shadow-sm md:col-span-2 lg:col-span-1">
-          <div className="bg-white p-2 rounded-2xl shadow-sm text-emerald-600">
-            <CheckSquare size={20} />
+        <div className="bg-emerald-50 border border-emerald-100 p-2 rounded-xl flex items-start gap-2 shadow-sm md:col-span-2 lg:col-span-1">
+          <div className="bg-white p-1.5 rounded-lg shadow-sm text-emerald-600">
+            <CheckSquare size={14} />
           </div>
-          <div className="space-y-1">
-            <h4 className="text-[11px] font-black text-emerald-900 uppercase tracking-wider">Destaques Analíticos</h4>
-            <p className="text-[10px] font-medium text-emerald-800 leading-snug">
+          <div className="space-y-0.5">
+            <h4 className="text-[9px] font-black text-emerald-900 uppercase tracking-wider">Destaques Analíticos</h4>
+            <p className="text-[8px] font-medium text-emerald-800 leading-snug">
               Explore os dados com o mouse para destacar células e identificar desvios rapidamente.
             </p>
           </div>

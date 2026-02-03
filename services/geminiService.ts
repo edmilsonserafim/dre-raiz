@@ -6,6 +6,10 @@ const PROXY_URL = import.meta.env.PROD
   ? "/api/anthropic"  // Produção: usa Vercel serverless function
   : "http://localhost:3021/api/anthropic";  // Desenvolvimento: usa proxy local
 
+// Configurações
+const ANTHROPIC_MODEL = import.meta.env.VITE_ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
+const USE_MOCK = import.meta.env.VITE_AI_REPORT_USE_MOCK === "1";
+
 /**
  * Helper function to clean JSON from markdown code blocks
  */
@@ -34,8 +38,9 @@ async function callAnthropicAPI(params: {
 }): Promise<string> {
   console.log("🔵 Chamando Anthropic API via proxy...", {
     url: PROXY_URL,
-    model: params.model || "claude-sonnet-4-5-20250929",
-    max_tokens: params.max_tokens
+    model: params.model || ANTHROPIC_MODEL,
+    max_tokens: params.max_tokens,
+    use_mock: USE_MOCK
   });
 
   try {
@@ -45,7 +50,7 @@ async function callAnthropicAPI(params: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: params.model || "claude-sonnet-4-5-20250929",
+        model: params.model || ANTHROPIC_MODEL,
         max_tokens: params.max_tokens,
         temperature: params.temperature,
         system: params.system,
@@ -258,7 +263,7 @@ OU, se NÃO for gerar gráfico:
 
 MÉTRICAS VÁLIDAS: "ebitda", "revenue", "fixedCosts", "variableCosts", "sgaCosts", "rateioCosts", "costs", "total"
 CENÁRIOS VÁLIDOS: "Real", "Orçado", "Ano Anterior"
-AGREGAÇÕES: "monthly" (0-11), "category", "branch"
+AGREGAÇÕES: "monthly" (0-11), "category", "filial"
 
 Responda APENAS com JSON válido.`;
 

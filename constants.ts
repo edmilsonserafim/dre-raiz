@@ -78,9 +78,9 @@ const generateMockData = (): Transaction[] => {
     months.forEach(month => {
       if (scenario === 'Real' && month > 4) return;
       branchesToGenerate.forEach(unit => {
-        const brand = unit.split(' - ')[0].trim();
+        const marca = unit.split(' - ')[0].trim();
         const date = `2024-${String(month + 1).padStart(2, '0')}-10`;
-        
+
         // Gerar itens para cada categoria da nova estrutura
         ALL_CATEGORIES.forEach(cat => {
           let type: any = 'REVENUE';
@@ -99,8 +99,8 @@ const generateMockData = (): Transaction[] => {
             scenario,
             date,
             category: cat,
-            branch: unit,
-            brand,
+            filial: unit,
+            marca,
             description: `Lançamento ${cat}`,
             amount: baseAmount * factor * (Math.random() * 0.4 + 0.8) * (isDeduction ? -1 : 1),
             type,

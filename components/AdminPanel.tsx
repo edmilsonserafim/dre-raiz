@@ -31,9 +31,9 @@ const AdminPanel: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showValuesHelper, setShowValuesHelper] = useState(false);
-  const [availableValues, setAvailableValues] = useState<{brands: string[], branches: string[], categories: string[], tags: string[]}>({
-    brands: [],
-    branches: [],
+  const [availableValues, setAvailableValues] = useState<{marcas: string[], filiais: string[], categories: string[], tags: string[]}>({
+    marcas: [],
+    filiais: [],
     categories: [],
     tags: []
   });
@@ -74,8 +74,8 @@ const AdminPanel: React.FC = () => {
     try {
       const transactions = await supabaseService.getAllTransactions();
 
-      const brands = [...new Set(transactions.map(t => t.brand).filter(Boolean))].sort();
-      const branches = [...new Set(transactions.map(t => t.branch).filter(Boolean))].sort();
+      const marcas = [...new Set(transactions.map(t => t.marca).filter(Boolean))].sort();
+      const filiais = [...new Set(transactions.map(t => t.filial).filter(Boolean))].sort();
       const categories = [...new Set(transactions.map(t => t.category).filter(Boolean))].sort();
       const tags = [...new Set([
         ...transactions.map(t => t.tag01).filter(Boolean),
@@ -83,7 +83,7 @@ const AdminPanel: React.FC = () => {
         ...transactions.map(t => t.tag03).filter(Boolean)
       ])].sort();
 
-      setAvailableValues({ brands, branches, categories, tags });
+      setAvailableValues({ marcas, filiais, categories, tags });
     } catch (error) {
       console.error('Erro ao carregar valores disponíveis:', error);
     }
@@ -296,8 +296,8 @@ const AdminPanel: React.FC = () => {
           tag02: row['Segmento'] || row['Segment'] || row['tag02'] || '',
           tag03: row['Projeto'] || row['Project'] || row['tag03'] || '',
           category: row['Conta'] || row['Category'] || row['category'] || 'Outros',
-          brand: row['Marca'] || row['Brand'] || row['brand'] || 'SAP',
-          branch: row['Unidade'] || row['Branch'] || row['branch'] || 'Matriz',
+          marca: row['Marca'] || row['Brand'] || row['brand'] || row['marca'] || 'SAP',
+          filial: row['Unidade'] || row['Branch'] || row['branch'] || row['filial'] || 'Matriz',
           ticket: row['Ticket'] || row['ticket'] || '',
           vendor: row['Fornecedor'] || row['Vendor'] || row['vendor'] || '',
           description: row['Descrição'] || row['Descricao'] || row['Description'] || row['description'] || '',
@@ -528,7 +528,7 @@ const AdminPanel: React.FC = () => {
                       <strong>Cenários:</strong> {[...new Set(importPreview.map(r => r.scenario))].join(', ')}
                     </div>
                     <div className="bg-white p-1 rounded">
-                      <strong>Marcas:</strong> {[...new Set(importPreview.map(r => r.brand))].length}
+                      <strong>Marcas:</strong> {[...new Set(importPreview.map(r => r.marca))].length}
                     </div>
                   </div>
                 </div>
@@ -704,10 +704,10 @@ const AdminPanel: React.FC = () => {
             {/* CIAs (Marcas) */}
             <div className="bg-green-50 border border-green-200 rounded p-2">
               <p className="font-bold text-[10px] text-green-900 uppercase mb-1">🏢 CIAs (Marcas):</p>
-              {availableValues.brands.length > 0 ? (
+              {availableValues.marcas.length > 0 ? (
                 <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
-                  {availableValues.brands.map(brand => (
-                    <span key={brand} className="block bg-green-200 px-1.5 py-0.5 rounded font-mono text-[9px]">{brand}</span>
+                  {availableValues.marcas.map(marca => (
+                    <span key={marca} className="block bg-green-200 px-1.5 py-0.5 rounded font-mono text-[9px]">{marca}</span>
                   ))}
                 </div>
               ) : (
@@ -718,10 +718,10 @@ const AdminPanel: React.FC = () => {
             {/* Filiais */}
             <div className="bg-orange-50 border border-orange-200 rounded p-2">
               <p className="font-bold text-[10px] text-orange-900 uppercase mb-1">🏫 Filiais:</p>
-              {availableValues.branches.length > 0 ? (
+              {availableValues.filiais.length > 0 ? (
                 <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
-                  {availableValues.branches.map(branch => (
-                    <span key={branch} className="block bg-orange-200 px-1.5 py-0.5 rounded font-mono text-[9px]">{branch}</span>
+                  {availableValues.filiais.map(filial => (
+                    <span key={filial} className="block bg-orange-200 px-1.5 py-0.5 rounded font-mono text-[9px]">{filial}</span>
                   ))}
                 </div>
               ) : (
@@ -981,11 +981,11 @@ const AdminPanel: React.FC = () => {
                         list={`suggestions-${newPermissionType}`}
                       />
                       <datalist id={`suggestions-${newPermissionType}`}>
-                        {newPermissionType === 'cia' && availableValues.brands.map(b => (
-                          <option key={b} value={b} />
+                        {newPermissionType === 'cia' && availableValues.marcas.map(m => (
+                          <option key={m} value={m} />
                         ))}
-                        {newPermissionType === 'filial' && availableValues.branches.map(b => (
-                          <option key={b} value={b} />
+                        {newPermissionType === 'filial' && availableValues.filiais.map(f => (
+                          <option key={f} value={f} />
                         ))}
                         {newPermissionType === 'centro_custo' && availableValues.categories.map(c => (
                           <option key={c} value={c} />

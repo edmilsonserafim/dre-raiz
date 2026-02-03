@@ -44,8 +44,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Função para verificar se usuário tem acesso a uma transação
 CREATE OR REPLACE FUNCTION can_access_transaction(
   user_email TEXT,
-  transaction_brand TEXT,
-  transaction_branch TEXT
+  transaction_marca TEXT,
+  transaction_filial TEXT
 )
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -90,13 +90,13 @@ BEGIN
       JOIN users u ON u.id = up.user_id
       WHERE u.email = user_email
         AND up.permission_type = 'filial'
-        AND up.permission_value = transaction_branch
+        AND up.permission_value = transaction_filial
     ) THEN
       RETURN FALSE;
     END IF;
   END IF;
 
-  -- Se tem permissão de CIA (brand), verificar brand
+  -- Se tem permissão de CIA (marca), verificar marca
   IF EXISTS (
     SELECT 1 FROM user_permissions up
     JOIN users u ON u.id = up.user_id
@@ -108,7 +108,7 @@ BEGIN
       JOIN users u ON u.id = up.user_id
       WHERE u.email = user_email
         AND up.permission_type = 'cia'
-        AND up.permission_value = transaction_brand
+        AND up.permission_value = transaction_marca
     ) THEN
       RETURN FALSE;
     END IF;
@@ -132,7 +132,7 @@ CREATE POLICY "Users can read transactions based on permissions" ON transactions
   FOR SELECT USING (
     -- Por enquanto, mantemos acesso público para compatibilidade
     -- Em produção, descomentar a linha abaixo e remover o TRUE
-    -- can_access_transaction(current_setting('app.user_email', true), brand, branch)
+    -- can_access_transaction(current_setting('app.user_email', true), marca, filial)
     TRUE
   );
 

@@ -13,7 +13,7 @@ function doGet() {
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) return returnJSON([]);
   
-  var keys = ["scenario", "date", "tag01", "tag02", "tag03", "category", "branch", "brand", "ticket", "vendor", "description", "amount", "recurring", "id", "status", "justification"];
+  var keys = ["scenario", "date", "tag01", "tag02", "tag03", "category", "filial", "marca", "ticket", "vendor", "description", "amount", "recurring", "id", "status", "justification"];
   var json = [];
   for (var i = 1; i < data.length; i++) {
     var obj = {};
@@ -36,7 +36,7 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("Lancamentos") || ss.getSheets()[0];
     
-    var keys = ["scenario", "date", "tag01", "tag02", "tag03", "category", "branch", "brand", "ticket", "vendor", "description", "amount", "recurring", "id", "status", "justification"];
+    var keys = ["scenario", "date", "tag01", "tag02", "tag03", "category", "filial", "marca", "ticket", "vendor", "description", "amount", "recurring", "id", "status", "justification"];
     
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(keys);
@@ -133,8 +133,8 @@ const DatabaseView: React.FC = () => {
     { col: 'D', label: 'Tag 02', key: 'tag02' },
     { col: 'E', label: 'Tag 03', key: 'tag03' },
     { col: 'F', label: 'Conta (Categoria)', key: 'category' },
-    { col: 'G', label: 'Unidade', key: 'branch' },
-    { col: 'H', label: 'Marca', key: 'brand' },
+    { col: 'G', label: 'Unidade', key: 'filial' },
+    { col: 'H', label: 'Marca', key: 'marca' },
     { col: 'I', label: 'Ticket', key: 'ticket' },
     { col: 'J', label: 'Fornecedor', key: 'vendor' },
     { col: 'K', label: 'Descrição', key: 'description' },

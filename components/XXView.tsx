@@ -13,20 +13,20 @@ interface XXViewProps {
 
 const XXView: React.FC<XXViewProps> = ({ transactions, requestChange }) => {
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const [editForm, setEditForm] = useState({ category: '', date: '', branch: '', brand: '' });
-  const [filters, setFilters] = useState({ description: '', category: '', branch: '' });
+  const [editForm, setEditForm] = useState({ category: '', date: '', filial: '', marca: '' });
+  const [filters, setFilters] = useState({ description: '', category: '', filial: '' });
 
   const filteredData = useMemo(() => {
-    return transactions.filter(t => 
+    return transactions.filter(t =>
       t.description.toLowerCase().includes(filters.description.toLowerCase()) &&
       t.category.toLowerCase().includes(filters.category.toLowerCase()) &&
-      t.branch.toLowerCase().includes(filters.branch.toLowerCase())
+      t.filial.toLowerCase().includes(filters.filial.toLowerCase())
     );
   }, [transactions, filters]);
 
   const handleOpenEdit = (tx: Transaction) => {
     setSelectedTx(tx);
-    setEditForm({ category: tx.category, date: tx.date, branch: tx.branch, brand: tx.brand || 'SAP' });
+    setEditForm({ category: tx.category, date: tx.date, filial: tx.filial, marca: tx.marca || 'SAP' });
   };
 
   const handleSubmitAjuste = () => {
@@ -62,7 +62,7 @@ const XXView: React.FC<XXViewProps> = ({ transactions, requestChange }) => {
                 <tr key={t.id} className={`h-8 hover:bg-blue-50/50 transition-all ${t.status === 'Pendente' ? 'opacity-50' : ''}`}>
                   <td className="px-4 text-[8px] font-mono">{t.date}</td>
                   <td className="px-4 text-[8px] font-black text-[#F44C00]">{t.category}</td>
-                  <td className="px-4 text-[8px] font-bold">{t.branch}</td>
+                  <td className="px-4 text-[8px] font-bold">{t.filial}</td>
                   <td className="px-4 text-[9px] truncate max-w-xs">{t.description}</td>
                   <td className="px-4 text-[9px] font-mono text-right">R$ {t.amount.toLocaleString()}</td>
                   <td className="px-4 text-center">
@@ -98,7 +98,7 @@ const XXView: React.FC<XXViewProps> = ({ transactions, requestChange }) => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-gray-400 uppercase">Nova Unidade</label>
-                  <select value={editForm.branch} onChange={e => setEditForm({...editForm, branch: e.target.value})} className="w-full border-2 border-gray-100 p-3 rounded-2xl text-xs font-black outline-none focus:border-[#F44C00]">
+                  <select value={editForm.filial} onChange={e => setEditForm({...editForm, filial: e.target.value})} className="w-full border-2 border-gray-100 p-3 rounded-2xl text-xs font-black outline-none focus:border-[#F44C00]">
                     {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>

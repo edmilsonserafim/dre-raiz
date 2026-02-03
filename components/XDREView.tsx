@@ -19,7 +19,7 @@ interface XDREViewProps {
   onDrillDown: (category?: string, monthIdx?: number, scenario?: string, tags?: any) => void;
 }
 
-type PivotType = 'month' | 'branch' | 'tag01';
+type PivotType = 'month' | 'filial' | 'tag01';
 
 const XDREView: React.FC<XDREViewProps> = ({ transactions, onDrillDown }) => {
   const [pivot, setPivot] = useState<PivotType>('month');
@@ -215,9 +215,9 @@ const XDREView: React.FC<XDREViewProps> = ({ transactions, onDrillDown }) => {
           >
             <Calendar size={14} /> Mensal
           </button>
-          <button 
-            onClick={() => setPivot('branch')}
-            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${pivot === 'branch' ? 'bg-[#1B75BB] text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}
+          <button
+            onClick={() => setPivot('filial')}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${pivot === 'filial' ? 'bg-[#1B75BB] text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}
           >
             <Building2 size={14} /> Unidades
           </button>

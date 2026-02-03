@@ -13,11 +13,11 @@ const transactionToDb = (t: Transaction): DatabaseTransaction => {
     type: t.type,
     scenario: t.scenario || 'Orçado',
     status: t.status,
-    branch: t.branch
+    filial: t.filial
   };
 
   // Adicionar campos opcionais apenas se existirem
-  if (t.brand) dbTransaction.brand = t.brand;
+  if (t.marca) dbTransaction.marca = t.marca;
   if (t.tag01) dbTransaction.tag01 = t.tag01;
   if (t.tag02) dbTransaction.tag02 = t.tag02;
   if (t.tag03) dbTransaction.tag03 = t.tag03;
@@ -38,8 +38,8 @@ const dbToTransaction = (db: DatabaseTransaction): Transaction => ({
   type: db.type as any,
   scenario: db.scenario,
   status: db.status,
-  branch: db.branch,
-  brand: db.brand,
+  filial: db.filial,
+  marca: db.marca,
   tag01: db.tag01,
   tag02: db.tag02,
   tag03: db.tag03,

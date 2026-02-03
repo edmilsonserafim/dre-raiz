@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
+import { DashboardEnhanced } from './components/DashboardEnhanced';
 import KPIsView from './components/KPIsView';
-import AIFinancialView from './components/AIFinancialView';
+import AnalysisView from './components/AnalysisView';
 import DREView from './components/DREView';
 import ManualChangesView from './components/ManualChangesView';
 import TransactionsView from './components/TransactionsView';
@@ -11,6 +11,7 @@ import ForecastingView from './components/ForecastingView';
 import LoginScreen from './components/LoginScreen';
 import AdminPanel from './components/AdminPanel';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
+import TestAnalysisPack from './components/TestAnalysisPack';
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
 import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock } from 'lucide-react';
@@ -20,20 +21,30 @@ import { usePermissions } from './hooks/usePermissions';
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
-  const { filterTransactions, hasPermissions, allowedBrands, allowedBranches, allowedCategories, loading: permissionsLoading } = usePermissions();
+  const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, loading: permissionsLoading } = usePermissions();
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
-  // Filtros Globais
-  const [selectedBrand, setSelectedBrand] = useState('all');
-  const [selectedBranch, setSelectedBranch] = useState('all');
+  // Filtros Globais (agora arrays para seleção múltipla)
+  const [selectedMarca, setSelectedMarca] = useState<string[]>([]);
+  const [selectedFilial, setSelectedFilial] = useState<string[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [preFullscreenSidebarState, setPreFullscreenSidebarState] = useState(true);
 
-  const [drillDownFilters, setDrillDownFilters] = useState<any>(null);
+  const [drillDownFilters, setDrillDownFilters] = useState<any>(() => {
+    // Carregar filtros salvos do sessionStorage
+    const saved = sessionStorage.getItem('drillDownFilters');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [drillDownActiveTab, setDrillDownActiveTab] = useState<'real' | 'orcamento' | 'comparativo' | undefined>(() => {
+    // Carregar aba ativa salva do sessionStorage
+    const saved = sessionStorage.getItem('drillDownActiveTab');
+    return saved ? JSON.parse(saved) : undefined;
+  });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [manualChanges, setManualChanges] = useState<ManualChange[]>([]);
@@ -80,6 +91,23 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
+  // Salvar filtros no sessionStorage quando mudarem
+  useEffect(() => {
+    if (drillDownFilters) {
+      sessionStorage.setItem('drillDownFilters', JSON.stringify(drillDownFilters));
+    } else {
+      sessionStorage.removeItem('drillDownFilters');
+    }
+  }, [drillDownFilters]);
+
+  useEffect(() => {
+    if (drillDownActiveTab) {
+      sessionStorage.setItem('drillDownActiveTab', JSON.stringify(drillDownActiveTab));
+    } else {
+      sessionStorage.removeItem('drillDownActiveTab');
+    }
+  }, [drillDownActiveTab]);
+
   // Contador de pendências para o Sidebar
   const pendingApprovalsCount = useMemo(() =>
     manualChanges.filter(c => c.status === 'Pendente').length
@@ -87,27 +115,27 @@ const App: React.FC = () => {
 
   // Marcas únicas presentes nos dados
   const uniqueBrands = useMemo(() => {
-    const brands = new Set(transactions.map(t => t.brand).filter(Boolean));
-    return Array.from(brands).sort();
+    const marcas = new Set(transactions.map(t => t.marca).filter(Boolean));
+    return Array.from(marcas).sort();
   }, [transactions]);
 
   // Unidades dinâmicas
   const availableBranches = useMemo(() => {
     let filtered = transactions;
-    if (selectedBrand !== 'all') {
-      filtered = transactions.filter(t => t.brand === selectedBrand);
+    if (selectedMarca.length > 0) {
+      filtered = transactions.filter(t => selectedMarca.includes(t.marca || ''));
     }
-    const branches = new Set(filtered.map(t => t.branch).filter(Boolean));
-    return Array.from(branches).sort();
-  }, [transactions, selectedBrand]);
+    const filiais = new Set(filtered.map(t => t.filial).filter(Boolean));
+    return Array.from(filiais).sort();
+  }, [transactions, selectedMarca]);
 
   useEffect(() => {
     setDrillDownFilters((prev: any) => ({
       ...prev,
-      brand: selectedBrand,
-      branch: selectedBranch
+      marca: selectedMarca,
+      filial: selectedFilial
     }));
-  }, [selectedBrand, selectedBranch]);
+  }, [selectedMarca, selectedFilial]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -132,18 +160,60 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDrillDown = (category?: string, monthIdx?: number, scenario?: string, tags?: any) => {
-    const monthFilter = monthIdx !== undefined ? `${String(monthIdx + 1).padStart(2, '0')}-2024` : '';
-    setDrillDownFilters({
-      category: category || 'all',
-      date: monthFilter,
-      scenario: scenario || 'all',
-      tag01: tags?.tag01 === 'all' ? '' : tags?.tag01 || '',
-      tag02: tags?.tag02 === 'all' ? '' : tags?.tag02 || '',
-      tag03: tags?.tag03 === 'all' ? '' : tags?.tag03 || '',
-      brand: selectedBrand,
-      branch: selectedBranch
+  const handleDrillDown = (drillDownData: {
+    categories: string[];
+    monthIdx?: number;
+    scenario?: string;
+    filters?: Record<string, any>;
+  }) => {
+    const { categories, monthIdx, scenario, filters = {} } = drillDownData;
+
+    // Formatar mês se fornecido no formato YYYY-MM
+    const monthFilter = monthIdx !== undefined ? `2024-${String(monthIdx + 1).padStart(2, '0')}` : '';
+
+    // Construir filtros para TransactionsView
+    const drillFilters: any = {
+      // Categorias: passa o array diretamente
+      category: categories || [],
+
+      // Data: passa o mês específico ou vazio
+      monthFrom: monthFilter,
+      monthTo: monthFilter,
+
+      // NÃO passa scenario aqui, pois a aba ativa vai cuidar disso
+
+      // Filtros acumulados das dimensões dinâmicas da DRE
+      tag01: Array.isArray(filters.tag01) ? filters.tag01 : (filters.tag01 ? [filters.tag01] : []),
+      tag02: Array.isArray(filters.tag02) ? filters.tag02 : (filters.tag02 ? [filters.tag02] : []),
+      tag03: Array.isArray(filters.tag03) ? filters.tag03 : (filters.tag03 ? [filters.tag03] : []),
+      marca: Array.isArray(filters.marca) ? filters.marca : (filters.marca ? [filters.marca] : []),
+      filial: Array.isArray(filters.filial) ? filters.filial : (filters.filial ? [filters.filial] : []),
+      ticket: filters.ticket || '',
+      vendor: filters.vendor || ''
+    };
+
+    // Definir aba ativa baseada no cenário
+    let activeTab: 'real' | 'orcamento' | 'comparativo' = 'real';
+    if (scenario === 'Real') {
+      activeTab = 'real';
+    } else if (scenario === 'Orçado') {
+      activeTab = 'orcamento';
+    } else if (scenario === 'A-1') {
+      activeTab = 'comparativo';
+    }
+
+    console.log('🔵 Drill-down aplicado:', {
+      categories,
+      monthIdx,
+      monthFilter,
+      scenario,
+      activeTab,
+      filters,
+      drillFilters
     });
+
+    setDrillDownFilters(drillFilters);
+    setDrillDownActiveTab(activeTab);
     setCurrentView('movements');
   };
 
@@ -344,8 +414,15 @@ const App: React.FC = () => {
   };
 
   const clearGlobalFilters = () => {
-    setSelectedBrand('all');
-    setSelectedBranch('all');
+    setSelectedMarca([]);
+    setSelectedFilial([]);
+    setDrillDownActiveTab(undefined);
+  };
+
+  const handleBackToDRE = () => {
+    setDrillDownFilters(null);
+    setDrillDownActiveTab(undefined);
+    setCurrentView('dre');
   };
 
   const filteredTransactions = useMemo(() => {
@@ -355,11 +432,11 @@ const App: React.FC = () => {
     // Depois, aplicar filtros de marca/filial selecionados
     if (currentView === 'movements' || currentView === 'dre') return permissionFiltered;
     return permissionFiltered.filter(t => {
-      const matchesBrand = selectedBrand === 'all' || t.brand === selectedBrand;
-      const matchesBranch = selectedBranch === 'all' || t.branch === selectedBranch;
-      return matchesBrand && matchesBranch;
+      const matchesMarca = selectedMarca.length === 0 || selectedMarca.includes(t.marca || '');
+      const matchesFilial = selectedFilial.length === 0 || selectedFilial.includes(t.filial || '');
+      return matchesMarca && matchesFilial;
     });
-  }, [transactions, selectedBrand, selectedBranch, currentView, filterTransactions]);
+  }, [transactions, selectedMarca, selectedFilial, currentView, filterTransactions]);
 
   const kpis: SchoolKPIs = useMemo(() => {
     const real = filteredTransactions.filter(t => t.scenario === 'Real');
@@ -369,8 +446,8 @@ const App: React.FC = () => {
     const targetMargin = 25;
     const targetEbitda = rev * (targetMargin / 100);
     const diff = targetEbitda - ebitda;
-    const baseStudents = selectedBrand === 'all' ? 5400 : 850;
-    const numberOfStudents = selectedBranch === 'all' ? baseStudents : 120;
+    const baseStudents = selectedMarca.length === 0 ? 5400 : selectedMarca.length * 850;
+    const numberOfStudents = selectedFilial.length === 0 ? baseStudents : selectedFilial.length * 120;
     const waterCost = real.filter(t => t.category === 'Água & Gás').reduce((acc, t) => acc + t.amount, 0);
     const energyCost = real.filter(t => t.category === 'Energia').reduce((acc, t) => acc + t.amount, 0);
     const consumptionMaterialCost = real.filter(t => t.category === 'Material de Consumo').reduce((acc, t) => acc + t.amount, 0);
@@ -396,7 +473,7 @@ const App: React.FC = () => {
       consumptionMaterialPerStudent: consumptionMaterialCost / Math.max(1, numberOfStudents),
       eventsPerStudent: eventsCost / Math.max(1, numberOfStudents)
     };
-  }, [filteredTransactions, selectedBrand, selectedBranch]);
+  }, [filteredTransactions, selectedMarca, selectedFilial]);
 
   const showGlobalFilters = currentView !== 'dre' && currentView !== 'movements' && currentView !== 'dashboard';
 
@@ -442,7 +519,7 @@ const App: React.FC = () => {
         <Sidebar
           currentView={currentView}
           setCurrentView={setCurrentView}
-          selectedBrand={selectedBrand}
+          selectedBrand={selectedMarca}
           pendingCount={pendingApprovalsCount}
         />
       </div>
@@ -463,8 +540,8 @@ const App: React.FC = () => {
                 <div className="flex flex-col">
                   <span className="text-[9px] font-black text-yellow-900 uppercase tracking-wider">Acesso Restrito</span>
                   <div className="flex gap-2 text-[10px] font-bold text-yellow-700">
-                    {allowedBrands.length > 0 && <span>Marcas: {allowedBrands.join(', ')}</span>}
-                    {allowedBranches.length > 0 && <span>Filiais: {allowedBranches.join(', ')}</span>}
+                    {allowedMarcas.length > 0 && <span>Marcas: {allowedMarcas.join(', ')}</span>}
+                    {allowedFiliais.length > 0 && <span>Filiais: {allowedFiliais.join(', ')}</span>}
                     {allowedCategories.length > 0 && <span>Categorias: {allowedCategories.join(', ')}</span>}
                   </div>
                 </div>
@@ -474,57 +551,22 @@ const App: React.FC = () => {
 
           {showGlobalFilters && (
             <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border-2 shadow-xl transition-all transform hover:scale-105 ${selectedBrand === 'all' ? 'border-[#1B75BB]/20' : 'border-[#1B75BB] ring-4 ring-[#1B75BB]/10'}`}>
-                <div className={`p-2 rounded-xl transition-colors ${selectedBrand === 'all' ? 'bg-blue-50 text-[#1B75BB]' : 'bg-[#1B75BB] text-white'}`}>
-                  <Flag size={18} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Grupo Raiz</span>
-                  <select
-                    value={selectedBrand}
-                    onChange={e => {
-                      setSelectedBrand(e.target.value);
-                      setSelectedBranch('all');
-                    }}
-                    className="font-black text-xs uppercase tracking-tight outline-none bg-transparent cursor-pointer min-w-[170px] text-gray-900"
-                  >
-                    <option value="all">TODAS AS MARCAS</option>
-                    {uniqueBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className={`flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border-2 shadow-xl transition-all transform hover:scale-105 ${selectedBranch === 'all' ? 'border-[#F44C00]/20' : 'border-[#F44C00] ring-4 ring-[#F44C00]/10'}`}>
-                <div className={`p-2 rounded-xl transition-colors ${selectedBranch === 'all' ? 'bg-orange-50 text-[#F44C00]' : 'bg-[#F44C00] text-white'}`}>
-                  <Building2 size={18} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Filial</span>
-                  <select
-                    value={selectedBranch}
-                    onChange={e => setSelectedBranch(e.target.value)}
-                    className="font-black text-xs uppercase tracking-tight outline-none bg-transparent cursor-pointer min-w-[170px] text-gray-900"
-                  >
-                    <option value="all">TODAS AS UNIDADES</option>
-                    {availableBranches.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-              </div>
+              {/* Nota: Filtros globais não são usados no dashboard, apenas nas outras views */}
             </div>
           )}
         </div>
 
         <div className="px-6 pb-6">
           {currentView === 'dashboard' && (
-            <Dashboard
+            <DashboardEnhanced
               kpis={kpis}
               transactions={filteredTransactions}
-              selectedBrand={selectedBrand}
-              selectedBranch={selectedBranch}
+              selectedBrand={selectedMarca}
+              selectedBranch={selectedFilial}
               uniqueBrands={uniqueBrands}
               availableBranches={availableBranches}
-              onBrandChange={setSelectedBrand}
-              onBranchChange={setSelectedBranch}
+              onBrandChange={setSelectedMarca}
+              onBranchChange={setSelectedFilial}
             />
           )}
           {currentView === 'kpis' && <KPIsView kpis={kpis} transactions={filteredTransactions} />}
@@ -537,14 +579,17 @@ const App: React.FC = () => {
               fetchFromCSV={handleImportData}
               isSyncing={isSyncing}
               externalFilters={drillDownFilters}
+              externalActiveTab={drillDownActiveTab}
               clearGlobalFilters={clearGlobalFilters}
+              onBackToDRE={handleBackToDRE}
             />
           )}
           {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
-          {currentView === 'ai_financial' && <AIFinancialView transactions={filteredTransactions} kpis={kpis} />}
           {currentView === 'dre' && <DREView transactions={filteredTransactions} onDrillDown={handleDrillDown} />}
           {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
+          {currentView === 'analysis' && <AnalysisView transactions={filteredTransactions} kpis={kpis} />}
           {currentView === 'admin' && <AdminPanel />}
+          {currentView === 'teste' && <TestAnalysisPack />}
         </div>
       </main>
     </div>

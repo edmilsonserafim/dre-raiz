@@ -1,3 +1,30 @@
 /* DRE RAIZ - Estilos Globais */
 /* Arquivo criado para evitar erro 404 */
 /* Os estilos principais estão no Tailwind CDN e no index.html */
+
+/* Scrollbar customizada para a DRE */
+.dre-scrollbar::-webkit-scrollbar {
+  height: 16px;
+  width: 16px;
+}
+
+.dre-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 0;
+}
+
+.dre-scrollbar::-webkit-scrollbar-thumb {
+  background: #1B75BB;
+  border-radius: 8px;
+  border: 3px solid #f1f5f9;
+}
+
+.dre-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #154a7d;
+}
+
+/* Firefox */
+.dre-scrollbar {
+  scrollbar-width: thick;
+  scrollbar-color: #1B75BB #f1f5f9;
+}

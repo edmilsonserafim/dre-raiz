@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   type TEXT NOT NULL,
   scenario TEXT NOT NULL,
   status TEXT DEFAULT 'Normal',
-  branch TEXT NOT NULL,
-  brand TEXT,
+  filial TEXT NOT NULL,
+  marca TEXT,
   tag01 TEXT,
   tag02 TEXT,
   tag03 TEXT,
@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS manual_changes (
 
 -- Índices para melhor performance
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_branch ON transactions(branch);
-CREATE INDEX IF NOT EXISTS idx_transactions_brand ON transactions(brand);
+CREATE INDEX IF NOT EXISTS idx_transactions_filial ON transactions(filial);
+CREATE INDEX IF NOT EXISTS idx_transactions_marca ON transactions(marca);
 CREATE INDEX IF NOT EXISTS idx_transactions_scenario ON transactions(scenario);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 CREATE INDEX IF NOT EXISTS idx_manual_changes_status ON manual_changes(status);

@@ -14,6 +14,7 @@ interface Message {
 interface AIFinancialViewProps {
   transactions: Transaction[];
   kpis: SchoolKPIs;
+  onAnalysisGenerated?: (pack: any, context: any) => void;
 }
 
 const AIFinancialView: React.FC<AIFinancialViewProps> = ({ transactions, kpis }) => {

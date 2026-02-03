@@ -17,7 +17,7 @@ import { Transaction, SchoolKPIs, ChartConfig } from '../types';
 import {
   aggregateByMonth,
   aggregateByCategory,
-  aggregateByBranch,
+  aggregateByFilial,
   buildWaterfallData,
   buildTimeSeries,
   buildHeatmapData
@@ -48,7 +48,7 @@ const DynamicChartRenderer: React.FC<DynamicChartRendererProps> = ({ config, tra
 
       case 'bar':
         if (dataSpec.aggregation === 'branch') {
-          return aggregateByBranch(transactions, dataSpec.metrics, dataSpec.scenarios);
+          return aggregateByFilial(transactions, dataSpec.metrics, dataSpec.scenarios);
         } else if (dataSpec.aggregation === 'category') {
           return aggregateByCategory(transactions, dataSpec.metrics, dataSpec.scenarios);
         } else if (dataSpec.aggregation === 'monthly') {

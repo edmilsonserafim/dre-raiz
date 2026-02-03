@@ -16,13 +16,13 @@ export interface Transaction {
   date: string;
   category: string;
   type: TransactionType;
-  branch: string;
+  filial: string;
   status: TransactionStatus;
   scenario?: string;
   tag01?: string;
   tag02?: string;
   tag03?: string;
-  brand?: string;
+  marca?: string;
   ticket?: string;
   vendor?: string;
   recurring?: string;
@@ -77,4 +77,122 @@ export interface IAInsight {
   category: 'Driver Positivo' | 'Driver Negativo' | 'Ação Recomendada';
 }
 
-export type ViewType = 'dashboard' | 'kpis' | 'ai_financial' | 'dre' | 'forecasting' | 'manual_changes' | 'movements' | 'admin';
+export type ViewType = 'dashboard' | 'kpis' | 'dre' | 'forecasting' | 'manual_changes' | 'movements' | 'admin' | 'teste' | 'analysis';
+
+// Chart Types for AI-Generated Visualizations
+export type ChartType = 'bar' | 'line' | 'waterfall' | 'composed' | 'heatmap';
+
+export interface ChartConfig {
+  type: ChartType;
+  title: string;
+  description: string;
+  dataSpec: {
+    aggregation: 'monthly' | 'category' | 'filial';
+    metrics: string[];
+    scenarios: string[];
+    timeframe: { start: number; end: number };
+  };
+}
+
+export interface AIChartResponse {
+  explanation: string;
+  chartConfig: ChartConfig | null;
+}
+
+// ============================================
+// Analysis Pack Types
+// ============================================
+
+export type CurrencyCode = "BRL" | "USD" | "EUR";
+
+export type KPI = {
+  code: string;
+  name: string;
+  unit: "currency" | "percent" | "number";
+  actual: number;
+  plan?: number | null;
+  prior?: number | null;
+  delta_vs_plan?: number | null;
+  delta_vs_prior?: number | null;
+};
+
+export type WaterfallStep = { label: string; value: number };
+
+export type DatasetRegistry = {
+  r12?: {
+    x: string[];
+    series: Array<{ key: string; name: string; data: number[]; unit: "currency" | "number" | "percent" }>;
+  };
+  ebitda_bridge_vs_plan_ytd?: {
+    start_label: string;
+    end_label: string;
+    start_value: number;
+    end_value: number;
+    steps: WaterfallStep[];
+  };
+  pareto_cost_variance_ytd?: {
+    items: Array<{ name: string; value: number }>;
+  };
+  heatmap_variance?: {
+    x: string[];
+    y: string[];
+    values: Array<[number, number, number]>;
+    unit: "currency" | "number" | "percent";
+  };
+  drivers_table?: {
+    columns: string[];
+    rows: Array<Array<string | number>>;
+  };
+};
+
+export type AnalysisContext = {
+  org_name: string;
+  currency: CurrencyCode;
+  period_label: string;
+  scope_label: string;
+  kpis: KPI[];
+  datasets: DatasetRegistry;
+  analysis_rules?: {
+    prefer_pareto?: boolean;
+    highlight_threshold_currency?: number;
+    highlight_threshold_percent?: number;
+  };
+};
+
+export type SlideBlock =
+  | { type: "text"; title?: string; bullets: string[] }
+  | { type: "callout"; intent: "positive" | "negative" | "neutral"; title: string; bullets: string[] }
+  | { type: "kpi_grid"; title?: string; kpi_codes: string[] }
+  | { type: "chart"; chart_id: string; height: "sm" | "md" | "lg"; note?: string }
+  | { type: "table"; title?: string; dataset_key: "drivers_table" };
+
+export type Slide = {
+  title: string;
+  subtitle?: string;
+  blocks: SlideBlock[];
+};
+
+export type ChartDef =
+  | { id: string; kind: "line"; dataset_key: "r12"; title: string; series_keys: string[] }
+  | { id: string; kind: "waterfall"; dataset_key: "ebitda_bridge_vs_plan_ytd"; title: string }
+  | { id: string; kind: "pareto"; dataset_key: "pareto_cost_variance_ytd"; title: string; top_n: number }
+  | { id: string; kind: "heatmap"; dataset_key: "heatmap_variance"; title: string };
+
+export type AnalysisPack = {
+  meta: {
+    org_name: string;
+    period_label: string;
+    scope_label: string;
+    currency: CurrencyCode;
+    generated_at_iso: string;
+  };
+  executive_summary: {
+    headline: string;
+    bullets: string[];
+    risks: string[];
+    opportunities: string[];
+  };
+  actions: Array<{ owner: string; action: string; eta: string; expected_impact: string }>;
+  charts: ChartDef[];
+  slides: Slide[];
+};

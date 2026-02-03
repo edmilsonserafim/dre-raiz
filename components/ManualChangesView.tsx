@@ -266,10 +266,10 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
         change.status,
         change.transactionId,
         orig.description,
-        orig.branch,
+        orig.filial,
         orig.amount.toString(),
         newValueObj.category || "-",
-        newValueObj.branch || "-",
+        newValueObj.filial || "-",
         newValueObj.date || "-",
         newValueObj.recurring || "-",
         justification,
@@ -544,7 +544,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
                           </p>
                           <div className="flex items-center gap-1 mt-1">
                             <span className="text-[7px] bg-gray-100 px-1 py-0.5 rounded text-gray-500 font-black border border-gray-200">
-                              {orig.branch}
+                              {orig.filial}
                             </span>
                             <span className="text-[7px] bg-[#F44C00]/5 px-1 py-0.5 rounded text-[#F44C00] font-black border border-[#F44C00]/10">
                               R${orig.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -577,7 +577,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
                             <div className="flex flex-wrap gap-1">
                               {rateioTransactions.slice(0, 3).map((p: any, i: number) => (
                                 <div key={i} className="text-[8px] bg-emerald-50/50 px-1.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
-                                  <span className="font-black text-emerald-800">{p.branch}:</span>
+                                  <span className="font-black text-emerald-800">{p.filial}:</span>
                                   <span className="font-bold text-emerald-600">R${p.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                                 </div>
                               ))}
@@ -586,7 +586,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
                           ) : (
                             <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-2 space-y-0.5">
                                 <ComparisonRow label="Conta" oldVal={orig.category} newVal={newValueObj.category} />
-                                <ComparisonRow label="Unidade" oldVal={orig.branch} newVal={newValueObj.branch} />
+                                <ComparisonRow label="Unidade" oldVal={orig.filial} newVal={newValueObj.filial} />
                                 <ComparisonRow label="Data" oldVal={orig.date} newVal={newValueObj.date} formatter={formatDateToMMAAAA} />
                                 <ComparisonRow label="Recorrência" oldVal={orig.recurring || 'Sim'} newVal={newValueObj.recurring} formatter={(v) => v === 'Não' ? 'Único' : 'Recorrente'} />
                             </div>

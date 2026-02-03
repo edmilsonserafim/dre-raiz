@@ -129,6 +129,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await firebaseSignOut(auth);
       setUser(null);
+      // Limpar todos os filtros salvos ao fazer logout
+      sessionStorage.removeItem('drillDownFilters');
+      sessionStorage.removeItem('drillDownActiveTab');
+      sessionStorage.removeItem('transactionsColFilters');
+      sessionStorage.removeItem('transactionsActiveTab');
+      sessionStorage.removeItem('dreMonthStart');
+      sessionStorage.removeItem('dreMonthEnd');
+      sessionStorage.removeItem('dreTags01');
+      sessionStorage.removeItem('dreBrands');
+      sessionStorage.removeItem('dreBranches');
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       alert('Erro ao fazer logout. Tente novamente.');

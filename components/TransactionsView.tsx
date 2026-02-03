@@ -11,7 +11,7 @@ import {
   Trash2, Filter, Loader2,
   Split, CheckCircle2, Download, ListOrdered, Calculator, ArrowRight,
   ChevronDown, Check, Square, CheckSquare, TrendingUp, History,
-  TrendingDown, ArrowUpRight, ArrowDownRight, AlertCircle
+  TrendingDown, ArrowUpRight, ArrowDownRight, AlertCircle, Search, ArrowLeft, TableProperties
 } from 'lucide-react';
 
 interface TransactionsViewProps {
@@ -23,6 +23,8 @@ interface TransactionsViewProps {
   isSyncing?: boolean;
   externalFilters?: any;
   clearGlobalFilters?: () => void;
+  externalActiveTab?: 'real' | 'orcamento' | 'comparativo';
+  onBackToDRE?: () => void;
 }
 
 type SortKey = keyof Transaction;
@@ -32,8 +34,8 @@ interface RateioPart {
   id: string;
   amount: number;
   percent: number;
-  branch: string;
-  brand: string;
+  filial: string;
+  marca: string;
   date: string;
   category: string;
 }
@@ -53,13 +55,15 @@ const formatDateToMMAAAA = (date: any) => {
   return String(d);
 };
 
-const TransactionsView: React.FC<TransactionsViewProps> = ({ 
-  transactions, 
+const TransactionsView: React.FC<TransactionsViewProps> = ({
+  transactions,
   requestChange,
   fetchFromCSV,
   isSyncing: initialSyncing,
   externalFilters,
-  clearGlobalFilters
+  clearGlobalFilters,
+  externalActiveTab,
+  onBackToDRE
 }) => {
   const [showFilters, setShowFilters] = useState(true);
   const [isSyncing, setIsSyncing] = useState(initialSyncing);
@@ -68,21 +72,25 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
 
   // Abas e Paginação
-  const [activeTab, setActiveTab] = useState<'real' | 'orcamento' | 'comparativo'>('real');
+  const [activeTab, setActiveTab] = useState<'real' | 'orcamento' | 'comparativo'>(() => {
+    // Carregar aba ativa salva do sessionStorage
+    const saved = sessionStorage.getItem('transactionsActiveTab');
+    return saved ? JSON.parse(saved) : 'real';
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const RECORDS_PER_PAGE = 1000;
 
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
   const [rateioParts, setRateioParts] = useState<RateioPart[]>([]);
-  const [editForm, setEditForm] = useState({ category: '', date: '', branch: '', brand: '', justification: '', amount: 0, recurring: 'Sim' });
+  const [editForm, setEditForm] = useState({ category: '', date: '', filial: '', marca: '', justification: '', amount: 0, recurring: 'Sim' });
   const [rateioJustification, setRateioJustification] = useState('');
 
   const initialFilters = {
     monthFrom: '',
     monthTo: '',
-    brand: [] as string[],
-    branch: [] as string[],
+    marca: [] as string[],
+    filial: [] as string[],
     tag01: [] as string[],
     tag02: [] as string[],
     tag03: [] as string[],
@@ -94,8 +102,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     recurring: ['Sim'] as string[]  // Filtro padrão: apenas "Sim"
   };
 
-  const [colFilters, setColFilters] = useState(initialFilters);
+  const [colFilters, setColFilters] = useState(() => {
+    // Carregar filtros salvos do sessionStorage
+    const saved = sessionStorage.getItem('transactionsColFilters');
+    return saved ? JSON.parse(saved) : initialFilters;
+  });
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownSearches, setDropdownSearches] = useState<Record<string, string>>({});
 
   // Debounced filter setter for text inputs
   const debouncedSetFilter = useMemo(
@@ -123,6 +136,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return () => document.removeEventListener('mousedown', handleGlobalClick);
   }, [openDropdown]);
 
+  // Limpar busca quando dropdown for fechado
+  useEffect(() => {
+    if (!openDropdown) {
+      setDropdownSearches({});
+    }
+  }, [openDropdown]);
+
   const dynamicOptions = useMemo(() => {
     const getOptions = (field: keyof Transaction) => {
       const filtered = transactions.filter(t => {
@@ -135,10 +155,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
 
             if (key === 'monthFrom' && value) {
-              if (tYearMonth < value) return false;
+              const passes = tYearMonth >= value;
+              if (!passes) return false;
             }
             if (key === 'monthTo' && value) {
-              if (tYearMonth > value) return false;
+              const passes = tYearMonth <= value;
+              if (!passes) return false;
             }
             return true;
           }
@@ -154,8 +176,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     };
 
     return {
-      brands: getOptions('brand'),
-      branches: getOptions('branch'),
+      marcas: getOptions('brand'),
+      filiais: getOptions('branch'),
       tag01s: getOptions('tag01'),
       tag02s: getOptions('tag02'),
       tag03s: getOptions('tag03'),
@@ -169,7 +191,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   useEffect(() => {
     if (externalFilters) {
       const formatted = { ...externalFilters };
-      ['scenario', 'brand', 'branch', 'tag01', 'tag02', 'tag03', 'category'].forEach(key => {
+      ['marca', 'filial', 'tag01', 'tag02', 'tag03', 'category'].forEach(key => {
         if (formatted[key] && typeof formatted[key] === 'string' && formatted[key] !== 'all') {
           formatted[key] = [formatted[key]];
         } else if (formatted[key] === 'all' || !formatted[key]) {
@@ -181,14 +203,31 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     }
   }, [externalFilters]);
 
+  // Sincronizar aba ativa quando vem do drill-down
+  useEffect(() => {
+    if (externalActiveTab) {
+      setActiveTab(externalActiveTab);
+    }
+  }, [externalActiveTab]);
+
+  // Salvar filtros no sessionStorage quando mudarem
+  useEffect(() => {
+    sessionStorage.setItem('transactionsColFilters', JSON.stringify(colFilters));
+  }, [colFilters]);
+
+  // Salvar aba ativa no sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('transactionsActiveTab', JSON.stringify(activeTab));
+  }, [activeTab]);
+
   // Sincroniza estado do formulário de edição
   useEffect(() => {
     if (editingTransaction) {
       setEditForm({
         category: editingTransaction.category,
         date: editingTransaction.date,
-        branch: editingTransaction.branch,
-        brand: editingTransaction.brand || 'SAP',
+        filial: editingTransaction.branch,
+        marca: editingTransaction.brand || 'SAP',
         justification: '',
         amount: editingTransaction.amount,
         recurring: editingTransaction.recurring || 'Sim'
@@ -203,8 +242,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       setRateioParts([
         {
           id: `p1-${Date.now()}`,
-          branch: rateioTransaction.branch,
-          brand: rateioTransaction.brand || 'SAP',
+          filial: rateioTransaction.branch,
+          marca: rateioTransaction.brand || 'SAP',
           amount: Number((rateioTransaction.amount / 2).toFixed(2)),
           percent: 50,
           date: rateioTransaction.date,
@@ -212,8 +251,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         },
         {
           id: `p2-${Date.now()}`,
-          branch: rateioTransaction.branch,
-          brand: rateioTransaction.brand || 'SAP',
+          filial: rateioTransaction.branch,
+          marca: rateioTransaction.brand || 'SAP',
           amount: Number((rateioTransaction.amount / 2).toFixed(2)),
           percent: 50,
           date: rateioTransaction.date,
@@ -224,12 +263,22 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [rateioTransaction]);
 
   const filteredAndSorted = useMemo(() => {
+    // Log de debug para drill-down
+    if (colFilters.monthFrom || colFilters.monthTo) {
+      console.log('🟢 Filtros de data aplicados:', {
+        monthFrom: colFilters.monthFrom,
+        monthTo: colFilters.monthTo,
+        totalTransactions: transactions.length
+      });
+    }
+
     return transactions
       .filter(t => {
         // Filtrar por aba ativa (cenário) - case-insensitive e sem acentos
         const scenarioNormalized = (t.scenario || '').toLowerCase().trim()
           .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
 
+        // Usar a lógica da aba ativa
         if (activeTab === 'real') {
           // Aceita: "Real", "real", "REAL", etc.
           if (scenarioNormalized !== 'real') return false;
@@ -255,10 +304,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
 
             if (key === 'monthFrom' && value) {
-              if (tYearMonth < value) return false;
+              const passes = tYearMonth >= value;
+              if (!passes) return false;
             }
             if (key === 'monthTo' && value) {
-              if (tYearMonth > value) return false;
+              const passes = tYearMonth <= value;
+              if (!passes) return false;
             }
             return true;
           }
@@ -405,8 +456,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const newTransactions: Transaction[] = rateioParts.filter(p => p.amount > 0).map((p, idx) => ({
       ...rateioTransaction,
       id: `${rateioTransaction.id}-R${idx}-${Date.now()}`,
-      branch: p.branch,
-      brand: p.brand,
+      branch: p.filial,
+      brand: p.marca,
       date: p.date,
       category: p.category,
       amount: Number(p.amount.toFixed(2)),
@@ -459,10 +510,20 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const MultiSelectFilter = ({ id, label, options, selected, active }: any) => {
     const isOpen = openDropdown === id;
     const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
+    const searchTerm = dropdownSearches[id] || '';
+
+    // Filtrar opções baseado no termo de busca
+    const filteredOptions = useMemo(() => {
+      if (!searchTerm) return options;
+      return options.filter((opt: string) =>
+        opt.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }, [options, searchTerm]);
+
     return (
       <div className="space-y-0.5 relative multi-select-container">
         <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</label>
-        <button 
+        <button
           onClick={(e) => { e.stopPropagation(); setOpenDropdown(isOpen ? null : id); }}
           className={`w-full flex items-center justify-between border p-1 rounded-none text-[8px] font-black transition-all ${active ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}
         >
@@ -470,27 +531,87 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           <ChevronDown size={8} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
         {isOpen && (
-          <div className="absolute top-full left-0 z-[150] w-[180px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute top-full left-0 z-[150] w-[200px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-50">
-              <span className="text-[7px] font-black text-gray-400 uppercase">Filtro: {label}</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[7px] font-black text-gray-400 uppercase">Filtro: {label}</span>
+                {searchTerm && (
+                  <span className="text-[7px] font-bold text-[#1B75BB] bg-blue-50 px-1 rounded">
+                    {filteredOptions.length}
+                  </span>
+                )}
+              </div>
               <button onClick={() => setColFilters(prev => ({...prev, [id]: []}))} className="text-[7px] font-black text-rose-500 uppercase hover:underline">Limpar</button>
             </div>
-            <div className="max-h-[200px] overflow-y-auto space-y-0.5 pr-1">
-              {options.map((opt: string) => {
-                const isChecked = selected.includes(opt);
-                return (
-                  <button 
-                    key={opt}
-                    onClick={() => toggleMultiFilter(id, opt)}
-                    className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
+
+            {/* Campo de busca */}
+            <div className="mb-1.5 relative">
+              <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-1.5 py-1 focus-within:border-[#1B75BB] focus-within:ring-1 focus-within:ring-[#1B75BB]">
+                <Search size={10} className="text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setDropdownSearches(prev => ({ ...prev, [id]: e.target.value }))}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 text-[8px] font-bold bg-transparent outline-none"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDropdownSearches(prev => ({ ...prev, [id]: '' }));
+                    }}
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                   >
-                    <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
-                      {isChecked ? <CheckSquare size={10} /> : <Square size={10} />}
-                    </div>
-                    <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt}</span>
+                    <X size={10} />
                   </button>
-                );
-              })}
+                )}
+              </div>
+            </div>
+
+            {/* Botão Selecionar Todos os filtrados */}
+            {filteredOptions.length > 0 && filteredOptions.length < options.length && (
+              <div className="mb-1 pb-1 border-b border-gray-50">
+                <button
+                  onClick={() => {
+                    const currentSelected = [...selected];
+                    filteredOptions.forEach((opt: string) => {
+                      if (!currentSelected.includes(opt)) {
+                        currentSelected.push(opt);
+                      }
+                    });
+                    setColFilters(prev => ({ ...prev, [id]: currentSelected }));
+                  }}
+                  className="w-full px-1.5 py-0.5 text-[7px] font-black text-[#1B75BB] hover:bg-blue-50 rounded-sm transition-colors uppercase"
+                >
+                  Selecionar Resultados ({filteredOptions.length})
+                </button>
+              </div>
+            )}
+
+            <div className="max-h-[200px] overflow-y-auto space-y-0.5 pr-1">
+              {filteredOptions.length === 0 ? (
+                <div className="text-center py-3 text-[8px] text-gray-400 font-bold">
+                  Nenhum resultado encontrado
+                </div>
+              ) : (
+                filteredOptions.map((opt: string) => {
+                  const isChecked = selected.includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => toggleMultiFilter(id, opt)}
+                      className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
+                        {isChecked ? <CheckSquare size={10} /> : <Square size={10} />}
+                      </div>
+                      <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt}</span>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -522,6 +643,17 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           <p className="text-gray-500 text-[7px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
         </div>
         <div className="flex items-center gap-1.5">
+           {/* Botão Voltar para DRE - só aparece quando há filtros de drill-down */}
+           {externalFilters && onBackToDRE && (
+             <button
+               onClick={onBackToDRE}
+               className="flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase tracking-widest transition-all border bg-[#152e55] text-white border-[#152e55] hover:bg-[#1B75BB]"
+             >
+               <ArrowLeft size={10} />
+               <TableProperties size={10} />
+               Voltar para DRE
+             </button>
+           )}
            <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1 px-2 py-1.5 rounded-none font-black text-[8px] uppercase tracking-widest transition-all border ${showFilters ? 'bg-[#1B75BB] text-white border-[#1B75BB]' : 'bg-white text-[#1B75BB] border-[#1B75BB]'}`}>
              <Filter size={10}/> {showFilters ? 'Ocultar Filtros' : 'Filtrar'}
              {activeFilterCount > 0 && (
@@ -625,12 +757,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <MultiSelectFilter id="tag01" label="C.Custo" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
-                <MultiSelectFilter id="tag02" label="Segmento" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} />
-                <MultiSelectFilter id="tag03" label="Projeto" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} />
+                <MultiSelectFilter id="tag01" label="Tag01" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
+                <MultiSelectFilter id="tag02" label="Tag02" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} />
+                <MultiSelectFilter id="tag03" label="Tag03" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} />
                 <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} />
-                <MultiSelectFilter id="brand" label="Marca" options={dynamicOptions.brands} selected={colFilters.brand} active={isFilterActive('brand')} />
-                <MultiSelectFilter id="branch" label="Unidade" options={dynamicOptions.branches} selected={colFilters.branch} active={isFilterActive('branch')} />
+                <MultiSelectFilter id="marca" label="Marca" options={dynamicOptions.marcas} selected={colFilters.marca} active={isFilterActive('marca')} />
+                <MultiSelectFilter id="filial" label="Unidade" options={dynamicOptions.filiais} selected={colFilters.filial} active={isFilterActive('filial')} />
               </div>
 
               {/* Segunda linha de filtros */}
@@ -723,9 +855,9 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               <tr className="whitespace-nowrap">
                 <HeaderCell label="Cen" sortKey="scenario" config={sortConfig} setConfig={setSortConfig} className="w-[50px]" />
                 <HeaderCell label="Data" sortKey="date" config={sortConfig} setConfig={setSortConfig} className="w-[65px]" />
-                <HeaderCell label="CC" sortKey="tag01" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
-                <HeaderCell label="Seg" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
-                <HeaderCell label="Proj" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
+                <HeaderCell label="Tag01" sortKey="tag01" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
+                <HeaderCell label="Tag02" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
+                <HeaderCell label="Tag03" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
                 <HeaderCell label="Conta" sortKey="category" config={sortConfig} setConfig={setSortConfig} className="w-[105px]" />
                 <HeaderCell label="Mar" sortKey="brand" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
                 <HeaderCell label="Filial" sortKey="branch" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
@@ -853,18 +985,18 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Unidade</label>
-                        <DeParaVisualizer oldValue={editingTransaction.branch} newValue={editForm.branch} />
+                        <DeParaVisualizer oldValue={editingTransaction.branch} newValue={editForm.filial} />
                       </div>
-                      <select value={editForm.branch} onChange={e => setEditForm({...editForm, branch: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
+                      <select value={editForm.filial} onChange={e => setEditForm({...editForm, filial: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
                         {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Marca</label>
-                        <DeParaVisualizer oldValue={editingTransaction.brand} newValue={editForm.brand} />
+                        <DeParaVisualizer oldValue={editingTransaction.brand} newValue={editForm.marca} />
                       </div>
-                      <select value={editForm.brand} onChange={e => setEditForm({...editForm, brand: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
+                      <select value={editForm.marca} onChange={e => setEditForm({...editForm, marca: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
                         {ALL_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </div>
@@ -939,7 +1071,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     {rateioParts.map((part) => (
                       <div key={part.id} className="grid grid-cols-12 gap-2 bg-gray-50 p-2 border border-gray-100 items-center">
                          <div className="col-span-3">
-                           <select value={part.branch} onChange={e => updateRateioPart(part.id, { branch: e.target.value })} className="w-full bg-white border border-gray-100 p-1.5 text-[8px] font-black outline-none focus:border-[#1B75BB]">
+                           <select value={part.filial} onChange={e => updateRateioPart(part.id, { filial: e.target.value })} className="w-full bg-white border border-gray-100 p-1.5 text-[8px] font-black outline-none focus:border-[#1B75BB]">
                              {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
                            </select>
                          </div>
@@ -965,7 +1097,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                          </div>
                       </div>
                     ))}
-                    <button onClick={() => setRateioParts([...rateioParts, { id: `p-${Date.now()}`, branch: BRANCHES[0], brand: 'SAP', amount: 0, percent: 0, date: rateioTransaction.date, category: rateioTransaction.category }])} className="w-full py-2.5 border-2 border-dashed border-gray-100 text-gray-300 hover:text-[#1B75BB] hover:border-[#1B75BB]/30 transition-all font-black text-[8px] uppercase flex items-center justify-center gap-2">
+                    <button onClick={() => setRateioParts([...rateioParts, { id: `p-${Date.now()}`, filial: BRANCHES[0], marca: 'SAP', amount: 0, percent: 0, date: rateioTransaction.date, category: rateioTransaction.category }])} className="w-full py-2.5 border-2 border-dashed border-gray-100 text-gray-300 hover:text-[#1B75BB] hover:border-[#1B75BB]/30 transition-all font-black text-[8px] uppercase flex items-center justify-center gap-2">
                       <PlusCircle size={12} /> Adicionar Linha
                     </button>
                     <div className="pt-6 space-y-2">
