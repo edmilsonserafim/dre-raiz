@@ -18,10 +18,21 @@ import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock } f
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './contexts/AuthContext';
 import { usePermissions } from './hooks/usePermissions';
+import { TransactionsSyncUI } from './src/components/TransactionsSyncUI';
+import { useTransactions } from './src/hooks/useTransactions';
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, loading: permissionsLoading } = usePermissions();
+
+  // Hook do TransactionsContext (COM Realtime!)
+  const {
+    transactions: contextTransactions,
+    isLoading: isLoadingTransactions,
+    applyFilters,
+    currentFilters
+  } = useTransactions();
+
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -30,7 +41,6 @@ const App: React.FC = () => {
   const [selectedFilial, setSelectedFilial] = useState<string[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [preFullscreenSidebarState, setPreFullscreenSidebarState] = useState(true);
 
@@ -46,49 +56,39 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : undefined;
   });
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Usar transactions do Context em vez de estado local
+  const transactions = contextTransactions;
   const [manualChanges, setManualChanges] = useState<ManualChange[]>([]);
 
-  // Carregar dados do Supabase ao iniciar
+  // Estado para dados buscados na página de Lançamentos (persistente ao trocar de aba)
+  const [searchedTransactions, setSearchedTransactions] = useState<Transaction[]>([]);
+  const [hasSearchedTransactions, setHasSearchedTransactions] = useState(false);
+
+  // Loading combinado
+  const isLoading = isLoadingTransactions || permissionsLoading;
+
+  // Carregar transações iniciais ao montar (via Context)
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
+    if (!currentFilters) {
+      // Carregar últimos 3 meses por padrão
+      applyFilters({
+        startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+      });
+    }
+  }, [applyFilters, currentFilters]);
+
+  // Carregar manual changes ao iniciar
+  useEffect(() => {
+    const loadManualChanges = async () => {
       try {
-        const [loadedTransactions, loadedChanges] = await Promise.all([
-          supabaseService.getAllTransactions(),
-          supabaseService.getAllManualChanges()
-        ]);
-
-        // Se não há dados no Supabase, usar dados iniciais
-        if (loadedTransactions.length === 0) {
-          console.log('Nenhum dado encontrado no Supabase. Usando dados iniciais.');
-          setTransactions(INITIAL_TRANSACTIONS);
-          // Salvar dados iniciais no Supabase
-          await supabaseService.bulkAddTransactions(INITIAL_TRANSACTIONS);
-        } else {
-          console.log('📊 App.tsx: Transações carregadas do Supabase:', loadedTransactions.length);
-          console.log('📊 App.tsx: Cenários nas transações carregadas:', [...new Set(loadedTransactions.map(t => t.scenario))]);
-          console.log('📊 App.tsx: Primeira transação:', loadedTransactions[0]);
-          console.log('📊 App.tsx: Amostra de 10 transações:', loadedTransactions.slice(0, 10).map(t => ({
-            id: t.id,
-            scenario: t.scenario,
-            category: t.category,
-            amount: t.amount
-          })));
-          setTransactions(loadedTransactions);
-        }
-
+        const loadedChanges = await supabaseService.getAllManualChanges();
         setManualChanges(loadedChanges);
       } catch (error) {
-        console.error('Erro ao carregar dados do Supabase:', error);
-        // Em caso de erro, usar dados iniciais
-        setTransactions(INITIAL_TRANSACTIONS);
-      } finally {
-        setIsLoading(false);
+        console.error('Erro ao carregar manual changes:', error);
       }
     };
-
-    loadData();
+    loadManualChanges();
   }, []);
 
   // Salvar filtros no sessionStorage quando mudarem
@@ -216,6 +216,24 @@ const App: React.FC = () => {
     setDrillDownActiveTab(activeTab);
     setCurrentView('movements');
   };
+
+  // Função para atualizar DRE manualmente
+  const handleRefreshDRE = React.useCallback(async () => {
+    console.log('🔄 DRE: Forçando atualização...');
+
+    // Reaplicar filtros atuais (força busca no Supabase)
+    if (currentFilters) {
+      await applyFilters(currentFilters);
+    } else {
+      // Se não há filtros, carregar últimos 3 meses
+      await applyFilters({
+        startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    console.log('✅ DRE: Atualização concluída');
+  }, [applyFilters, currentFilters]);
 
   const mapCategoryToType = (category: string): TransactionType => {
     if (CATEGORIES.FIXED_COST.includes(category)) return 'FIXED_COST';
@@ -515,14 +533,14 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#fcfcfc] overflow-hidden">
-      <div className={`${isSidebarVisible ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden shrink-0`}>
-        <Sidebar
-          currentView={currentView}
-          setCurrentView={setCurrentView}
-          selectedBrand={selectedMarca}
-          pendingCount={pendingApprovalsCount}
-        />
-      </div>
+        <div className={`${isSidebarVisible ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden shrink-0`}>
+          <Sidebar
+            currentView={currentView}
+            setCurrentView={setCurrentView}
+            selectedBrand={selectedMarca}
+            pendingCount={pendingApprovalsCount}
+          />
+        </div>
       <main className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-40 bg-[#fcfcfc] px-6 pt-6 pb-6 mb-6 flex justify-between items-center border-b border-gray-200 shadow-sm">
           <div className="flex items-center gap-4">
@@ -547,6 +565,9 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Indicador de Sincronização - Fase 2 */}
+            <TransactionsSyncUI />
           </div>
 
           {showGlobalFilters && (
@@ -561,18 +582,22 @@ const App: React.FC = () => {
             <DashboardEnhanced
               kpis={kpis}
               transactions={filteredTransactions}
-              selectedBrand={selectedMarca}
-              selectedBranch={selectedFilial}
+              selectedMarca={selectedMarca}
+              selectedFilial={selectedFilial}
               uniqueBrands={uniqueBrands}
               availableBranches={availableBranches}
-              onBrandChange={setSelectedMarca}
-              onBranchChange={setSelectedFilial}
+              onMarcaChange={setSelectedMarca}
+              onFilialChange={setSelectedFilial}
             />
           )}
           {currentView === 'kpis' && <KPIsView kpis={kpis} transactions={filteredTransactions} />}
           {currentView === 'movements' && (
             <TransactionsView
               transactions={filteredTransactions}
+              searchedTransactions={searchedTransactions}
+              setSearchedTransactions={setSearchedTransactions}
+              hasSearchedTransactions={hasSearchedTransactions}
+              setHasSearchedTransactions={setHasSearchedTransactions}
               addTransaction={handleAddTransaction}
               requestChange={handleRequestChange}
               deleteTransaction={handleDeleteTransaction}
@@ -585,7 +610,14 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
-          {currentView === 'dre' && <DREView transactions={filteredTransactions} onDrillDown={handleDrillDown} />}
+          {currentView === 'dre' && (
+            <DREView
+              transactions={filteredTransactions}
+              onDrillDown={handleDrillDown}
+              onRefresh={handleRefreshDRE}
+              isRefreshing={isLoadingTransactions}
+            />
+          )}
           {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
           {currentView === 'analysis' && <AnalysisView transactions={filteredTransactions} kpis={kpis} />}
           {currentView === 'admin' && <AdminPanel />}

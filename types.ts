@@ -14,7 +14,8 @@ export interface Transaction {
   description: string;
   amount: number;
   date: string;
-  category: string;
+  conta_contabil: string;  // Campo que popula coluna "Conta" na UI
+  category?: string;  // Existe no banco mas não é usada no momento (reservada para futuro)
   type: TransactionType;
   filial: string;
   status: TransactionStatus;
@@ -29,6 +30,7 @@ export interface Transaction {
   nat_orc?: string;
   chave_id?: string;
   justification?: string;
+  updated_at: string;  // Campo obrigatório para optimistic locking e detecção de conflitos
 }
 
 export interface ManualChange {
@@ -198,3 +200,20 @@ export type AnalysisPack = {
   charts: ChartDef[];
   slides: Slide[];
 };
+
+// ============================================
+// Virtual Scrolling & Pagination Types
+// ============================================
+
+export interface PaginationParams {
+  pageNumber: number;  // 1, 2, 3, ...
+  pageSize: number;    // Registros por página (ex: 200, 500, 50000)
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+  hasMore: boolean;
+}

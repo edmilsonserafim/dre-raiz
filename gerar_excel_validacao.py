@@ -100,22 +100,9 @@ def buscar_dados_100_linhas(conn):
             WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
             ELSE F.INTEGRACHAVE_TRATADA
         END AS INTEGRACHAVE_TRATADA,
-        CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
-            CASE
-                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
-                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
-                ELSE F.INTEGRACHAVE_TRATADA
-            END
-        ) AS Coligada_Chave,
-        ROW_NUMBER() OVER (
-            PARTITION BY CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
-                CASE
-                    WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
-                    WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
-                    ELSE F.INTEGRACHAVE_TRATADA
-                END)
-            ORDER BY F.IDPARTIDA ASC, F.VALOR DESC
-        ) AS ID_Cont,
+        -- chave_id: Identificador unico composto por CODCOLIGADA + INTEGRACHAVE_TRATADA + contador sequencial
+        -- Formato: "1-12345-1", "1-12345-2", "2-67890-1"
+        -- O contador reinicia a cada mudanca de CODCOLIGADA ou INTEGRACHAVE_TRATADA
         CONCAT(
             CAST(F.CODCOLIGADA AS VARCHAR), '-',
             CASE
@@ -143,7 +130,12 @@ def buscar_dados_100_linhas(conn):
     WHERE F.DATA >= '{DATA_MINIMA}' AND F.DATA <= GETDATE()
     AND T.Tag1 != 'N/A'
     ORDER BY
-        Coligada_Chave ASC,
+        CONCAT(CAST(F.CODCOLIGADA AS VARCHAR), '-',
+            CASE
+                WHEN F.INTEGRACHAVE_TRATADA = '' THEN F.IDPARTIDA
+                WHEN F.INTEGRACHAVE_TRATADA IS NULL THEN F.IDPARTIDA
+                ELSE F.INTEGRACHAVE_TRATADA
+            END) ASC,
         F.IDPARTIDA ASC,
         F.VALOR DESC
     """

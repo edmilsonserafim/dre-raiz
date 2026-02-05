@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Transaction } from '../types';
 import { DRE_STRUCTURE, TAG_STRUCTURE } from '../constants';
+import { useDREHierarchy } from '../src/hooks/useDREHierarchy';  // NOVO: Hook para hierarquia dinâmica
 import {
   ChevronRight,
   ChevronDown,
@@ -20,7 +21,9 @@ import {
   Building2,
   Flag,
   FilterX,
-  ArrowLeftRight
+  ArrowLeftRight,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 
 interface DREViewProps {
@@ -31,19 +34,30 @@ interface DREViewProps {
     scenario?: string;
     filters?: Record<string, string>;
   }) => void;
+  onRefresh?: () => void;  // NOVO: callback para atualizar DRE
+  isRefreshing?: boolean;  // NOVO: estado de loading
 }
 
 const DRE_DIMENSIONS = [
-  { id: 'tag01', label: 'C. Custo' },
-  { id: 'tag02', label: 'Segmento' },
-  { id: 'tag03', label: 'Projeto' },
+  { id: 'tag01', label: 'tag01' },  // Renomeado para minúscula
+  { id: 'tag02', label: 'tag02' },  // Renomeado para minúscula
+  { id: 'tag03', label: 'tag03' },  // Renomeado para minúscula
+  { id: 'category', label: 'CC (Centro de Custo)' },  // NOVO!
   { id: 'marca', label: 'Marca' },
   { id: 'filial', label: 'Unidade' },
   { id: 'vendor', label: 'Fornecedor' },
   { id: 'ticket', label: 'Ticket' },
 ];
 
-const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
+const DREView: React.FC<DREViewProps> = ({
+  transactions,
+  onDrillDown,
+  onRefresh,
+  isRefreshing = false
+}) => {
+  // NOVO: Hook para hierarquia DRE dinâmica do banco
+  const { groupedHierarchy, isLoading: isLoadingHierarchy, error: hierarchyError } = useDREHierarchy();
+
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(() => {
     const saved = sessionStorage.getItem('dreMonthStart');
     return saved ? JSON.parse(saved) : 0;
@@ -234,7 +248,7 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
     if (filteredTransactions.length > 0) {
       console.log('🔵 DRE: Primeira transação:', filteredTransactions[0]);
       console.log('🔵 DRE: Cenários encontrados:', [...new Set(filteredTransactions.map(t => t.scenario))]);
-      console.log('🔵 DRE: Categorias encontradas:', [...new Set(filteredTransactions.map(t => t.category))].slice(0, 10));
+      console.log('🔵 DRE: Contas contábeis encontradas:', [...new Set(filteredTransactions.map(t => t.conta_contabil))].slice(0, 10));
     }
 
     filteredTransactions.forEach(t => {
@@ -243,8 +257,10 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
       if (scenario === 'Original') scenario = 'Real';
 
       const month = new Date(t.date).getMonth();
-      if (!map[scenario][t.category]) map[scenario][t.category] = new Array(12).fill(0);
-      map[scenario][t.category][month] += t.amount;
+      // CORRIGIDO: usar conta_contabil em vez de category
+      const key = t.conta_contabil;
+      if (!map[scenario][key]) map[scenario][key] = new Array(12).fill(0);
+      map[scenario][key][month] += t.amount;
     });
 
     console.log('🔵 DRE: DataMap criado:', {
@@ -255,6 +271,83 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
 
     return map;
   }, [filteredTransactions, transactions]);
+
+  // NOVO: Preparar estrutura DRE (dinâmica do banco ou fallback)
+  const dreStructure = useMemo(() => {
+    // Se hierarquia carregou do banco, usar ela
+    if (!isLoadingHierarchy && groupedHierarchy && Object.keys(groupedHierarchy).length > 0) {
+      console.log('✅ DRE: Usando hierarquia dinâmica do banco');
+      return { source: 'database', data: groupedHierarchy };
+    }
+
+    // Fallback: usar estrutura hardcoded
+    console.log('⚠️ DRE: Usando hierarquia hardcoded (fallback)');
+    return {
+      source: 'fallback',
+      data: {
+        '01': {
+          label: DRE_STRUCTURE.REVENUE.label,
+          items: Object.values(DRE_STRUCTURE.REVENUE.children).map((child: any, idx: number) => ({
+            id: `temp-01-${idx}`,
+            nivel_1_code: '01',
+            nivel_1_label: DRE_STRUCTURE.REVENUE.label,
+            nivel_2_code: `01.${idx + 1}`,
+            nivel_2_label: child.label,
+            items: child.items,
+            ordem: idx + 1,
+            ativo: true,
+            created_at: '',
+            updated_at: ''
+          }))
+        },
+        '02': {
+          label: DRE_STRUCTURE.VARIABLE_COST.label,
+          items: Object.values(DRE_STRUCTURE.VARIABLE_COST.children).map((child: any, idx: number) => ({
+            id: `temp-02-${idx}`,
+            nivel_1_code: '02',
+            nivel_1_label: DRE_STRUCTURE.VARIABLE_COST.label,
+            nivel_2_code: `02.${idx + 1}`,
+            nivel_2_label: child.label,
+            items: child.items,
+            ordem: idx + 1,
+            ativo: true,
+            created_at: '',
+            updated_at: ''
+          }))
+        },
+        '03': {
+          label: DRE_STRUCTURE.FIXED_COST.label,
+          items: Object.values(DRE_STRUCTURE.FIXED_COST.children).map((child: any, idx: number) => ({
+            id: `temp-03-${idx}`,
+            nivel_1_code: '03',
+            nivel_1_label: DRE_STRUCTURE.FIXED_COST.label,
+            nivel_2_code: `03.${idx + 1}`,
+            nivel_2_label: child.label,
+            items: child.items,
+            ordem: idx + 1,
+            ativo: true,
+            created_at: '',
+            updated_at: ''
+          }))
+        },
+        '04': {
+          label: DRE_STRUCTURE.SGA.label,
+          items: Object.values(DRE_STRUCTURE.SGA.children).map((child: any, idx: number) => ({
+            id: `temp-04-${idx}`,
+            nivel_1_code: '04',
+            nivel_1_label: DRE_STRUCTURE.SGA.label,
+            nivel_2_code: `04.${idx + 1}`,
+            nivel_2_label: child.label,
+            items: child.items,
+            ordem: idx + 1,
+            ativo: true,
+            created_at: '',
+            updated_at: ''
+          }))
+        }
+      }
+    };
+  }, [groupedHierarchy, isLoadingHierarchy]);
 
   const getValues = (scenario: string, categories: string[]) => {
     const values = new Array(12).fill(0);
@@ -272,10 +365,11 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
     filteredTransactions
       .filter(t => {
         const matchesScenario = t.scenario === scenario;
-        const matchesCat = categories.includes(t.category);
+        // CORRIGIDO: usar conta_contabil em vez de category
+        const matchesCat = categories.includes(t.conta_contabil);
         const matchesThisDim = String(t[dimensionKey as keyof Transaction] || 'N/A') === dimensionValue;
-        
-        const matchesAllParentFilters = Object.entries(filters).every(([key, val]) => 
+
+        const matchesAllParentFilters = Object.entries(filters).every(([key, val]) =>
           String(t[key as keyof Transaction] || 'N/A') === val
         );
 
@@ -647,8 +741,9 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
             const uniqueValues = Array.from(new Set(
               filteredTransactions
                 .filter(t => {
-                  const matchesCat = categories.includes(t.category);
-                  const matchesAllParents = Object.entries(accumulatedFilters).every(([key, val]) => 
+                  // CORRIGIDO: usar conta_contabil em vez de category
+                  const matchesCat = categories.includes(t.conta_contabil);
+                  const matchesAllParents = Object.entries(accumulatedFilters).every(([key, val]) =>
                     String(t[key as keyof Transaction] || 'N/A') === val
                   );
                   return matchesCat && matchesAllParents;
@@ -1033,6 +1128,28 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
               className="flex items-center gap-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 font-black text-[8px] uppercase tracking-widest hover:bg-rose-100 transition-all shadow-sm"
             >
               <FilterX size={14} /> Limpar Filtros
+            </button>
+          )}
+
+          {/* Botão Atualizar DRE */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-black text-[8px] uppercase tracking-widest shadow-sm"
+              title="Forçar atualização dos dados da DRE"
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Atualizando...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Atualizar DRE</span>
+                </>
+              )}
             </button>
           )}
 
@@ -1597,29 +1714,41 @@ const DREView: React.FC<DREViewProps> = ({ transactions, onDrillDown }) => {
               </tr>
             </thead>
             <tbody className="bg-white">
-              {renderRow('01', DRE_STRUCTURE.REVENUE.label, 1, Object.values(DRE_STRUCTURE.REVENUE.children).flatMap(c => c.items), true)}
-              {renderRow('02', DRE_STRUCTURE.VARIABLE_COST.label, 1, Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items), true)}
-              {renderRow('03', DRE_STRUCTURE.FIXED_COST.label, 1, Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items), true)}
+              {/* NOVO: Renderização dinâmica da hierarquia DRE */}
+              {Object.entries(dreStructure.data)
+                .sort(([a], [b]) => a.localeCompare(b)) // Ordenar por código (01, 02, 03, 04, 05)
+                .map(([nivel1Code, nivel1Data]) => {
+                  // Coletar todas as categorias deste nível 1 para passar ao renderRow
+                  const allCategories = nivel1Data.items.flatMap(item => item.items);
 
+                  return (
+                    <React.Fragment key={nivel1Code}>
+                      {renderRow(nivel1Code, nivel1Data.label, 1, allCategories, true)}
+
+                      {/* Linha calculada após custos (MARGEM) */}
+                      {nivel1Code === '03' && renderCalculationLine(
+                        '06. MARGEM DE CONTRIBUIÇÃO',
+                        dreStructure.data['01']?.items.flatMap(i => i.items) || [],
+                        [
+                          dreStructure.data['02']?.items.flatMap(i => i.items) || [],
+                          dreStructure.data['03']?.items.flatMap(i => i.items) || []
+                        ],
+                        'bg-[#F44C00]'
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              }
+
+              {/* EBITDA: Receita - (Custos Var + Custos Fix + SGA + RATEIO CSC se existir) */}
               {renderCalculationLine(
-                '06. MARGEM DE CONTRIBUIÇÃO',
-                Object.values(DRE_STRUCTURE.REVENUE.children).flatMap(c => c.items),
+                '09. EBITDA OPERACIONAL',
+                dreStructure.data['01']?.items.flatMap(i => i.items) || [],
                 [
-                  Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items),
-                  Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items)
-                ],
-                'bg-[#F44C00]'
-              )}
-
-              {renderRow('04', DRE_STRUCTURE.SGA.label, 1, Object.values(DRE_STRUCTURE.SGA.children).flatMap(c => c.items), true)}
-
-              {renderCalculationLine(
-                '09. EBITDA OPERACIONAL', 
-                Object.values(DRE_STRUCTURE.REVENUE.children).flatMap(c => c.items),
-                [
-                  Object.values(DRE_STRUCTURE.VARIABLE_COST.children).flatMap(c => c.items),
-                  Object.values(DRE_STRUCTURE.FIXED_COST.children).flatMap(c => c.items),
-                  Object.values(DRE_STRUCTURE.SGA.children).flatMap(c => c.items)
+                  dreStructure.data['02']?.items.flatMap(i => i.items) || [],
+                  dreStructure.data['03']?.items.flatMap(i => i.items) || [],
+                  dreStructure.data['04']?.items.flatMap(i => i.items) || [],
+                  ...(dreStructure.data['05'] ? [dreStructure.data['05'].items.flatMap(i => i.items)] : [])
                 ],
                 'bg-[#152e55]'
               )}

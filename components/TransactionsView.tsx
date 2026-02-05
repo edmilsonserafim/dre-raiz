@@ -1,7 +1,32 @@
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * TRANSAÇÕES VIEW - EM MIGRAÇÃO PARA CONTEXT API
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * FASE 1 (ATUAL): Estrutura base criada
+ * - TransactionsContext criado (src/contexts/TransactionsContext.tsx)
+ * - useTransactions hook disponível (src/hooks/useTransactions.ts)
+ * - PRÓXIMO PASSO: Migrar este componente para consumir o context
+ *
+ * TODO - CONFIGURAÇÕES FUTURAS
+ *
+ * 1. ABA "ORÇAMENTO":
+ *    - Atualmente desabilitada (retorna false no filtro)
+ *    - Precisa configurar fonte de dados de orçamento
+ *
+ * 2. ABA "ANO ANTERIOR":
+ *    - Atualmente desabilitada (retorna false no filtro)
+ *    - Precisa configurar lógica de comparação com ano anterior
+ *
+ * STATUS: Por enquanto, apenas a aba REAL está funcional (50.000 registros)
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Transaction, TransactionType, TransactionStatus, ManualChange } from '../types';
+import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
+import { getFilteredTransactions, TransactionFilters } from '../services/supabaseService';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
 import {
@@ -16,6 +41,10 @@ import {
 
 interface TransactionsViewProps {
   transactions: Transaction[];
+  searchedTransactions: Transaction[];
+  setSearchedTransactions: (transactions: Transaction[]) => void;
+  hasSearchedTransactions: boolean;
+  setHasSearchedTransactions: (value: boolean) => void;
   addTransaction: (t: Omit<Transaction, 'id' | 'status'>) => void;
   requestChange: (change: Omit<ManualChange, 'id' | 'status' | 'requestedAt' | 'requestedBy' | 'originalTransaction'>) => void;
   deleteTransaction: (id: string) => void;
@@ -56,7 +85,11 @@ const formatDateToMMAAAA = (date: any) => {
 };
 
 const TransactionsView: React.FC<TransactionsViewProps> = ({
-  transactions,
+  transactions: propsTransactions,
+  searchedTransactions,
+  setSearchedTransactions,
+  hasSearchedTransactions,
+  setHasSearchedTransactions,
   requestChange,
   fetchFromCSV,
   isSyncing: initialSyncing,
@@ -65,11 +98,20 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   externalActiveTab,
   onBackToDRE
 }) => {
+  // Estado de busca
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchAllModal, setShowSearchAllModal] = useState(false);
+  const [searchAllProgress, setSearchAllProgress] = useState({ current: 0, total: 0, loaded: 0 });
+  const cancelSearchAllRef = useRef(false); // Usar ref para cancelamento funcionar no loop
+
   const [showFilters, setShowFilters] = useState(true);
   const [isSyncing, setIsSyncing] = useState(initialSyncing);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [rateioTransaction, setRateioTransaction] = useState<Transaction | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'date', direction: 'desc' });
+
+  // Usar transactions buscados do estado do App.tsx se já buscou, senão mostrar vazio
+  const transactions = hasSearchedTransactions ? searchedTransactions : [];
 
   // Abas e Paginação
   const [activeTab, setActiveTab] = useState<'real' | 'orcamento' | 'comparativo'>(() => {
@@ -77,6 +119,14 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const saved = sessionStorage.getItem('transactionsActiveTab');
     return saved ? JSON.parse(saved) : 'real';
   });
+  // Paginação server-side (Virtual Scrolling)
+  const PAGE_SIZE = 500;  // 500 registros por página (scroll infinito)
+  const [currentPageNumber, setCurrentPageNumber] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Paginação client-side legada (será removida após virtual scrolling)
   const [currentPage, setCurrentPage] = useState(1);
   const RECORDS_PER_PAGE = 1000;
 
@@ -145,30 +195,27 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [openDropdown]);
 
   const dynamicOptions = useMemo(() => {
+    // Gerar opções dinâmicas baseadas nos filtros ativos
+    // Mostra apenas as opções relevantes considerando os outros filtros
     const getOptions = (field: keyof Transaction) => {
       const filtered = transactions.filter(t => {
         return Object.entries(colFilters).every(([key, value]) => {
-          if (key === field || !value || (Array.isArray(value) && value.length === 0)) return true;
+          // Não filtrar pelo próprio campo que estamos gerando opções
+          if (key === field) return true;
 
-          // Handle month range filters
-          if (key === 'monthFrom' || key === 'monthTo') {
-            const tDate = new Date(t.date);
-            const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+          // Ignorar filtros vazios
+          if (!value || (Array.isArray(value) && value.length === 0)) return true;
 
-            if (key === 'monthFrom' && value) {
-              const passes = tYearMonth >= value;
-              if (!passes) return false;
-            }
-            if (key === 'monthTo' && value) {
-              const passes = tYearMonth <= value;
-              if (!passes) return false;
-            }
-            return true;
+          // Ignorar filtros de período (já aplicados no servidor)
+          if (key === 'monthFrom' || key === 'monthTo') return true;
+
+          // Filtros de array
+          const tValue = String(t[key as keyof Transaction] || '');
+          if (Array.isArray(value)) {
+            return value.includes(tValue);
           }
 
-          const tValue = String(t[key as keyof Transaction] || '');
-          if (Array.isArray(value)) return value.includes(tValue);
-
+          // Filtros de texto
           const filterValue = String(value).toLowerCase();
           return tValue.toLowerCase().includes(filterValue);
         });
@@ -177,8 +224,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     };
 
     return {
-      marcas: getOptions('brand'),
-      filiais: getOptions('branch'),
+      marcas: getOptions('marca'),
+      filiais: getOptions('filial'),
       tag01s: getOptions('tag01'),
       tag02s: getOptions('tag02'),
       tag03s: getOptions('tag03'),
@@ -188,7 +235,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     };
   }, [transactions, colFilters]);
 
-  const ALL_BRANDS = useMemo(() => Array.from(new Set(transactions.map(t => t.brand).filter(Boolean))).sort(), [transactions]);
+  const ALL_BRANDS = useMemo(() => Array.from(new Set(transactions.map(t => t.marca).filter(Boolean))).sort(), [transactions]);
 
   useEffect(() => {
     if (externalFilters) {
@@ -228,8 +275,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       setEditForm({
         category: editingTransaction.category,
         date: editingTransaction.date,
-        filial: editingTransaction.branch,
-        marca: editingTransaction.brand || 'SAP',
+        filial: editingTransaction.filial,
+        marca: editingTransaction.marca || 'SAP',
         justification: '',
         amount: editingTransaction.amount,
         recurring: editingTransaction.recurring || 'Sim',
@@ -245,8 +292,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       setRateioParts([
         {
           id: `p1-${Date.now()}`,
-          filial: rateioTransaction.branch,
-          marca: rateioTransaction.brand || 'SAP',
+          filial: rateioTransaction.filial,
+          marca: rateioTransaction.marca || 'SAP',
           amount: Number((rateioTransaction.amount / 2).toFixed(2)),
           percent: 50,
           date: rateioTransaction.date,
@@ -254,8 +301,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         },
         {
           id: `p2-${Date.now()}`,
-          filial: rateioTransaction.branch,
-          marca: rateioTransaction.brand || 'SAP',
+          filial: rateioTransaction.filial,
+          marca: rateioTransaction.marca || 'SAP',
           amount: Number((rateioTransaction.amount / 2).toFixed(2)),
           percent: 50,
           date: rateioTransaction.date,
@@ -265,61 +312,232 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     }
   }, [rateioTransaction]);
 
-  const filteredAndSorted = useMemo(() => {
-    // Log de debug para drill-down
-    if (colFilters.monthFrom || colFilters.monthTo) {
-      console.log('🟢 Filtros de data aplicados:', {
-        monthFrom: colFilters.monthFrom,
-        monthTo: colFilters.monthTo,
-        totalTransactions: transactions.length
-      });
+  // Função para buscar dados com filtros
+  const handleSearchData = async (pageNumber: number | any = 1) => {
+    // Garantir que pageNumber é sempre um número
+    const page = typeof pageNumber === 'number' ? pageNumber : 1;
+
+    setIsSearching(true);
+    console.log('🔍 Iniciando busca com filtros:', colFilters);
+
+    try {
+      // ESTRATÉGIA DE FILTRAGEM HÍBRIDA:
+      // - Servidor: aplica filtros de PERÍODO e CENÁRIO (para limitar volume de dados)
+      // - Client-side: aplica todos os outros filtros em tempo real (tags, marca, filial, etc.)
+      const filters: TransactionFilters = {
+        monthFrom: colFilters.monthFrom || undefined,
+        monthTo: colFilters.monthTo || undefined,
+        scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
+        // Todos os outros filtros serão aplicados no client-side
+      };
+
+      const pagination: PaginationParams = { pageNumber: page, pageSize: PAGE_SIZE };
+
+      const response = await getFilteredTransactions(filters, pagination);
+
+      if (page === 1) {
+        // Nova busca - substitui dados
+        setSearchedTransactions(response.data);
+      } else {
+        // Página adicional - append
+        setSearchedTransactions(prev => [...prev, ...response.data]);
+      }
+
+      setTotalCount(response.totalCount);
+      setHasMore(response.hasMore);
+      setCurrentPageNumber(page);
+      setHasSearchedTransactions(true);
+
+      console.log(`✅ Busca concluída: ${response.data.length} registros retornados (página ${page})`);
+      console.log(`📊 Total de registros: ${response.totalCount}, Mais páginas: ${response.hasMore}`);
+    } catch (error) {
+      console.error('❌ Erro ao buscar dados:', error);
+    } finally {
+      setIsSearching(false);
     }
+  };
+
+  // Função para carregar próxima página (scroll infinito)
+  const loadNextPage = async () => {
+    if (!hasMore || isLoadingMore) return;
+
+    setIsLoadingMore(true);
+    console.log(`📥 Carregando próxima página: ${currentPageNumber + 1}`);
+
+    try {
+      await handleSearchData(currentPageNumber + 1);
+    } catch (error) {
+      console.error('❌ Erro ao carregar próxima página:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // Função para buscar TODOS os dados (loop paginado com progresso)
+  const handleSearchAll = async () => {
+    setShowSearchAllModal(false);
+    setIsSearching(true);
+    cancelSearchAllRef.current = false; // Reset do flag de cancelamento
+    setSearchAllProgress({ current: 0, total: 0, loaded: 0 });
+    console.log('🔍 Buscando TODOS os dados com filtros:', colFilters);
+
+    try {
+      // Passar TODOS os filtros para o servidor
+      const filters: TransactionFilters = {
+        monthFrom: colFilters.monthFrom || undefined,
+        monthTo: colFilters.monthTo || undefined,
+        scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
+        marca: colFilters.marca && colFilters.marca.length > 0 ? colFilters.marca : undefined,
+        filial: colFilters.filial && colFilters.filial.length > 0 ? colFilters.filial : undefined,
+        tag01: colFilters.tag01 && colFilters.tag01.length > 0 ? colFilters.tag01 : undefined,
+        tag02: colFilters.tag02 && colFilters.tag02.length > 0 ? colFilters.tag02 : undefined,
+        tag03: colFilters.tag03 && colFilters.tag03.length > 0 ? colFilters.tag03 : undefined,
+        category: colFilters.category && colFilters.category.length > 0 ? colFilters.category : undefined,
+        chave_id: colFilters.chave_id && colFilters.chave_id.length > 0 ? colFilters.chave_id : undefined,
+        recurring: colFilters.recurring && colFilters.recurring.length > 0 ? colFilters.recurring : undefined,
+        ticket: colFilters.ticket || undefined,
+        vendor: colFilters.vendor || undefined,
+        description: colFilters.description || undefined,
+        amount: colFilters.amount || undefined,
+      };
+
+      console.log('📋 Filtros aplicados:', filters);
+
+      // Primeira busca para descobrir o total
+      const firstResponse = await getFilteredTransactions(filters, {
+        pageNumber: 1,
+        pageSize: 1000
+      });
+
+      if (firstResponse.data.length === 0) {
+        console.log('⚠️ Nenhum dado encontrado');
+        setIsSearching(false);
+        setHasSearchedTransactions(true);
+        return;
+      }
+
+      const totalPages = firstResponse.totalPages;
+      const totalRecords = firstResponse.totalCount;
+
+      console.log(`📊 Total: ${totalRecords} registros em ${totalPages} páginas`);
+      setSearchAllProgress({ current: 1, total: totalPages, loaded: firstResponse.data.length });
+
+      // Iniciar com dados da primeira página
+      let allData: Transaction[] = [...firstResponse.data];
+
+      // Atualizar UI com primeira página
+      setSearchedTransactions(allData);
+      setHasSearchedTransactions(true);
+
+      // Buscar páginas restantes
+      for (let page = 2; page <= totalPages; page++) {
+        // Verificar se foi cancelado (usando ref)
+        if (cancelSearchAllRef.current) {
+          console.log(`⚠️ Busca cancelada pelo usuário na página ${page}/${totalPages}`);
+          console.log(`✅ ${allData.length} registros foram carregados antes do cancelamento`);
+          break;
+        }
+
+        console.log(`📄 Buscando página ${page}/${totalPages}...`);
+
+        const response = await getFilteredTransactions(filters, {
+          pageNumber: page,
+          pageSize: 1000
+        });
+
+        allData = [...allData, ...response.data];
+
+        // Atualizar UI incrementalmente a cada 5 páginas
+        if (page % 5 === 0 || page === totalPages) {
+          setSearchedTransactions([...allData]);
+          console.log(`✅ Carregado: ${allData.length}/${totalRecords} registros (${Math.round((allData.length / totalRecords) * 100)}%)`);
+        }
+
+        setSearchAllProgress({
+          current: page,
+          total: totalPages,
+          loaded: allData.length
+        });
+
+        // Segurança: parar se passar de 150 páginas
+        if (page >= 150) {
+          console.warn('⚠️ Limite de segurança atingido (150 páginas)');
+          break;
+        }
+
+        // Pequeno delay para não sobrecarregar (50ms)
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Atualização final
+      setSearchedTransactions(allData);
+      setTotalCount(allData.length);
+      setHasMore(false);
+      setCurrentPageNumber(1);
+
+      if (!cancelSearchAllRef.current) {
+        console.log(`✅ Busca completa: ${allData.length} registros carregados em ${totalPages} páginas`);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao buscar todos os dados:', error);
+      alert(`Erro ao buscar dados: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsSearching(false);
+      cancelSearchAllRef.current = false;
+      setSearchAllProgress({ current: 0, total: 0, loaded: 0 });
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    console.log('🔍 Aplicando filtros client-side e ordenação:', {
+      activeTab,
+      totalTransactions: transactions.length,
+      activeFilters: Object.keys(colFilters).filter(key => {
+        const value = colFilters[key as keyof typeof colFilters];
+        return value && (Array.isArray(value) ? value.length > 0 : true);
+      })
+    });
 
     return transactions
       .filter(t => {
-        // Filtrar por aba ativa (cenário) - case-insensitive e sem acentos
+        // 1. Filtrar por aba ativa (cenário) - case-insensitive e sem acentos
         const scenarioNormalized = (t.scenario || '').toLowerCase().trim()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Remove acentos
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-        // Usar a lógica da aba ativa
         if (activeTab === 'real') {
-          // Aceita: "Real", "real", "REAL", etc.
-          if (scenarioNormalized !== 'real') return false;
+          // Aceitar 'real' ou vazio (transações sem cenário definido são consideradas 'real')
+          if (scenarioNormalized !== 'real' && scenarioNormalized !== '') return false;
         }
 
         if (activeTab === 'orcamento') {
-          // Aceita: "Orçamento", "Orcamento", "orcamento", "ORCAMENTO", etc.
-          if (scenarioNormalized !== 'orcamento') return false;
+          // TODO: ORÇAMENTO será configurado futuramente
+          return false;
         }
 
         if (activeTab === 'comparativo') {
-          const currentYear = new Date().getFullYear();
-          const tYear = new Date(t.date).getFullYear();
-          if (tYear !== currentYear - 1) return false;
+          // TODO: ANO ANTERIOR será configurado futuramente
+          return false;
         }
 
+        // 2. Aplicar filtros client-side (EXCETO período, que já foi aplicado no servidor)
         return Object.entries(colFilters).every(([key, value]) => {
+          // Ignorar filtros vazios
           if (!value || (Array.isArray(value) && value.length === 0)) return true;
 
-          // Handle month range filters
-          if (key === 'monthFrom' || key === 'monthTo') {
-            const tDate = new Date(t.date);
-            const tYearMonth = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+          // IMPORTANTE: NÃO filtrar por período aqui (já foi aplicado no servidor)
+          if (key === 'monthFrom' || key === 'monthTo') return true;
 
-            if (key === 'monthFrom' && value) {
-              const passes = tYearMonth >= value;
-              if (!passes) return false;
+          // Filtros de array (marca, filial, tags, category, chave_id, recurring)
+          const tValue = String(t[key as keyof Transaction] || '');
+          if (Array.isArray(value)) {
+            // Comparação case-insensitive para campos que podem ter variação de maiúsculas/minúsculas
+            if (key === 'recurring') {
+              return value.some(v => String(v).toLowerCase() === tValue.toLowerCase());
             }
-            if (key === 'monthTo' && value) {
-              const passes = tYearMonth <= value;
-              if (!passes) return false;
-            }
-            return true;
+            return value.includes(tValue);
           }
 
-          const tValue = String(t[key as keyof Transaction] || '');
-          if (Array.isArray(value)) return value.includes(tValue);
-
+          // Filtros de texto (ticket, vendor, description, amount)
           const filterValue = String(value).toLowerCase();
           return tValue.toLowerCase().includes(filterValue);
         });
@@ -338,7 +556,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return filteredAndSorted.reduce((sum, t) => t.type === 'REVENUE' ? sum + t.amount : sum - t.amount, 0);
   }, [filteredAndSorted]);
 
-  // Paginação
+  // Paginação client-side legada (será removida)
   const totalPages = Math.ceil(filteredAndSorted.length / RECORDS_PER_PAGE);
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
@@ -351,13 +569,35 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     setCurrentPage(1);
   }, [colFilters, activeTab]);
 
+  // Scroll infinito (SEM virtual scrolling - renderização normal com paginação server-side)
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  // Detectar scroll até o fim para carregar próxima página
+  useEffect(() => {
+    const parent = parentRef.current;
+    if (!parent) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = parent;
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 200;
+
+      if (isNearBottom && hasMore && !isLoadingMore && filteredAndSorted.length > 0) {
+        console.log('📥 Scroll infinito: Carregando próxima página...');
+        loadNextPage();
+      }
+    };
+
+    parent.addEventListener('scroll', handleScroll);
+    return () => parent.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoadingMore, filteredAndSorted.length]);
+
   // Contadores por aba
   const tabCounts = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const counts = {
       real: 0,
       orcamento: 0,
-      comparativo: 0
+      comparativo: 0  // TODO: Será configurado futuramente
     };
 
     // Debug: Ver quais cenários existem no banco
@@ -372,8 +612,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
       if (scenarioNormalized === 'real') counts.real++;
-      if (scenarioNormalized === 'orcamento') counts.orcamento++;
-      if (tYear === currentYear - 1) counts.comparativo++;
+      // TODO: Orçamento será configurado futuramente
+      // if (scenarioNormalized === 'orcamento') counts.orcamento++;
+      // TODO: Ano Anterior será configurado futuramente
+      // if (tYear === currentYear - 1) counts.comparativo++;
     });
 
     // Log para debug (temporário)
@@ -423,19 +665,55 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const handleExportExcel = () => {
     const headers = ["Cenário", "Data", "Tag 01", "Tag 02", "Tag 03", "Conta", "Unidade", "Marca", "Ticket", "Fornecedor", "Descrição", "Valor", "Recorrente", "ID", "Status", "Justificativa"];
     const rows = filteredAndSorted.map(t => [
-      t.scenario || 'Real', t.date, t.tag01 || '', t.tag02 || '', t.tag03 || '', 
-      t.category, t.branch, t.brand || 'SAP', t.ticket || '', t.vendor || '', 
-      t.description.replace(/;/g, ','), t.amount, t.recurring || 'Sim', t.id, t.status, t.justification || ''
+      t.scenario || 'Real',
+      t.date,
+      t.tag01 || '',
+      t.tag02 || '',
+      t.tag03 || '',
+      t.category,
+      t.filial,
+      t.marca || 'SAP',
+      t.ticket || '',
+      t.vendor || '',
+      t.description,
+      t.amount,
+      t.recurring || 'Sim',
+      t.id,
+      t.status,
+      t.justification || ''
     ]);
-    const csvContent = [headers.join(";"), ...rows.map(e => e.join(";"))].join("\n");
-    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Relatorio_SAP_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    // Criar workbook e worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    // Definir largura das colunas
+    const colWidths = [
+      { wch: 10 },  // Cenário
+      { wch: 12 },  // Data
+      { wch: 15 },  // Tag 01
+      { wch: 15 },  // Tag 02
+      { wch: 15 },  // Tag 03
+      { wch: 25 },  // Conta
+      { wch: 12 },  // Unidade
+      { wch: 10 },  // Marca
+      { wch: 15 },  // Ticket
+      { wch: 30 },  // Fornecedor
+      { wch: 50 },  // Descrição
+      { wch: 15 },  // Valor
+      { wch: 12 },  // Recorrente
+      { wch: 30 },  // ID
+      { wch: 12 },  // Status
+      { wch: 40 }   // Justificativa
+    ];
+    ws['!cols'] = colWidths;
+
+    // Adicionar worksheet ao workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Lançamentos");
+
+    // Gerar e baixar o arquivo Excel
+    const fileName = `Relatorio_SAP_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
   const handleSubmitAjuste = () => {
@@ -459,8 +737,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const newTransactions: Transaction[] = rateioParts.filter(p => p.amount > 0).map((p, idx) => ({
       ...rateioTransaction,
       id: `${rateioTransaction.id}-R${idx}-${Date.now()}`,
-      branch: p.filial,
-      brand: p.marca,
+      filial: p.filial,
+      marca: p.marca,
       date: p.date,
       category: p.category,
       amount: Number(p.amount.toFixed(2)),
@@ -484,6 +762,9 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const handleClearAllFilters = () => {
     setColFilters(initialFilters);
     if (clearGlobalFilters) clearGlobalFilters();
+    // Limpar também os dados da busca
+    setHasSearchedTransactions(false);
+    setSearchedTransactions([]);
   };
 
   const toggleMultiFilter = (key: string, value: string) => {
@@ -727,10 +1008,38 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                  <div className="bg-blue-50 p-1.5 rounded-none text-[#1B75BB]"><Filter size={12}/></div>
                  <h3 className="text-[9px] font-black text-gray-900 uppercase tracking-tighter">Painel de Refinamento Dinâmico</h3>
               </div>
-              <button onClick={handleClearAllFilters} className="flex items-center gap-2 px-3 py-2 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95">
-                <FilterX size={14} />
-                Limpar Filtros
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleSearchData()}
+                  disabled={isSearching}
+                  className="flex items-center gap-2 px-3 py-2 bg-[#1B75BB] hover:bg-[#152e55] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Search size={14} />
+                      Buscar Dados
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowSearchAllModal(true)}
+                  disabled={isSearching}
+                  className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Buscar todos os dados (pode demorar)"
+                >
+                  <Download size={14} />
+                  Buscar Tudo
+                </button>
+                <button onClick={handleClearAllFilters} className="flex items-center gap-2 px-3 py-2 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95">
+                  <FilterX size={14} />
+                  Limpar Filtros
+                </button>
+              </div>
            </div>
            <div className="space-y-1.5">
               {/* Primeira linha de filtros */}
@@ -781,59 +1090,97 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
+      {/* Indicador de Progresso "Buscar Tudo" */}
+      {isSearching && searchAllProgress.total > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 p-4 mb-3 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+              <div>
+                <p className="text-sm font-black text-emerald-900">
+                  Carregando todos os dados...
+                </p>
+                <p className="text-xs text-emerald-700 font-semibold mt-0.5">
+                  Página {searchAllProgress.current} de {searchAllProgress.total} • {searchAllProgress.loaded.toLocaleString()} registros carregados
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-2xl font-black text-emerald-600">
+                  {Math.round((searchAllProgress.current / searchAllProgress.total) * 100)}%
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  cancelSearchAllRef.current = true;
+                  console.log('🛑 Cancelamento solicitado pelo usuário...');
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-black uppercase transition-all shadow-sm active:scale-95 flex items-center gap-2"
+              >
+                <X size={14} />
+                Cancelar
+              </button>
+            </div>
+          </div>
+          <div className="w-full bg-emerald-200 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-emerald-600 h-full transition-all duration-300"
+              style={{ width: `${(searchAllProgress.current / searchAllProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Controles de Paginação */}
       {filteredAndSorted.length > 0 && (
-        <div className="bg-white border border-gray-200 p-1.5 flex items-center justify-between shadow-sm">
+        <div className="bg-white border border-gray-200 p-2 flex items-center justify-between shadow-sm">
+          {/* Contador à esquerda */}
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-bold text-gray-600">
               <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span>-<span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
               <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span>
             </p>
-            {filteredAndSorted.length > RECORDS_PER_PAGE && (
-              <p className="text-[9px] text-gray-400">
-                (Pág {currentPage}/{totalPages})
-              </p>
-            )}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
+          {/* Controles de navegação à direita - sempre visível */}
+          <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="px-2 py-1 bg-gray-100 text-gray-600 font-black text-[10px] uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                ← Anterior
+                ←
               </button>
 
               <div className="flex gap-1">
                 {currentPage > 2 && (
                   <>
-                    <button onClick={() => setCurrentPage(1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">1</button>
-                    {currentPage > 3 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
+                    <button onClick={() => setCurrentPage(1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">1</button>
+                    {currentPage > 3 && <span className="px-2 py-1 text-[10px] text-gray-400">...</span>}
                   </>
                 )}
 
                 {currentPage > 1 && (
-                  <button onClick={() => setCurrentPage(currentPage - 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                  <button onClick={() => setCurrentPage(currentPage - 1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
                     {currentPage - 1}
                   </button>
                 )}
 
-                <button className="px-2 py-1 text-xs font-black bg-[#1B75BB] text-white rounded">
+                <button className="px-2 py-1 text-[10px] font-black bg-[#1B75BB] text-white rounded border border-[#1B75BB]">
                   {currentPage}
                 </button>
 
                 {currentPage < totalPages && (
-                  <button onClick={() => setCurrentPage(currentPage + 1)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                  <button onClick={() => setCurrentPage(currentPage + 1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
                     {currentPage + 1}
                   </button>
                 )}
 
                 {currentPage < totalPages - 1 && (
                   <>
-                    {currentPage < totalPages - 2 && <span className="px-2 py-1 text-xs text-gray-400">...</span>}
-                    <button onClick={() => setCurrentPage(totalPages)} className="px-2 py-1 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded">
+                    {currentPage < totalPages - 2 && <span className="px-2 py-1 text-[10px] text-gray-400">...</span>}
+                    <button onClick={() => setCurrentPage(totalPages)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
                       {totalPages}
                     </button>
                   </>
@@ -843,17 +1190,20 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               <button
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1.5 bg-gray-100 text-gray-600 font-black text-xs uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="px-2 py-1 bg-gray-100 text-gray-600 font-black text-[10px] uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                Próxima →
+                →
               </button>
-            </div>
-          )}
+
+              <span className="text-[10px] text-gray-500 font-bold ml-2">
+                Pág {currentPage}/{totalPages}
+              </span>
+          </div>
         </div>
       )}
 
       <div className="bg-white border border-gray-200 overflow-hidden shadow-sm rounded-none">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] relative">
+        <div ref={parentRef} className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] relative">
           <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
             <thead>
               <tr className="whitespace-nowrap">
@@ -863,8 +1213,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <HeaderCell label="Tag02" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
                 <HeaderCell label="Tag03" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
                 <HeaderCell label="Conta" sortKey="category" config={sortConfig} setConfig={setSortConfig} className="w-[105px]" />
-                <HeaderCell label="Mar" sortKey="brand" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
-                <HeaderCell label="Filial" sortKey="branch" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
+                <HeaderCell label="Mar" sortKey="marca" config={sortConfig} setConfig={setSortConfig} className="w-[45px]" />
+                <HeaderCell label="Filial" sortKey="filial" config={sortConfig} setConfig={setSortConfig} className="w-[100px]" />
                 <HeaderCell label="Tick" sortKey="ticket" config={sortConfig} setConfig={setSortConfig} className="w-[60px]" />
                 <HeaderCell label="Chave ID" sortKey="chave_id" config={sortConfig} setConfig={setSortConfig} className="w-[80px]" />
                 <HeaderCell label="Fornecedor" sortKey="vendor" config={sortConfig} setConfig={setSortConfig} className="w-[120px]" />
@@ -875,67 +1225,108 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {paginatedData.length === 0 ? (
+              {filteredAndSorted.length === 0 ? (
                 <tr>
                   <td colSpan={14} className="py-20">
                     <div className="text-center">
-                      <AlertCircle size={48} className="mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500 font-bold text-sm">Nenhum lançamento encontrado</p>
-                      <p className="text-gray-400 text-xs mt-2">Ajuste os filtros ou limpe-os para ver mais dados</p>
-                      {isAnyFilterActive && (
-                        <button
-                          onClick={handleClearAllFilters}
-                          className="mt-4 px-4 py-2 bg-[#F44C00] text-white rounded-xl text-xs font-black uppercase hover:bg-[#d44200] transition-all"
-                        >
-                          Limpar Filtros
-                        </button>
+                      {!hasSearchedTransactions ? (
+                        <>
+                          <Search size={48} className="mx-auto text-[#1B75BB] mb-4" />
+                          <p className="text-gray-700 font-black text-base mb-2">Configure os filtros e clique em "Buscar Dados"</p>
+                          <p className="text-gray-400 text-xs mt-2">Aplique filtros de período, marca, filial ou outros campos para buscar os lançamentos</p>
+                          <button
+                            onClick={() => handleSearchData()}
+                            disabled={isSearching}
+                            className="mt-4 px-6 py-3 bg-[#1B75BB] text-white rounded-xl text-sm font-black uppercase hover:bg-[#152e55] transition-all shadow-lg disabled:opacity-50"
+                          >
+                            {isSearching ? 'Buscando...' : 'Buscar Dados'}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle size={48} className="mx-auto text-gray-300 mb-4" />
+                          <p className="text-gray-500 font-bold text-sm">Nenhum lançamento encontrado</p>
+                          <p className="text-gray-400 text-xs mt-2">Ajuste os filtros e busque novamente</p>
+                          <div className="flex gap-2 justify-center mt-4">
+                            {isAnyFilterActive && (
+                              <button
+                                onClick={handleClearAllFilters}
+                                className="px-4 py-2 bg-[#F44C00] text-white rounded-xl text-xs font-black uppercase hover:bg-[#d44200] transition-all"
+                              >
+                                Limpar Filtros
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleSearchData()}
+                              disabled={isSearching}
+                              className="px-4 py-2 bg-[#1B75BB] text-white rounded-xl text-xs font-black uppercase hover:bg-[#152e55] transition-all disabled:opacity-50"
+                            >
+                              Buscar Novamente
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   </td>
                 </tr>
-              ) : paginatedData.map(t => (
-                <tr key={t.id} className="hover:bg-blue-50/50 transition-colors border-b border-gray-50 h-8">
-                  <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
-                  <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden">{formatDateToMMAAAA(t.date)}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag01 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag02 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag03 || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-black text-[#F44C00] border-r border-gray-100 uppercase truncate">{t.category}</td>
-                  <td className="px-2 py-1 text-[8px] font-black text-[#1B75BB] border-r border-gray-100 uppercase truncate">{t.brand || 'SAP'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.branch}</td>
-                  <td className="px-2 py-1 text-[8px] font-mono border-r border-gray-100 truncate">
-                    {t.ticket ? (
-                      <a href={`https://raizeducacao.zeev.it/report/main/?inpsearch=${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-[#1B75BB] font-black flex items-center gap-0.5 hover:underline active:scale-95">
-                        {t.ticket} <ExternalLink size={8} />
-                      </a>
-                    ) : '-'}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{t.chave_id || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.vendor}>{t.vendor || '-'}</td>
-                  <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.description}>{t.description}</td>
-                  <td className={`px-2 py-1 text-[8px] font-mono font-black text-right border-r border-gray-100 ${t.type === 'REVENUE' ? 'text-emerald-600' : 'text-gray-900'}`}>
-                    {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-2 py-1 text-center border-r border-gray-100">
-                    <span className={`px-2 py-0.5 rounded-none text-[8px] font-black uppercase border ${
-                      t.status === 'Pendente' ? 'bg-orange-50 text-orange-600 border-orange-200' :
-                      t.status === 'Ajustado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                      t.status === 'Rateado' ? 'bg-purple-50 text-purple-600 border-purple-200' :
-                      t.status === 'Excluído' ? 'bg-red-50 text-red-600 border-red-200' :
-                      'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}>
-                      {t.status}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                       <button onClick={() => setEditingTransaction(t)} className="p-1.5 text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 active:scale-90 transition-all"><Edit3 size={12}/></button>
-                       <button onClick={() => setRateioTransaction(t)} className="p-1.5 text-[#F44C00] bg-amber-50 hover:bg-amber-100 border border-amber-100 active:scale-90 transition-all"><GitFork size={12}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : filteredAndSorted.map((t) => (
+                  <tr
+                    key={t.id}
+                    className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+                  >
+                    <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
+                    <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden">{formatDateToMMAAAA(t.date)}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag01 || '-'}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag02 || '-'}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag03 || '-'}</td>
+                    <td className="px-2 py-1 text-[8px] font-black text-[#F44C00] border-r border-gray-100 uppercase truncate">{t.category}</td>
+                    <td className="px-2 py-1 text-[8px] font-black text-[#1B75BB] border-r border-gray-100 uppercase truncate">{t.marca || 'SAP'}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.filial}</td>
+                    <td className="px-2 py-1 text-[8px] font-mono border-r border-gray-100 truncate">
+                      {t.ticket ? (
+                        <a href={`https://raizeducacao.zeev.it/report/main/?inpsearch=${t.ticket}`} target="_blank" rel="noopener noreferrer" className="text-[#1B75BB] font-black flex items-center gap-0.5 hover:underline active:scale-95">
+                          {t.ticket} <ExternalLink size={8} />
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td className="px-2 py-1 text-[8px] font-black text-[#F44C00] border-r border-gray-100 uppercase truncate">{t.chave_id || '-'}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.vendor}>{t.vendor || '-'}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate" title={t.description}>{t.description}</td>
+                    <td className={`px-2 py-1 text-[8px] font-mono font-black text-right border-r border-gray-100 ${t.type === 'REVENUE' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                      {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-center border-r border-gray-100">
+                      <span className={`px-2 py-0.5 rounded-none text-[8px] font-black uppercase border ${
+                        t.status === 'Pendente' ? 'bg-orange-50 text-orange-600 border-orange-200' :
+                        t.status === 'Ajustado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                        t.status === 'Rateado' ? 'bg-purple-50 text-purple-600 border-purple-200' :
+                        t.status === 'Excluído' ? 'bg-red-50 text-red-600 border-red-200' :
+                        'bg-gray-50 text-gray-400 border-gray-200'
+                      }`}>
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                         <button onClick={() => setEditingTransaction(t)} className="p-1.5 text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 active:scale-90 transition-all"><Edit3 size={12}/></button>
+                         <button onClick={() => setRateioTransaction(t)} className="p-1.5 text-[#F44C00] bg-amber-50 hover:bg-amber-100 border border-amber-100 active:scale-90 transition-all"><GitFork size={12}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
+          </table>
+
+          {isLoadingMore && (
+            <div className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 py-4">
+              <div className="flex items-center justify-center gap-3">
+                <Loader2 className="animate-spin text-[#1B75BB]" size={20} />
+                <span className="text-sm font-bold text-gray-700">Carregando mais registros...</span>
+              </div>
+            </div>
+          )}
+
+          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
             <tfoot className="sticky bottom-0 z-50 bg-[#152e55] text-white">
               <tr className="h-10 border-t border-white/20 whitespace-nowrap">
                 <td colSpan={11} className="px-4 text-[10px] font-black uppercase tracking-widest bg-[#152e55]">
@@ -991,7 +1382,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Unidade</label>
-                        <DeParaVisualizer oldValue={editingTransaction.branch} newValue={editForm.filial} />
+                        <DeParaVisualizer oldValue={editingTransaction.filial} newValue={editForm.filial} />
                       </div>
                       <select value={editForm.filial} onChange={e => setEditForm({...editForm, filial: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
                         {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
@@ -1000,7 +1391,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Marca</label>
-                        <DeParaVisualizer oldValue={editingTransaction.brand} newValue={editForm.marca} />
+                        <DeParaVisualizer oldValue={editingTransaction.marca} newValue={editForm.marca} />
                       </div>
                       <select value={editForm.marca} onChange={e => setEditForm({...editForm, marca: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
                         {ALL_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -1125,6 +1516,64 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <button onClick={handleSubmitRateio} disabled={!isRateioFullyAllocated || !rateioJustification.trim()} className="flex-[2] py-3 bg-[#1B75BB] text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-50">Confirmar Rateio</button>
                   </div>
                </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL DE CONFIRMAÇÃO "BUSCAR TUDO" --- */}
+      {showSearchAllModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-black text-gray-900 mb-2">
+                  ⚠️ Buscar Todos os Dados?
+                </h3>
+                <div className="space-y-3 text-sm text-gray-600">
+                  <p className="font-bold">
+                    Esta ação vai buscar <span className="text-amber-600 font-black">TODOS os registros</span> do banco de dados que correspondem aos filtros aplicados.
+                  </p>
+                  <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded">
+                    <p className="text-xs font-bold text-amber-800">
+                      <strong>⚠️ ATENÇÃO:</strong> Se você não aplicou filtros de período, marca ou filial, a busca pode retornar <strong>+100 mil registros</strong> e causar lentidão ou travamento!
+                    </p>
+                  </div>
+                  <p className="text-xs font-semibold">
+                    <strong>Recomendação:</strong> Aplique filtros (período, marca, filial) antes de buscar todos os dados para melhor performance.
+                  </p>
+                  <div className="bg-blue-50 border border-blue-200 p-3 rounded text-xs">
+                    <p className="font-bold text-blue-900 mb-1">Filtros atualmente aplicados:</p>
+                    <ul className="list-disc list-inside space-y-1 text-blue-800">
+                      {colFilters.monthFrom && <li>Período: {colFilters.monthFrom} a {colFilters.monthTo || 'hoje'}</li>}
+                      {colFilters.marca && colFilters.marca.length > 0 && <li>Marca: {colFilters.marca.join(', ')}</li>}
+                      {colFilters.filial && colFilters.filial.length > 0 && <li>Filial: {colFilters.filial.join(', ')}</li>}
+                      {!colFilters.monthFrom && (!colFilters.marca || colFilters.marca.length === 0) && (!colFilters.filial || colFilters.filial.length === 0) && (
+                        <li className="text-amber-600 font-black">⚠️ Nenhum filtro aplicado!</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowSearchAllModal(false)}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-bold text-sm hover:bg-gray-200 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSearchAll}
+                className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg font-black text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Download size={16} />
+                Confirmar Busca
+              </button>
             </div>
           </div>
         </div>

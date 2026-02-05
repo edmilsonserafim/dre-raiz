@@ -21,6 +21,7 @@
     "@nivo/line": "^0.99.0",
     "@nivo/pie": "^0.99.0",
     "@supabase/supabase-js": "^2.93.2",
+    "@tanstack/react-virtual": "^3.13.18",
     "@types/d3": "^7.4.3",
     "chart.js": "^4.5.1",
     "cors": "^2.8.6",
@@ -44,10 +45,12 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.1",
     "@types/lodash.debounce": "^4.0.9",
     "@types/node": "^22.14.0",
     "@vercel/node": "^5.5.28",
     "@vitejs/plugin-react": "^5.0.0",
+    "playwright": "^1.58.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

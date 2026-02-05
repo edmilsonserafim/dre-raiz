@@ -18,7 +18,8 @@ export interface DatabaseTransaction {
   id: string;
   date: string;
   description: string;
-  category: string;
+  conta_contabil: string;  // Popula coluna "Conta" na UI
+  category?: string | null;  // Existe no banco mas não é usada no momento (reservada para futuro)
   amount: number;
   type: string;
   scenario: string;

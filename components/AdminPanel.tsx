@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, X, Plus, Trash2, Save, AlertTriangle, CheckCircle2, User as UserIcon, Database, Search, Upload, Download, FileSpreadsheet, Eye, CheckCircle } from 'lucide-react';
+import { Shield, Users, X, Plus, Trash2, Save, AlertTriangle, CheckCircle2, User as UserIcon, Database, Search, Upload, Download, FileSpreadsheet, Eye, CheckCircle, Table } from 'lucide-react';
 import * as supabaseService from '../services/supabaseService';
 import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
 import { Transaction } from '../types';
+import DREHierarchyManager from './DREHierarchyManager';
 
 interface User {
   id: string;
@@ -50,7 +51,7 @@ const AdminPanel: React.FC = () => {
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
   // Estado para controle de abas
-  const [activeTab, setActiveTab] = useState<'import' | 'users'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'users' | 'dre'>('import');
 
   // Estado para busca de usuários
   const [userSearch, setUserSearch] = useState('');
@@ -420,6 +421,22 @@ const AdminPanel: React.FC = () => {
           </div>
           {activeTab === 'users' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 rounded-t"></div>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('dre')}
+          className={`px-4 py-2 font-bold text-xs uppercase transition-all relative ${
+            activeTab === 'dre'
+              ? 'text-blue-700 bg-blue-50'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <Table size={14} />
+            📊 Estrutura DRE
+          </div>
+          {activeTab === 'dre' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t"></div>
           )}
         </button>
       </div>
@@ -1025,6 +1042,11 @@ const AdminPanel: React.FC = () => {
         </ul>
       </div>
         </>
+      )}
+
+      {/* Aba: Estrutura DRE */}
+      {activeTab === 'dre' && (
+        <DREHierarchyManager />
       )}
     </div>
   );

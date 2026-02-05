@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(dir:*)",
+      "WebSearch",
+      "Bash(npx tweakcc:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout:*)",
+      "Bash(python:*)",
+      "Bash(cmd /c \"EXECUTAR_SYNC_MANUAL.bat\")",
+      "Bash(npx tsx check_recurring.ts)",
+      "Bash(npx tsx:*)",
+      "Bash(del:*)",
+      "Bash(test:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(wc:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(if [ -f \"screenshot-inicial.png\" ])",
+      "Bash(then echo \"Screenshot existe\")",
+      "Bash(else echo \"Screenshot não encontrado\")",
+      "Bash(fi)",
+      "Bash(git add:*)"
+    ]
+  }
+}

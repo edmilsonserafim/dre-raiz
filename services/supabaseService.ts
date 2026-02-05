@@ -1,5 +1,5 @@
 import { supabase, DatabaseTransaction, DatabaseManualChange } from '../supabase';
-import { Transaction, ManualChange } from '../types';
+import { Transaction, ManualChange, PaginationParams, PaginatedResponse } from '../types';
 
 // Converter Transaction do app para formato do banco
 // Remove campos que não existem na tabela: ticket, vendor, recurring, justification
@@ -8,7 +8,7 @@ const transactionToDb = (t: Transaction): DatabaseTransaction => {
     id: t.id,
     date: t.date,
     description: t.description,
-    category: t.category,
+    conta_contabil: t.conta_contabil,  // Campo que popula coluna "Conta" na UI
     amount: t.amount,
     type: t.type,
     scenario: t.scenario || 'Orçado',
@@ -17,6 +17,7 @@ const transactionToDb = (t: Transaction): DatabaseTransaction => {
   };
 
   // Adicionar campos opcionais apenas se existirem
+  if (t.category) dbTransaction.category = t.category;  // Reservado para futuro
   if (t.marca) dbTransaction.marca = t.marca;
   if (t.tag01) dbTransaction.tag01 = t.tag01;
   if (t.tag02) dbTransaction.tag02 = t.tag02;
@@ -35,21 +36,23 @@ const dbToTransaction = (db: DatabaseTransaction): Transaction => ({
   id: db.id,
   date: db.date,
   description: db.description,
-  category: db.category,
+  conta_contabil: db.conta_contabil,  // Campo que popula coluna "Conta" na UI
+  category: db.category || undefined,  // Reservado para futuro
   amount: db.amount,
   type: db.type as any,
   scenario: db.scenario,
   status: db.status,
   filial: db.filial,
-  marca: db.marca,
-  tag01: db.tag01,
-  tag02: db.tag02,
-  tag03: db.tag03,
-  recurring: db.recurring || undefined,
+  marca: db.marca || undefined,
+  tag01: db.tag01 || undefined,
+  tag02: db.tag02 || undefined,
+  tag03: db.tag03 || undefined,
+  recurring: db.recurring || undefined,  // Mantém o valor do banco (comparação case-insensitive no filtro)
   ticket: db.ticket || undefined,
   vendor: db.vendor || undefined,
   nat_orc: db.nat_orc || undefined,
-  chave_id: db.chave_id || undefined
+  chave_id: db.chave_id || undefined,
+  updated_at: db.updated_at || new Date().toISOString()  // Campo obrigatório para sync
 });
 
 // Converter ManualChange para formato do banco
@@ -108,64 +111,230 @@ const dbToManualChange = (db: DatabaseManualChange): ManualChange => ({
 
 // ========== TRANSACTIONS ==========
 
-export const getAllTransactions = async (): Promise<Transaction[]> => {
-  // Supabase tem limite de 1000 por página
-  // Vamos buscar em múltiplas páginas até não ter mais dados
-  let allData: any[] = [];
-  let page = 0;
-  const pageSize = 1000;
-  let hasMore = true;
+export const getAllTransactions = async (monthsBack: number = 3): Promise<Transaction[]> => {
+  // VERSÃO OTIMIZADA: Carrega apenas últimos X meses (padrão: 3)
+  console.log(`🔄 Carregando últimos ${monthsBack} meses de transações...`);
 
-  console.log('🔄 Iniciando carregamento de transações do Supabase...');
+  // Calcular data de início (X meses atrás)
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - monthsBack);
+  const startDateStr = startDate.toISOString().split('T')[0];
 
-  while (hasMore) {
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
+  console.log(`📅 Buscando transações desde: ${startDateStr}`);
 
-    console.log(`📥 Buscando transações ${from} a ${to}...`);
+  const { data, error, count } = await supabase
+    .from('transactions')
+    .select('*', { count: 'exact' })
+    .gte('date', startDateStr)
+    .order('date', { ascending: false })
+    .limit(10000); // Limite de segurança
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .order('date', { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      console.error('Error fetching transactions page', page, ':', error);
-      break;
-    }
-
-    if (!data || data.length === 0) {
-      hasMore = false;
-    } else {
-      allData = [...allData, ...data];
-      console.log(`✅ Página ${page + 1}: ${data.length} transações carregadas. Total: ${allData.length}`);
-
-      // Se retornou menos que pageSize, não há mais páginas
-      if (data.length < pageSize) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    }
+  if (error) {
+    console.error('❌ Erro ao carregar transações:', error);
+    // Em caso de erro, retornar array vazio em vez de quebrar
+    return [];
   }
 
-  console.log('✅ Supabase: Total de transações carregadas:', allData.length);
+  if (!data || data.length === 0) {
+    console.log('⚠️ Nenhuma transação encontrada no período');
+    return [];
+  }
 
-  return allData.map(dbToTransaction);
+  console.log(`✅ ${data.length} transações carregadas (de ${count} no período)!`);
+
+  // Debug: Verificar campos na primeira transação
+  if (data.length > 0) {
+    console.log('🔍 DEBUG - Primeira transação ANTES do mapeamento (do banco):', {
+      id: data[0].id,
+      chave_id: data[0].chave_id,
+      ticket: data[0].ticket,
+      vendor: data[0].vendor,
+      description: data[0].description?.substring(0, 50)
+    });
+  }
+
+  const mapped = data.map(dbToTransaction);
+
+  // Debug: Verificar após mapeamento
+  if (mapped.length > 0) {
+    console.log('🔍 DEBUG - Primeira transação DEPOIS do mapeamento (para o app):', {
+      id: mapped[0].id,
+      chave_id: mapped[0].chave_id,
+      ticket: mapped[0].ticket,
+      vendor: mapped[0].vendor,
+      description: mapped[0].description?.substring(0, 50)
+    });
+  }
+
+  return mapped;
 };
 
-export const addTransaction = async (transaction: Transaction): Promise<boolean> => {
-  const { error } = await supabase
+// Nova função: Buscar transações com filtros aplicados
+export interface TransactionFilters {
+  monthFrom?: string;      // YYYY-MM
+  monthTo?: string;        // YYYY-MM
+  marca?: string[];
+  filial?: string[];
+  tag01?: string[];
+  tag02?: string[];
+  tag03?: string[];
+  category?: string[];
+  ticket?: string;
+  chave_id?: string[];
+  vendor?: string;
+  description?: string;
+  amount?: string;
+  recurring?: string[];
+  scenario?: string;       // Para filtrar por aba (Real, Orçamento, etc)
+}
+
+// Helper para aplicar filtros em uma query (reutilizado em paginação)
+const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
+  // Filtros de data (período)
+  if (filters.monthFrom) {
+    const startDate = `${filters.monthFrom}-01`;
+    query = query.gte('date', startDate);
+  }
+
+  if (filters.monthTo) {
+    const [year, month] = filters.monthTo.split('-');
+    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+    const endDate = `${filters.monthTo}-${lastDay}`;
+    query = query.lte('date', endDate);
+  }
+
+  // Filtros de array (marca, filial, tags, category, etc)
+  if (filters.marca && filters.marca.length > 0) query = query.in('marca', filters.marca);
+  if (filters.filial && filters.filial.length > 0) query = query.in('filial', filters.filial);
+  if (filters.tag01 && filters.tag01.length > 0) query = query.in('tag01', filters.tag01);
+  if (filters.tag02 && filters.tag02.length > 0) query = query.in('tag02', filters.tag02);
+  if (filters.tag03 && filters.tag03.length > 0) query = query.in('tag03', filters.tag03);
+  if (filters.category && filters.category.length > 0) query = query.in('category', filters.category);
+  if (filters.chave_id && filters.chave_id.length > 0) query = query.in('chave_id', filters.chave_id);
+  if (filters.recurring && filters.recurring.length > 0) query = query.in('recurring', filters.recurring);
+
+  // Filtros de texto (LIKE)
+  if (filters.ticket && filters.ticket.trim() !== '') query = query.ilike('ticket', `%${filters.ticket.trim()}%`);
+  if (filters.vendor && filters.vendor.trim() !== '') query = query.ilike('vendor', `%${filters.vendor.trim()}%`);
+  if (filters.description && filters.description.trim() !== '') query = query.ilike('description', `%${filters.description.trim()}%`);
+
+  // Filtro de valor (amount)
+  if (filters.amount && filters.amount.trim() !== '') {
+    const amountValue = parseFloat(filters.amount.trim());
+    if (!isNaN(amountValue)) query = query.eq('amount', amountValue);
+  }
+
+  // Filtro de cenário (aba ativa)
+  if (filters.scenario) query = query.ilike('scenario', filters.scenario);
+
+  return query;
+};
+
+export const getFilteredTransactions = async (
+  filters: TransactionFilters,
+  pagination?: PaginationParams
+): Promise<PaginatedResponse<Transaction>> => {
+  console.log('🔍 Buscando transações com filtros:', filters);
+  if (pagination) {
+    console.log(`📄 Paginação: Página ${pagination.pageNumber}, ${pagination.pageSize} registros/página`);
+  }
+
+  // Iniciar query com contagem
+  let query = supabase
     .from('transactions')
-    .insert([transactionToDb(transaction)]);
+    .select('*', { count: 'exact' });
+
+  // Aplicar todos os filtros
+  query = applyTransactionFilters(query, filters);
+
+  // Ordenar
+  query = query.order('date', { ascending: false });
+
+  // Aplicar paginação se fornecida
+  if (pagination) {
+    const { pageNumber, pageSize } = pagination;
+
+    // Validar parâmetros
+    if (pageNumber < 1) {
+      console.error('❌ Erro: pageNumber deve ser >= 1');
+      return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+    }
+    if (pageSize < 1 || pageSize > 50000) {
+      console.error('❌ Erro: pageSize deve estar entre 1 e 50000');
+      return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+    }
+
+    const offset = (pageNumber - 1) * pageSize;
+    const rangeEnd = offset + pageSize - 1;
+    query = query.range(offset, rangeEnd);
+
+    console.log(`📥 Buscando registros ${offset + 1} a ${offset + pageSize} (range: ${offset}-${rangeEnd})...`);
+  } else {
+    // Sem paginação - buscar até 50k (comportamento legado)
+    console.log('⚠️ Sem paginação - buscando até 50k registros (modo legado)');
+    query = query.limit(50000);
+  }
+
+  // Executar query
+  const { data, count, error } = await query;
+
+  if (error) {
+    console.error('❌ Erro ao buscar transações:', error);
+    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+  }
+
+  const totalCount = count || 0;
+  console.log(`📊 Total de registros filtrados: ${totalCount}`);
+
+  if (!data || data.length === 0) {
+    console.log('⚠️ Nenhuma transação encontrada com os filtros aplicados');
+    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+  }
+
+  console.log(`✅ ${data.length} transações retornadas nesta página`);
+
+  // Preparar resposta paginada
+  if (pagination) {
+    const { pageNumber, pageSize } = pagination;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const hasMore = pageNumber < totalPages;
+
+    return {
+      data: data.map(dbToTransaction),
+      totalCount,
+      currentPage: pageNumber,
+      totalPages,
+      hasMore
+    };
+  } else {
+    // Modo legado - retornar como PaginatedResponse mas sem paginação real
+    return {
+      data: data.map(dbToTransaction),
+      totalCount,
+      currentPage: 1,
+      totalPages: 1,
+      hasMore: false
+    };
+  }
+};
+
+export const addTransaction = async (transaction: Omit<Transaction, 'id'>): Promise<Transaction> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert([transactionToDb(transaction as Transaction)])
+    .select()
+    .single();
 
   if (error) {
     console.error('Error adding transaction:', error);
-    return false;
+    throw new Error(error.message);
   }
 
-  return true;
+  if (!data) {
+    throw new Error('No data returned from insert');
+  }
+
+  return dbToTransaction(data);
 };
 
 export const updateTransaction = async (id: string, updates: Partial<Transaction>): Promise<boolean> => {
@@ -217,17 +386,22 @@ export const deleteTransaction = async (id: string): Promise<boolean> => {
   return true;
 };
 
-export const bulkAddTransactions = async (transactions: Transaction[]): Promise<boolean> => {
-  const { error } = await supabase
+export const bulkAddTransactions = async (transactions: Omit<Transaction, 'id'>[]): Promise<Transaction[]> => {
+  const { data, error } = await supabase
     .from('transactions')
-    .insert(transactions.map(transactionToDb));
+    .insert(transactions.map(t => transactionToDb(t as Transaction)))
+    .select();
 
   if (error) {
     console.error('Error bulk adding transactions:', error);
-    return false;
+    throw new Error(error.message);
   }
 
-  return true;
+  if (!data) {
+    throw new Error('No data returned from bulk insert');
+  }
+
+  return data.map(dbToTransaction);
 };
 
 // ========== MANUAL CHANGES ==========
@@ -476,6 +650,96 @@ export const removeUserPermission = async (permissionId: string) => {
 
 // ========== SYNC ==========
 
+/**
+ * Atualiza transação com verificação de conflito (Optimistic Locking)
+ *
+ * Verifica se o updated_at da transação no servidor corresponde ao esperado.
+ * Se não corresponder, retorna conflito ao invés de sobrescrever.
+ *
+ * @param id ID da transação
+ * @param updates Campos a atualizar
+ * @param expectedUpdatedAt Timestamp esperado (versão local)
+ * @returns { success: boolean, conflict?: Transaction }
+ */
+export const updateTransactionWithConflictCheck = async (
+  id: string,
+  updates: Partial<Transaction>,
+  expectedUpdatedAt: string
+): Promise<{ success: boolean; conflict?: Transaction; error?: string }> => {
+  try {
+    console.log(`🔍 Verificando conflito para transação ${id}`);
+    console.log(`   Expected updated_at: ${expectedUpdatedAt}`);
+
+    // 1. Buscar versão atual do servidor
+    const { data: current, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !current) {
+      console.error('❌ Erro ao buscar transação atual:', fetchError);
+      return {
+        success: false,
+        error: fetchError?.message || 'Transação não encontrada'
+      };
+    }
+
+    console.log(`   Server updated_at: ${current.updated_at}`);
+
+    // 2. Verificar conflito (comparar updated_at)
+    if (current.updated_at !== expectedUpdatedAt) {
+      console.warn('⚠️ Conflito detectado! Versões divergiram.');
+      return {
+        success: false,
+        conflict: dbToTransaction(current)
+      };
+    }
+
+    // 3. Não há conflito - prosseguir com update
+    // Adicionar novo timestamp
+    const updatesWithTimestamp = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+
+    // Limpar campos vazios
+    const cleanedUpdates: any = {};
+    Object.keys(updatesWithTimestamp).forEach(key => {
+      const value = (updatesWithTimestamp as any)[key];
+      if (value !== null && value !== undefined && value !== '') {
+        cleanedUpdates[key] = value;
+      }
+    });
+
+    // 4. Executar update COM condição no updated_at (optimistic locking)
+    const { error: updateError } = await supabase
+      .from('transactions')
+      .update(cleanedUpdates)
+      .eq('id', id)
+      .eq('updated_at', expectedUpdatedAt); // ← Condição crítica para optimistic locking
+
+    if (updateError) {
+      console.error('❌ Erro ao atualizar transação:', updateError);
+      return {
+        success: false,
+        error: updateError.message
+      };
+    }
+
+    console.log('✅ Transação atualizada com sucesso (sem conflito)');
+
+    return { success: true };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erro inesperado no conflict check:', errorMsg);
+    return {
+      success: false,
+      error: errorMsg
+    };
+  }
+};
+
 // Migrar dados do localStorage para Supabase (executar uma vez)
 export const migrateFromLocalStorage = async () => {
   const STORAGE_KEY = 'sap_financial_data_v6';
@@ -507,4 +771,166 @@ export const migrateFromLocalStorage = async () => {
     console.error('Error migrating data:', error);
     return false;
   }
+};
+
+/**
+ * Subscribe to real-time changes in transactions table (FASE 3)
+ *
+ * Configura Supabase Realtime para escutar mudanças na tabela transactions.
+ * Filtra eventos por marca, filial e período (se fornecidos).
+ *
+ * @param filters Filtros para aplicar na subscription
+ * @param callbacks Callbacks para eventos INSERT/UPDATE/DELETE
+ * @returns RealtimeChannel instance (use .unsubscribe() para parar)
+ */
+export const subscribeToTransactionChanges = (
+  filters: Partial<TransactionFilters>,
+  callbacks: {
+    onInsert?: (transaction: Transaction) => void;
+    onUpdate?: (transaction: Transaction) => void;
+    onDelete?: (id: string) => void;
+    onError?: (error: Error) => void;
+  }
+): any => {
+  console.log('📡 Iniciando subscription Realtime com filtros:', filters);
+
+  // Construir filtro Realtime
+  // Nota: Supabase Realtime tem limitações - filtros complexos são aplicados no cliente
+  let channelName = 'transactions-changes';
+
+  // Criar channel
+  const channel = supabase.channel(channelName);
+
+  // Configurar listener para INSERT
+  if (callbacks.onInsert) {
+    channel.on(
+      'postgres_changes' as any,
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'transactions'
+      },
+      (payload: any) => {
+        console.log('📥 Realtime INSERT:', payload.new.id);
+
+        const transaction = dbToTransaction(payload.new);
+
+        // Aplicar filtros no cliente (Realtime não suporta filtros complexos)
+        if (shouldIncludeTransaction(transaction, filters)) {
+          callbacks.onInsert!(transaction);
+        } else {
+          console.log('⏭️ Transação filtrada (não corresponde aos critérios)');
+        }
+      }
+    );
+  }
+
+  // Configurar listener para UPDATE
+  if (callbacks.onUpdate) {
+    channel.on(
+      'postgres_changes' as any,
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'transactions'
+      },
+      (payload: any) => {
+        console.log('📝 Realtime UPDATE:', payload.new.id);
+
+        const transaction = dbToTransaction(payload.new);
+
+        if (shouldIncludeTransaction(transaction, filters)) {
+          callbacks.onUpdate!(transaction);
+        } else {
+          console.log('⏭️ Transação filtrada (não corresponde aos critérios)');
+        }
+      }
+    );
+  }
+
+  // Configurar listener para DELETE
+  if (callbacks.onDelete) {
+    channel.on(
+      'postgres_changes' as any,
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'transactions'
+      },
+      (payload: any) => {
+        console.log('🗑️ Realtime DELETE:', payload.old.id);
+        callbacks.onDelete!(payload.old.id);
+      }
+    );
+  }
+
+  // Subscribe ao channel
+  channel.subscribe((status: string) => {
+    console.log(`📡 Realtime status: ${status}`);
+
+    if (status === 'SUBSCRIBED') {
+      console.log('✅ Realtime conectado com sucesso!');
+    } else if (status === 'CLOSED') {
+      console.log('⚠️ Realtime desconectado');
+    } else if (status === 'CHANNEL_ERROR') {
+      console.error('❌ Erro no canal Realtime');
+      if (callbacks.onError) {
+        callbacks.onError(new Error('Realtime channel error'));
+      }
+    }
+  });
+
+  return channel;
+};
+
+/**
+ * Helper: Verifica se transação deve ser incluída baseado nos filtros
+ */
+const shouldIncludeTransaction = (
+  transaction: Transaction,
+  filters: Partial<TransactionFilters>
+): boolean => {
+  // Filtro de marca
+  if (filters.marca && filters.marca.length > 0) {
+    if (!transaction.marca || !filters.marca.includes(transaction.marca)) {
+      return false;
+    }
+  }
+
+  // Filtro de filial
+  if (filters.filial && filters.filial.length > 0) {
+    if (!transaction.filial || !filters.filial.includes(transaction.filial)) {
+      return false;
+    }
+  }
+
+  // Filtro de período (monthFrom/monthTo)
+  if (filters.monthFrom || filters.monthTo) {
+    const transactionDate = new Date(transaction.date);
+
+    if (filters.monthFrom) {
+      const [year, month] = filters.monthFrom.split('-');
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      if (transactionDate < startDate) {
+        return false;
+      }
+    }
+
+    if (filters.monthTo) {
+      const [year, month] = filters.monthTo.split('-');
+      const endDate = new Date(parseInt(year), parseInt(month), 0); // Último dia do mês
+      if (transactionDate > endDate) {
+        return false;
+      }
+    }
+  }
+
+  // Filtro de cenário
+  if (filters.scenario) {
+    if (!transaction.scenario || !transaction.scenario.toLowerCase().includes(filters.scenario.toLowerCase())) {
+      return false;
+    }
+  }
+
+  return true;
 };
