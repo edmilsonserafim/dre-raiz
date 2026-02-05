@@ -717,15 +717,46 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   const handleSubmitAjuste = () => {
-    if (!editingTransaction || !editForm.justification.trim()) return;
-    requestChange({
+    console.log('🟢 handleSubmitAjuste INICIADO');
+
+    if (!editingTransaction) {
+      console.error('❌ editingTransaction é NULL');
+      return;
+    }
+
+    if (!editForm.justification.trim()) {
+      console.error('❌ justification está vazia');
+      return;
+    }
+
+    console.log('✅ Validações OK', {
+      transactionId: editingTransaction.id,
+      justification: editForm.justification,
+      justificationLength: editForm.justification.length
+    });
+
+    const changeData = {
       transactionId: editingTransaction.id,
       description: `Ajuste: ${editForm.justification}`,
       justification: editForm.justification,
-      type: 'MULTI',
+      type: 'MULTI' as const,
       oldValue: JSON.stringify(editingTransaction),
       newValue: JSON.stringify(editForm)
+    };
+
+    console.log('📦 Dados do change (ajuste):', {
+      transactionId: changeData.transactionId,
+      description: changeData.description,
+      justification: changeData.justification,
+      type: changeData.type,
+      oldValuePreview: changeData.oldValue.substring(0, 50) + '...',
+      newValuePreview: changeData.newValue.substring(0, 50) + '...'
     });
+
+    console.log('🔄 Chamando requestChange...');
+    requestChange(changeData);
+
+    console.log('✅ requestChange chamado, fechando modal');
     setEditingTransaction(null);
   };
 
@@ -734,7 +765,33 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const isRateioFullyAllocated = useMemo(() => Math.abs(remainingRateio) < 0.05, [remainingRateio]);
 
   const handleSubmitRateio = () => {
-    if (!rateioTransaction || !isRateioFullyAllocated || !rateioJustification.trim()) return;
+    console.log('🟢 handleSubmitRateio INICIADO');
+
+    if (!rateioTransaction) {
+      console.error('❌ rateioTransaction é NULL');
+      return;
+    }
+
+    if (!isRateioFullyAllocated) {
+      console.error('❌ Rateio não está totalmente alocado', {
+        currentSum: currentRateioSum,
+        remaining: remainingRateio
+      });
+      return;
+    }
+
+    if (!rateioJustification.trim()) {
+      console.error('❌ rateioJustification está vazia');
+      return;
+    }
+
+    console.log('✅ Validações OK', {
+      transactionId: rateioTransaction.id,
+      justification: rateioJustification,
+      justificationLength: rateioJustification.length,
+      partsCount: rateioParts.length
+    });
+
     const newTransactions: Transaction[] = rateioParts.filter(p => p.amount > 0).map((p, idx) => ({
       ...rateioTransaction,
       id: `${rateioTransaction.id}-R${idx}-${Date.now()}`,
@@ -746,14 +803,35 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       type: CATEGORIES.FIXED_COST.includes(p.category) ? 'FIXED_COST' : CATEGORIES.VARIABLE_COST.includes(p.category) ? 'VARIABLE_COST' : 'REVENUE',
       status: 'Rateado'
     }));
-    requestChange({
+
+    console.log('📦 Novas transações criadas:', {
+      count: newTransactions.length,
+      ids: newTransactions.map(t => t.id),
+      amounts: newTransactions.map(t => t.amount)
+    });
+
+    const changeData = {
       transactionId: rateioTransaction.id,
       description: `Rateio: ${rateioJustification}`,
       justification: rateioJustification,
-      type: 'RATEIO',
+      type: 'RATEIO' as const,
       oldValue: JSON.stringify(rateioTransaction),
       newValue: JSON.stringify({ transactions: newTransactions, justification: rateioJustification })
+    };
+
+    console.log('📦 Dados do change (rateio):', {
+      transactionId: changeData.transactionId,
+      description: changeData.description,
+      justification: changeData.justification,
+      type: changeData.type,
+      oldValuePreview: changeData.oldValue.substring(0, 50) + '...',
+      newValuePreview: changeData.newValue.substring(0, 100) + '...'
     });
+
+    console.log('🔄 Chamando requestChange...');
+    requestChange(changeData);
+
+    console.log('✅ requestChange chamado, fechando modal');
     setRateioTransaction(null);
   };
 

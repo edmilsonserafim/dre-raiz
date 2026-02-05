@@ -417,25 +417,65 @@ export const bulkAddTransactions = async (transactions: Omit<Transaction, 'id'>[
 // ========== MANUAL CHANGES ==========
 
 export const getAllManualChanges = async (): Promise<ManualChange[]> => {
+  console.log('🟦 getAllManualChanges INICIADO');
+
   const { data, error } = await supabase
     .from('manual_changes')
     .select('*')
     .order('requested_at', { ascending: false });
 
+  console.log('🟦 Resposta do Supabase:', {
+    error: error,
+    hasData: !!data,
+    dataLength: data ? data.length : 0
+  });
+
   if (error) {
-    console.error('Error fetching manual changes:', error);
+    console.error('❌ Error fetching manual changes:', error);
+    console.error('❌ Código do erro:', error.code);
+    console.error('❌ Mensagem do erro:', error.message);
     return [];
   }
 
-  return data.map(dbToManualChange);
+  console.log('✅ Dados brutos (primeiros 2):', data.slice(0, 2));
+
+  const converted = data.map(dbToManualChange);
+  console.log('✅ Dados convertidos (primeiros 2):', converted.slice(0, 2).map(c => ({
+    id: c.id,
+    type: c.type,
+    status: c.status,
+    transactionId: c.transactionId
+  })));
+
+  return converted;
 };
 
 export const addManualChange = async (change: ManualChange): Promise<boolean> => {
+  console.log('🟦 addManualChange INICIADO:', {
+    id: change.id,
+    type: change.type,
+    transactionId: change.transactionId,
+    justification: change.justification,
+    hasOriginalTransaction: !!change.originalTransaction
+  });
+
   try {
     const dbChange = manualChangeToDb(change);
 
+    console.log('🟦 Após manualChangeToDb:', {
+      id: dbChange.id,
+      type: dbChange.type,
+      transaction_id: dbChange.transaction_id,
+      justification: dbChange.justification,
+      original_transaction_type: typeof dbChange.original_transaction,
+      original_transaction_preview: typeof dbChange.original_transaction === 'string'
+        ? dbChange.original_transaction.substring(0, 100)
+        : 'object'
+    });
+
     // Garantir que original_transaction é um objeto válido
     if (typeof dbChange.original_transaction === 'string') {
+      console.log('🟦 Convertendo original_transaction de string para objeto');
       dbChange.original_transaction = JSON.parse(dbChange.original_transaction);
     }
 
@@ -448,28 +488,51 @@ export const addManualChange = async (change: ManualChange): Promise<boolean> =>
       }
     });
 
-    console.log('Tentando salvar manual change:', {
+    console.log('🟦 Campos após limpeza:', Object.keys(cleanedChange));
+    console.log('🟦 Dados limpos (resumo):', {
       id: cleanedChange.id,
       type: cleanedChange.type,
-      transaction_id: cleanedChange.transaction_id
+      transaction_id: cleanedChange.transaction_id,
+      justification: cleanedChange.justification,
+      status: cleanedChange.status,
+      requested_at: cleanedChange.requested_at,
+      requested_by: cleanedChange.requested_by,
+      requested_by_name: cleanedChange.requested_by_name,
+      has_original_transaction: !!cleanedChange.original_transaction,
+      has_new_values: !!cleanedChange.new_values
     });
 
+    console.log('🔄 Iniciando INSERT no Supabase...');
     const { error, data } = await supabase
       .from('manual_changes')
       .insert([cleanedChange])
       .select();
 
+    console.log('🟦 Resposta do Supabase:', {
+      error: error,
+      data: data,
+      hasError: !!error,
+      hasData: !!data,
+      dataLength: data ? data.length : 0
+    });
+
     if (error) {
-      console.error('Error adding manual change:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.error('Data being sent:', JSON.stringify(cleanedChange, null, 2));
+      console.error('❌ ERRO ao salvar manual change:', error);
+      console.error('❌ Código do erro:', error.code);
+      console.error('❌ Mensagem do erro:', error.message);
+      console.error('❌ Detalhes do erro:', JSON.stringify(error, null, 2));
+      console.error('❌ Dados enviados (completo):', JSON.stringify(cleanedChange, null, 2));
       return false;
     }
 
-    console.log('Manual change saved successfully:', data);
+    console.log('✅ Manual change salvo com SUCESSO!');
+    console.log('✅ Dados retornados:', data);
     return true;
   } catch (err) {
-    console.error('Exception in addManualChange:', err);
+    console.error('❌ EXCEPTION in addManualChange:', err);
+    console.error('❌ Tipo do erro:', (err as Error).name);
+    console.error('❌ Mensagem:', (err as Error).message);
+    console.error('❌ Stack:', (err as Error).stack);
     return false;
   }
 };
