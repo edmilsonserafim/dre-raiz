@@ -721,6 +721,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     requestChange({
       transactionId: editingTransaction.id,
       description: `Ajuste: ${editForm.justification}`,
+      justification: editForm.justification,
       type: 'MULTI',
       oldValue: JSON.stringify(editingTransaction),
       newValue: JSON.stringify(editForm)
@@ -748,6 +749,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     requestChange({
       transactionId: rateioTransaction.id,
       description: `Rateio: ${rateioJustification}`,
+      justification: rateioJustification,
       type: 'RATEIO',
       oldValue: JSON.stringify(rateioTransaction),
       newValue: JSON.stringify({ transactions: newTransactions, justification: rateioJustification })
@@ -1423,6 +1425,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                         value={editForm.chave_id || ''}
                         onChange={e => setEditForm({...editForm, chave_id: e.target.value})}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        disabled={true}
                       />
                     </div>
                     <div className="col-span-2 space-y-1 pt-4">

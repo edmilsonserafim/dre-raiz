@@ -287,8 +287,18 @@ const App: React.FC = () => {
   };
 
   const handleRequestChange = async (change: Omit<ManualChange, 'id' | 'status' | 'requestedAt' | 'requestedBy' | 'originalTransaction'>) => {
+    console.log('🔵 handleRequestChange CHAMADO', {
+      transactionId: change.transactionId,
+      type: change.type,
+      description: change.description,
+      justification: change.justification
+    });
+
     const original = transactions.find(t => t.id === change.transactionId);
-    if (!original) return;
+    if (!original) {
+      console.error('❌ Transação original não encontrada:', change.transactionId);
+      return;
+    }
 
     const newChange: ManualChange = {
       ...change,
@@ -300,15 +310,29 @@ const App: React.FC = () => {
       requestedByName: user?.name || "Usuário Desconhecido"
     };
 
+    console.log('📦 ManualChange criado:', {
+      id: newChange.id,
+      transactionId: newChange.transactionId,
+      type: newChange.type,
+      justification: newChange.justification,
+      status: newChange.status
+    });
+
     // Salvar no Supabase
     const successChange = await supabaseService.addManualChange(newChange);
     const successUpdate = await supabaseService.updateTransaction(change.transactionId, { status: 'Pendente' });
 
+    console.log('💾 Resultado do salvamento:', {
+      successChange,
+      successUpdate
+    });
+
     if (successChange && successUpdate) {
       setManualChanges(prev => [newChange, ...prev]);
       setTransactions(prev => prev.map(t => t.id === change.transactionId ? { ...t, status: 'Pendente' } : t));
+      console.log('✅ ManualChange salvo com sucesso! Total de changes:', manualChanges.length + 1);
     } else {
-      console.error('Erro ao salvar mudança no Supabase');
+      console.error('❌ Erro ao salvar mudança no Supabase');
       alert('Erro ao solicitar mudança. Tente novamente.');
     }
   };

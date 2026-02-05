@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS manual_changes (
   requested_by_name TEXT NOT NULL,
   approved_at TIMESTAMPTZ,
   approved_by TEXT,
+  approved_by_name TEXT,
   original_transaction JSONB NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

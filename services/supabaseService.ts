@@ -60,15 +60,25 @@ const manualChangeToDb = (mc: ManualChange): DatabaseManualChange => {
   // Extrair justificativa - se não estiver direta, tentar extrair do newValue (para RATEIO)
   let justification = mc.justification || mc.description || '';
 
+  console.log('🔄 manualChangeToDb - Justification inicial:', {
+    mcJustification: mc.justification,
+    mcDescription: mc.description,
+    justification
+  });
+
   // Para RATEIO, a justificativa pode estar dentro do JSON do newValue
   if (!justification && mc.type === 'RATEIO') {
     try {
       const parsed = JSON.parse(mc.newValue);
       justification = parsed.justification || '';
+      console.log('🔄 manualChangeToDb - Justification extraída do newValue:', justification);
     } catch (e) {
-      // Se falhar parsing, usa string vazia
+      console.warn('⚠️ manualChangeToDb - Falha ao fazer parsing do newValue:', e);
     }
   }
+
+  const finalJustification = justification || 'Sem justificativa';
+  console.log('✅ manualChangeToDb - Justification final:', finalJustification);
 
   return {
     id: mc.id,
@@ -77,7 +87,7 @@ const manualChangeToDb = (mc: ManualChange): DatabaseManualChange => {
     field_changed: mc.fieldChanged || null,
     old_value: mc.oldValue || null,
     new_value: mc.newValue,
-    justification: justification || 'Sem justificativa',  // Garantir que nunca seja vazio
+    justification: finalJustification,  // Garantir que nunca seja vazio
     status: mc.status,
     requested_at: mc.requestedAt,
     requested_by: mc.requestedBy,
