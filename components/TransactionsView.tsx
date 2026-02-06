@@ -792,9 +792,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       partsCount: rateioParts.length
     });
 
-    const newTransactions: Transaction[] = rateioParts.filter(p => p.amount > 0).map((p, idx) => ({
+    const newTransactions: Transaction[] = rateioParts.filter(p => p.amount !== 0).map((p, idx) => ({
       ...rateioTransaction,
-      id: `${rateioTransaction.id}-R${idx}-${Date.now()}`,
+      id: crypto.randomUUID(),
+      chave_id: `${rateioTransaction.chave_id || rateioTransaction.id}-R${idx}`,
       filial: p.filial,
       marca: p.marca,
       date: p.date,

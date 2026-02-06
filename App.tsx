@@ -64,6 +64,13 @@ const App: React.FC = () => {
   const [searchedTransactions, setSearchedTransactions] = useState<Transaction[]>([]);
   const [hasSearchedTransactions, setHasSearchedTransactions] = useState(false);
 
+  // Helper para re-buscar dados do banco após operações de escrita
+  const refreshData = React.useCallback(async () => {
+    if (currentFilters) {
+      await applyFilters(currentFilters);
+    }
+  }, [applyFilters, currentFilters]);
+
   // Loading combinado
   const isLoading = isLoadingTransactions || permissionsLoading;
 
@@ -258,7 +265,7 @@ const App: React.FC = () => {
     const success = await supabaseService.addTransaction(t);
 
     if (success) {
-      setTransactions(prev => [t, ...prev]);
+      await refreshData();
     } else {
       console.error('Erro ao adicionar transação no Supabase');
       alert('Erro ao salvar transação. Tente novamente.');
@@ -275,7 +282,7 @@ const App: React.FC = () => {
       const success = await supabaseService.bulkAddTransactions(filteredNew);
 
       if (success) {
-        setTransactions(prev => [...filteredNew, ...prev]);
+        await refreshData();
       } else {
         console.error('Erro ao importar dados no Supabase');
         alert('Erro ao importar dados. Tente novamente.');
@@ -287,7 +294,7 @@ const App: React.FC = () => {
     const success = await supabaseService.deleteTransaction(id);
 
     if (success) {
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      await refreshData();
     } else {
       console.error('Erro ao deletar transação no Supabase');
       alert('Erro ao deletar transação. Tente novamente.');
@@ -305,11 +312,12 @@ const App: React.FC = () => {
       newValuesKeys: change.newValues ? Object.keys(change.newValues) : []
     });
 
-    const original = transactions.find(t => t.id === change.transactionId);
+    const original = transactions.find(t => t.id === change.transactionId)
+      || searchedTransactions.find(t => t.id === change.transactionId);
     if (!original) {
       console.error('❌ Transação original NÃO ENCONTRADA:', change.transactionId);
-      console.error('❌ Total de transações disponíveis:', transactions.length);
-      console.error('❌ Primeiras 5 IDs:', transactions.slice(0, 5).map(t => t.id));
+      console.error('❌ Total de transações (context):', transactions.length);
+      console.error('❌ Total de transações (searched):', searchedTransactions.length);
       return;
     }
 
@@ -369,7 +377,11 @@ const App: React.FC = () => {
         return updated;
       });
 
-      setTransactions(prev => prev.map(t => t.id === change.transactionId ? { ...t, status: 'Pendente' } : t));
+      // Re-fetch para atualizar o status da transação no Context
+      await refreshData();
+
+      // Navegar para guia de Aprovação
+      setCurrentView('manual_changes');
 
       console.log('✅ Estados locais atualizados com SUCESSO!');
     } else {
@@ -399,29 +411,29 @@ const App: React.FC = () => {
       console.log('📦 Parsed value:', parsedValue);
 
       if (change.type === 'RATEIO') {
-        const newParts = (parsedValue.transactions || (Array.isArray(parsedValue) ? parsedValue : [])) as Transaction[];
-        console.log('✂️ RATEIO: deletando transação original e criando', newParts.length, 'novas');
+        const rawParts = (parsedValue.transactions || (Array.isArray(parsedValue) ? parsedValue : [])) as Transaction[];
+        // Gerar novo id (UUID) e chave_id único para cada part, remover updated_at
+        const newParts = rawParts.map(({ updated_at, id, ...rest }, idx) => ({
+          ...rest,
+          id: crypto.randomUUID(),
+          chave_id: `${rest.chave_id || id}-R${idx}`
+        }));
+        console.log('✂️ RATEIO: criando', newParts.length, 'novas transações');
+        console.log('📦 Primeira part:', JSON.stringify(newParts[0]));
 
-        // Deletar a transação original do Supabase
+        // PRIMEIRO inserir as novas (antes de deletar a original)
+        const bulkResult = await supabaseService.bulkAddTransactions(newParts as any);
+        console.log('➕ Bulk add resultado:', bulkResult);
+
+        // SÓ deletar a original APÓS confirmar que o insert funcionou
         const deleteSuccess = await supabaseService.deleteTransaction(change.transactionId);
         console.log('🗑️ Delete resultado:', deleteSuccess);
-
-        // Adicionar as novas transações no Supabase
-        const bulkSuccess = await supabaseService.bulkAddTransactions(newParts);
-        console.log('➕ Bulk add resultado:', bulkSuccess);
-
-        setTransactions(prev => {
-          const filtered = prev.filter(t => t.id !== change.transactionId);
-          return [...newParts, ...filtered];
-        });
       } else if (change.type === 'EXCLUSAO') {
         console.log('🗑️ EXCLUSAO: deletando transação');
 
         // Deletar a transação do Supabase
         const deleteSuccess = await supabaseService.deleteTransaction(change.transactionId);
         console.log('🗑️ Delete resultado:', deleteSuccess);
-
-        setTransactions(prev => prev.filter(t => t.id !== change.transactionId));
       } else {
         console.log('✏️ Tipo:', change.type, '- atualizando transação');
 
@@ -443,13 +455,6 @@ const App: React.FC = () => {
         if (!updateSuccess) {
           throw new Error('Falha ao atualizar transação no Supabase');
         }
-
-        setTransactions(prev => prev.map(t => {
-          if (t.id === change.transactionId) {
-            return { ...t, ...updatedData, type: updatedData.type || t.type };
-          }
-          return t;
-        }));
       }
 
       // Atualizar o status da mudança
@@ -467,6 +472,9 @@ const App: React.FC = () => {
           ? { ...c, status: 'Aplicado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br', approvedByName: user?.name || 'Usuário Desconhecido' }
           : c
       ));
+
+      // Re-fetch dados do banco para refletir as mudanças
+      await refreshData();
 
       console.log('✅ Aprovação concluída com sucesso!');
     } catch (error) {
@@ -496,8 +504,10 @@ const App: React.FC = () => {
       approvedByName: user?.name || 'Usuário Desconhecido'
     });
 
-    setTransactions(prev => prev.map(t => t.id === change.transactionId ? { ...t, status: 'Normal' } : t));
     setManualChanges(prev => prev.map(c => c.id === changeId ? { ...c, status: 'Reprovado', approvedAt: new Date().toISOString(), approvedBy: user?.email || 'unknown@raizeducacao.com.br', approvedByName: user?.name || 'Usuário Desconhecido' } : c));
+
+    // Re-fetch dados do banco para refletir as mudanças
+    await refreshData();
   };
 
   const clearGlobalFilters = () => {
