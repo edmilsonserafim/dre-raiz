@@ -142,7 +142,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     tag03: [] as string[],
     category: [] as string[],
     ticket: '',
-    chave_id: [] as string[],
+    chave_id: '',
     vendor: '',
     description: '',
     amount: '',
@@ -226,7 +226,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       tag02s: getOptions('tag02'),
       tag03s: getOptions('tag03'),
       categories: getOptions('category'),
-      chave_id: getOptions('chave_id'),
       recurrings: ['Sim', 'Não']
     };
   }, [transactions, colFilters]);
@@ -327,7 +326,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         tag02: colFilters.tag02?.length > 0 ? colFilters.tag02 : undefined,
         tag03: colFilters.tag03?.length > 0 ? colFilters.tag03 : undefined,
         category: colFilters.category?.length > 0 ? colFilters.category : undefined,
-        chave_id: colFilters.chave_id?.length > 0 ? colFilters.chave_id : undefined,
+        chave_id: colFilters.chave_id || undefined,
         recurring: colFilters.recurring?.length > 0 ? colFilters.recurring : undefined,
         ticket: colFilters.ticket || undefined,
         vendor: colFilters.vendor || undefined,
@@ -521,7 +520,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           // IMPORTANTE: NÃO filtrar por período aqui (já foi aplicado no servidor)
           if (key === 'monthFrom' || key === 'monthTo') return true;
 
-          // Filtros de array (marca, filial, tags, category, chave_id, recurring)
+          // Filtros de array (marca, filial, tags, category, recurring)
           const tValue = String(t[key as keyof Transaction] || '');
           if (Array.isArray(value)) {
             // Comparação case-insensitive para campos que podem ter variação de maiúsculas/minúsculas
@@ -838,6 +837,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const isOpen = openDropdown === id;
     const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
     const searchTerm = dropdownSearches[id] || '';
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Filtrar opções baseado no termo de busca
     const filteredOptions = useMemo(() => {
@@ -847,18 +847,28 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       );
     }, [options, searchTerm]);
 
+    // Focar no campo de busca ao abrir
+    useEffect(() => {
+      if (isOpen && searchInputRef.current) {
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+    }, [isOpen]);
+
     return (
       <div className="space-y-0.5 relative multi-select-container">
         <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</label>
         <button
-          onClick={(e) => { e.stopPropagation(); setOpenDropdown(isOpen ? null : id); }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setOpenDropdown(isOpen ? null : id); }}
           className={`w-full flex items-center justify-between border p-1 rounded-none text-[8px] font-black transition-all ${active ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}
         >
           <span className="truncate pr-1 uppercase">{summary}</span>
           <ChevronDown size={8} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
         {isOpen && (
-          <div className="absolute top-full left-0 z-[150] w-[200px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="absolute top-full left-0 z-[150] w-[220px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-50">
               <div className="flex items-center gap-1">
                 <span className="text-[7px] font-black text-gray-400 uppercase">Filtro: {label}</span>
@@ -868,7 +878,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                   </span>
                 )}
               </div>
-              <button onClick={() => setColFilters(prev => ({...prev, [id]: []}))} className="text-[7px] font-black text-rose-500 uppercase hover:underline">Limpar</button>
+              <button onMouseDown={(e) => { e.preventDefault(); setColFilters(prev => ({...prev, [id]: []})); }} className="text-[7px] font-black text-rose-500 uppercase hover:underline">Limpar</button>
             </div>
 
             {/* Campo de busca */}
@@ -876,18 +886,20 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-1.5 py-1 focus-within:border-[#1B75BB] focus-within:ring-1 focus-within:ring-[#1B75BB]">
                 <Search size={10} className="text-gray-400 flex-shrink-0" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setDropdownSearches(prev => ({ ...prev, [id]: e.target.value }))}
-                  onClick={(e) => e.stopPropagation()}
                   className="flex-1 text-[8px] font-bold bg-transparent outline-none"
                 />
                 {searchTerm && (
                   <button
-                    onClick={(e) => {
+                    onMouseDown={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       setDropdownSearches(prev => ({ ...prev, [id]: '' }));
+                      searchInputRef.current?.focus();
                     }}
                     className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                   >
@@ -901,7 +913,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             {filteredOptions.length > 0 && filteredOptions.length < options.length && (
               <div className="mb-1 pb-1 border-b border-gray-50">
                 <button
-                  onClick={() => {
+                  onMouseDown={(e) => {
+                    e.preventDefault();
                     const currentSelected = [...selected];
                     filteredOptions.forEach((opt: string) => {
                       if (!currentSelected.includes(opt)) {
@@ -928,7 +941,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                   return (
                     <button
                       key={opt}
-                      onClick={() => toggleMultiFilter(id, opt)}
+                      onMouseDown={(e) => { e.preventDefault(); toggleMultiFilter(id, opt); }}
                       className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
                     >
                       <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
@@ -1123,7 +1136,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               {/* Segunda linha de filtros */}
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-1.5">
                 <FilterTextInput label="Ticket" id="ticket" value={colFilters.ticket} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
-                <MultiSelectFilter id="chave_id" label="Chave ID" options={dynamicOptions.chave_id} selected={colFilters.chave_id} active={isFilterActive('chave_id')} />
+                <FilterTextInput label="Chave ID" id="chave_id" value={colFilters.chave_id} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Descrição" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-3" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />

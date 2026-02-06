@@ -190,7 +190,7 @@ export interface TransactionFilters {
   tag03?: string[];
   category?: string[];
   ticket?: string;
-  chave_id?: string[];
+  chave_id?: string;
   vendor?: string;
   description?: string;
   amount?: string;
@@ -220,8 +220,25 @@ const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
   if (filters.tag02 && filters.tag02.length > 0) query = query.in('tag02', filters.tag02);
   if (filters.tag03 && filters.tag03.length > 0) query = query.in('tag03', filters.tag03);
   if (filters.category && filters.category.length > 0) query = query.in('category', filters.category);
-  if (filters.chave_id && filters.chave_id.length > 0) query = query.in('chave_id', filters.chave_id);
-  if (filters.recurring && filters.recurring.length > 0) query = query.in('recurring', filters.recurring);
+  if (filters.chave_id && filters.chave_id.trim() !== '') query = query.ilike('chave_id', `%${filters.chave_id.trim()}%`);
+  if (filters.recurring && filters.recurring.length > 0) {
+    // Expandir variações com/sem acento para busca case-insensitive
+    const recurringPatterns: string[] = [];
+    for (const val of filters.recurring) {
+      const lower = val.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (lower === 'sim') {
+        recurringPatterns.push('recurring.ilike.sim', 'recurring.ilike.Sim', 'recurring.ilike.SIM');
+      } else if (lower === 'nao') {
+        recurringPatterns.push(
+          'recurring.ilike.nao', 'recurring.ilike.Nao', 'recurring.ilike.NAO',
+          'recurring.ilike.não', 'recurring.ilike.Não', 'recurring.ilike.NÃO'
+        );
+      } else {
+        recurringPatterns.push(`recurring.ilike.${val}`);
+      }
+    }
+    query = query.or(recurringPatterns.join(','));
+  }
 
   // Filtros de texto (LIKE)
   if (filters.ticket && filters.ticket.trim() !== '') query = query.ilike('ticket', `%${filters.ticket.trim()}%`);
