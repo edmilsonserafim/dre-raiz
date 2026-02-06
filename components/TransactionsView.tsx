@@ -119,16 +119,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const saved = sessionStorage.getItem('transactionsActiveTab');
     return saved ? JSON.parse(saved) : 'real';
   });
-  // Paginação server-side (Virtual Scrolling)
-  const PAGE_SIZE = 500;  // 500 registros por página (scroll infinito)
+  // Paginação server-side
+  const PAGE_SIZE = 1000;
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalPages, setTotalPages] = useState(0);
 
-  // Paginação client-side legada (será removida após virtual scrolling)
-  const [currentPage, setCurrentPage] = useState(1);
-  const RECORDS_PER_PAGE = 1000;
 
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
@@ -321,30 +317,31 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     console.log('🔍 Iniciando busca com filtros:', colFilters);
 
     try {
-      // ESTRATÉGIA DE FILTRAGEM HÍBRIDA:
-      // - Servidor: aplica filtros de PERÍODO e CENÁRIO (para limitar volume de dados)
-      // - Client-side: aplica todos os outros filtros em tempo real (tags, marca, filial, etc.)
       const filters: TransactionFilters = {
         monthFrom: colFilters.monthFrom || undefined,
         monthTo: colFilters.monthTo || undefined,
         scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
-        // Todos os outros filtros serão aplicados no client-side
+        marca: colFilters.marca?.length > 0 ? colFilters.marca : undefined,
+        filial: colFilters.filial?.length > 0 ? colFilters.filial : undefined,
+        tag01: colFilters.tag01?.length > 0 ? colFilters.tag01 : undefined,
+        tag02: colFilters.tag02?.length > 0 ? colFilters.tag02 : undefined,
+        tag03: colFilters.tag03?.length > 0 ? colFilters.tag03 : undefined,
+        category: colFilters.category?.length > 0 ? colFilters.category : undefined,
+        chave_id: colFilters.chave_id?.length > 0 ? colFilters.chave_id : undefined,
+        recurring: colFilters.recurring?.length > 0 ? colFilters.recurring : undefined,
+        ticket: colFilters.ticket || undefined,
+        vendor: colFilters.vendor || undefined,
+        description: colFilters.description || undefined,
+        amount: colFilters.amount || undefined,
       };
 
       const pagination: PaginationParams = { pageNumber: page, pageSize: PAGE_SIZE };
 
       const response = await getFilteredTransactions(filters, pagination);
 
-      if (page === 1) {
-        // Nova busca - substitui dados
-        setSearchedTransactions(response.data);
-      } else {
-        // Página adicional - append
-        setSearchedTransactions(prev => [...prev, ...response.data]);
-      }
-
+      setSearchedTransactions(response.data);
       setTotalCount(response.totalCount);
-      setHasMore(response.hasMore);
+      setTotalPages(response.totalPages);
       setCurrentPageNumber(page);
       setHasSearchedTransactions(true);
 
@@ -357,19 +354,16 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     }
   };
 
-  // Função para carregar próxima página (scroll infinito)
-  const loadNextPage = async () => {
-    if (!hasMore || isLoadingMore) return;
+  // Funções de navegação de página
+  const goToNextPage = () => {
+    if (currentPageNumber < totalPages) {
+      handleSearchData(currentPageNumber + 1);
+    }
+  };
 
-    setIsLoadingMore(true);
-    console.log(`📥 Carregando próxima página: ${currentPageNumber + 1}`);
-
-    try {
-      await handleSearchData(currentPageNumber + 1);
-    } catch (error) {
-      console.error('❌ Erro ao carregar próxima página:', error);
-    } finally {
-      setIsLoadingMore(false);
+  const goToPrevPage = () => {
+    if (currentPageNumber > 1) {
+      handleSearchData(currentPageNumber - 1);
     }
   };
 
@@ -472,7 +466,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       // Atualização final
       setSearchedTransactions(allData);
       setTotalCount(allData.length);
-      setHasMore(false);
+      setTotalPages(1);
       setCurrentPageNumber(1);
 
       if (!cancelSearchAllRef.current) {
@@ -556,40 +550,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return filteredAndSorted.reduce((sum, t) => t.type === 'REVENUE' ? sum + t.amount : sum - t.amount, 0);
   }, [filteredAndSorted]);
 
-  // Paginação client-side legada (será removida)
-  const totalPages = Math.ceil(filteredAndSorted.length / RECORDS_PER_PAGE);
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
-    const endIndex = startIndex + RECORDS_PER_PAGE;
-    return filteredAndSorted.slice(startIndex, endIndex);
-  }, [filteredAndSorted, currentPage]);
 
-  // Resetar para página 1 quando filtros ou aba mudar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [colFilters, activeTab]);
-
-  // Scroll infinito (SEM virtual scrolling - renderização normal com paginação server-side)
   const parentRef = useRef<HTMLDivElement>(null);
-
-  // Detectar scroll até o fim para carregar próxima página
-  useEffect(() => {
-    const parent = parentRef.current;
-    if (!parent) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = parent;
-      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 200;
-
-      if (isNearBottom && hasMore && !isLoadingMore && filteredAndSorted.length > 0) {
-        console.log('📥 Scroll infinito: Carregando próxima página...');
-        loadNextPage();
-      }
-    };
-
-    parent.addEventListener('scroll', handleScroll);
-    return () => parent.removeEventListener('scroll', handleScroll);
-  }, [hasMore, isLoadingMore, filteredAndSorted.length]);
 
   // Contadores por aba
   const tabCounts = useMemo(() => {
@@ -1213,73 +1175,47 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
-      {/* Controles de Paginação */}
-      {filteredAndSorted.length > 0 && (
-        <div className="bg-white border border-gray-200 p-2 flex items-center justify-between shadow-sm">
-          {/* Contador à esquerda */}
+
+      {/* Barra de paginação acima da tabela */}
+      {hasSearchedTransactions && filteredAndSorted.length > 0 && (
+        <div className="bg-[#152e55] text-white px-4 py-2 flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
           <div className="flex items-center gap-2">
-            <p className="text-[10px] font-bold text-gray-600">
-              <span className="text-[#1B75BB] font-black">{((currentPage - 1) * RECORDS_PER_PAGE) + 1}</span>-<span className="text-[#1B75BB] font-black">{Math.min(currentPage * RECORDS_PER_PAGE, filteredAndSorted.length)}</span> de{' '}
-              <span className="text-[#1B75BB] font-black">{filteredAndSorted.length.toLocaleString()}</span>
-            </p>
+            <ListOrdered size={14} className="text-[#4AC8F4]" />
+            <span>ITENS: <span className="text-[#4AC8F4]">{filteredAndSorted.length}</span></span>
           </div>
-
-          {/* Controles de navegação à direita - sempre visível */}
           <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-2 py-1 bg-gray-100 text-gray-600 font-black text-[10px] uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                ←
-              </button>
-
-              <div className="flex gap-1">
-                {currentPage > 2 && (
-                  <>
-                    <button onClick={() => setCurrentPage(1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">1</button>
-                    {currentPage > 3 && <span className="px-2 py-1 text-[10px] text-gray-400">...</span>}
-                  </>
-                )}
-
-                {currentPage > 1 && (
-                  <button onClick={() => setCurrentPage(currentPage - 1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
-                    {currentPage - 1}
-                  </button>
-                )}
-
-                <button className="px-2 py-1 text-[10px] font-black bg-[#1B75BB] text-white rounded border border-[#1B75BB]">
-                  {currentPage}
-                </button>
-
-                {currentPage < totalPages && (
-                  <button onClick={() => setCurrentPage(currentPage + 1)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
-                    {currentPage + 1}
-                  </button>
-                )}
-
-                {currentPage < totalPages - 1 && (
-                  <>
-                    {currentPage < totalPages - 2 && <span className="px-2 py-1 text-[10px] text-gray-400">...</span>}
-                    <button onClick={() => setCurrentPage(totalPages)} className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 rounded border border-gray-200">
-                      {totalPages}
-                    </button>
-                  </>
-                )}
+            <Calculator size={14} className="text-[#4AC8F4]" />
+            <span>TOTAL: <span className="text-[#4AC8F4]">R$ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+          </div>
+          {totalPages > 1 && (
+            <>
+              <div className="mx-2 h-4 w-px bg-white/30" />
+              <div className="flex items-center gap-2">
+                <span>TOTAL BD: <span className="text-[#4AC8F4]">{totalCount.toLocaleString()}</span></span>
               </div>
-
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-2 py-1 bg-gray-100 text-gray-600 font-black text-[10px] uppercase rounded-none hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                →
-              </button>
-
-              <span className="text-[10px] text-gray-500 font-bold ml-2">
-                Pág {currentPage}/{totalPages}
-              </span>
-          </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={goToPrevPage}
+                  disabled={currentPageNumber <= 1 || isSearching}
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
+                >
+                  <ArrowLeft size={12} className="inline mr-1" />
+                  ANTERIOR
+                </button>
+                <span className="text-[11px]">
+                  Pg <span className="text-[#4AC8F4] font-bold">{currentPageNumber}</span> de <span className="text-[#4AC8F4] font-bold">{totalPages}</span>
+                </span>
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPageNumber >= totalPages || isSearching}
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
+                >
+                  PRÓXIMA
+                  <ArrowRight size={12} className="inline ml-1" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1398,19 +1334,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             </tbody>
           </table>
 
-          {isLoadingMore && (
-            <div className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 py-4">
-              <div className="flex items-center justify-center gap-3">
-                <Loader2 className="animate-spin text-[#1B75BB]" size={20} />
-                <span className="text-sm font-bold text-gray-700">Carregando mais registros...</span>
-              </div>
-            </div>
-          )}
-
           <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
             <tfoot className="sticky bottom-0 z-50 bg-[#152e55] text-white">
               <tr className="h-10 border-t border-white/20 whitespace-nowrap">
-                <td colSpan={11} className="px-4 text-[10px] font-black uppercase tracking-widest bg-[#152e55]">
+                <td colSpan={14} className="px-4 text-[10px] font-black uppercase tracking-widest bg-[#152e55]">
                   <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
                        <ListOrdered size={14} className="text-[#4AC8F4]" />
@@ -1422,7 +1349,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </div>
                   </div>
                 </td>
-                <td colSpan={3} className="bg-[#152e55]"></td>
               </tr>
             </tfoot>
           </table>

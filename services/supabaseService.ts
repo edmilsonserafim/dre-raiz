@@ -257,8 +257,8 @@ export const getFilteredTransactions = async (
   // Aplicar todos os filtros
   query = applyTransactionFilters(query, filters);
 
-  // Ordenar
-  query = query.order('date', { ascending: false });
+  // Ordenar com desempate por id para paginação estável
+  query = query.order('date', { ascending: false }).order('id', { ascending: true });
 
   // Aplicar paginação se fornecida
   if (pagination) {
