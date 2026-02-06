@@ -155,7 +155,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return saved ? JSON.parse(saved) : initialFilters;
   });
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [dropdownSearches, setDropdownSearches] = useState<Record<string, string>>({});
 
   // Debounced filter setter for text inputs
   const debouncedSetFilter = useMemo(
@@ -183,12 +182,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return () => document.removeEventListener('mousedown', handleGlobalClick);
   }, [openDropdown]);
 
-  // Limpar busca quando dropdown for fechado
-  useEffect(() => {
-    if (!openDropdown) {
-      setDropdownSearches({});
-    }
-  }, [openDropdown]);
 
   const dynamicOptions = useMemo(() => {
     // Gerar opções dinâmicas baseadas nos filtros ativos
@@ -833,131 +826,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return Object.keys(colFilters).filter(key => isFilterActive(key as keyof typeof initialFilters)).length;
   }, [colFilters]);
 
-  const MultiSelectFilter = ({ id, label, options, selected, active }: any) => {
-    const isOpen = openDropdown === id;
-    const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
-    const searchTerm = dropdownSearches[id] || '';
-    const searchInputRef = useRef<HTMLInputElement>(null);
-
-    // Filtrar opções baseado no termo de busca
-    const filteredOptions = useMemo(() => {
-      if (!searchTerm) return options;
-      return options.filter((opt: string) =>
-        opt.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }, [options, searchTerm]);
-
-    // Focar no campo de busca ao abrir
-    useEffect(() => {
-      if (isOpen && searchInputRef.current) {
-        setTimeout(() => searchInputRef.current?.focus(), 50);
-      }
-    }, [isOpen]);
-
-    return (
-      <div className="space-y-0.5 relative multi-select-container">
-        <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</label>
-        <button
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setOpenDropdown(isOpen ? null : id); }}
-          className={`w-full flex items-center justify-between border p-1 rounded-none text-[8px] font-black transition-all ${active ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}
-        >
-          <span className="truncate pr-1 uppercase">{summary}</span>
-          <ChevronDown size={8} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {isOpen && (
-          <div
-            className="absolute top-full left-0 z-[150] w-[220px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-50">
-              <div className="flex items-center gap-1">
-                <span className="text-[7px] font-black text-gray-400 uppercase">Filtro: {label}</span>
-                {searchTerm && (
-                  <span className="text-[7px] font-bold text-[#1B75BB] bg-blue-50 px-1 rounded">
-                    {filteredOptions.length}
-                  </span>
-                )}
-              </div>
-              <button onMouseDown={(e) => { e.preventDefault(); setColFilters(prev => ({...prev, [id]: []})); }} className="text-[7px] font-black text-rose-500 uppercase hover:underline">Limpar</button>
-            </div>
-
-            {/* Campo de busca */}
-            <div className="mb-1.5 relative">
-              <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-1.5 py-1 focus-within:border-[#1B75BB] focus-within:ring-1 focus-within:ring-[#1B75BB]">
-                <Search size={10} className="text-gray-400 flex-shrink-0" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setDropdownSearches(prev => ({ ...prev, [id]: e.target.value }))}
-                  className="flex-1 text-[8px] font-bold bg-transparent outline-none"
-                />
-                {searchTerm && (
-                  <button
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDropdownSearches(prev => ({ ...prev, [id]: '' }));
-                      searchInputRef.current?.focus();
-                    }}
-                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Botão Selecionar Todos os filtrados */}
-            {filteredOptions.length > 0 && filteredOptions.length < options.length && (
-              <div className="mb-1 pb-1 border-b border-gray-50">
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    const currentSelected = [...selected];
-                    filteredOptions.forEach((opt: string) => {
-                      if (!currentSelected.includes(opt)) {
-                        currentSelected.push(opt);
-                      }
-                    });
-                    setColFilters(prev => ({ ...prev, [id]: currentSelected }));
-                  }}
-                  className="w-full px-1.5 py-0.5 text-[7px] font-black text-[#1B75BB] hover:bg-blue-50 rounded-sm transition-colors uppercase"
-                >
-                  Selecionar Resultados ({filteredOptions.length})
-                </button>
-              </div>
-            )}
-
-            <div className="max-h-[200px] overflow-y-auto space-y-0.5 pr-1">
-              {filteredOptions.length === 0 ? (
-                <div className="text-center py-3 text-[8px] text-gray-400 font-bold">
-                  Nenhum resultado encontrado
-                </div>
-              ) : (
-                filteredOptions.map((opt: string) => {
-                  const isChecked = selected.includes(opt);
-                  return (
-                    <button
-                      key={opt}
-                      onMouseDown={(e) => { e.preventDefault(); toggleMultiFilter(id, opt); }}
-                      className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
-                    >
-                      <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
-                        {isChecked ? <CheckSquare size={10} /> : <Square size={10} />}
-                      </div>
-                      <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const DeParaVisualizer = ({ oldValue, newValue, labelFormatter }: any) => {
     const isChanged = oldValue !== newValue;
@@ -1125,12 +993,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <MultiSelectFilter id="tag01" label="Tag01" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} />
-                <MultiSelectFilter id="tag02" label="Tag02" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} />
-                <MultiSelectFilter id="tag03" label="Tag03" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} />
-                <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} />
-                <MultiSelectFilter id="marca" label="Marca" options={dynamicOptions.marcas} selected={colFilters.marca} active={isFilterActive('marca')} />
-                <MultiSelectFilter id="filial" label="Unidade" options={dynamicOptions.filiais} selected={colFilters.filial} active={isFilterActive('filial')} />
+                <MultiSelectFilter id="tag01" label="Tag01" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} isOpen={openDropdown === 'tag01'} onToggle={() => setOpenDropdown(openDropdown === 'tag01' ? null : 'tag01')} onClear={() => setColFilters(prev => ({...prev, tag01: []}))} onToggleItem={(val) => toggleMultiFilter('tag01', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag01: [...new Set([...prev.tag01, ...vals])]}))} />
+                <MultiSelectFilter id="tag02" label="Tag02" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} isOpen={openDropdown === 'tag02'} onToggle={() => setOpenDropdown(openDropdown === 'tag02' ? null : 'tag02')} onClear={() => setColFilters(prev => ({...prev, tag02: []}))} onToggleItem={(val) => toggleMultiFilter('tag02', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag02: [...new Set([...prev.tag02, ...vals])]}))} />
+                <MultiSelectFilter id="tag03" label="Tag03" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} isOpen={openDropdown === 'tag03'} onToggle={() => setOpenDropdown(openDropdown === 'tag03' ? null : 'tag03')} onClear={() => setColFilters(prev => ({...prev, tag03: []}))} onToggleItem={(val) => toggleMultiFilter('tag03', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag03: [...new Set([...prev.tag03, ...vals])]}))} />
+                <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} isOpen={openDropdown === 'category'} onToggle={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')} onClear={() => setColFilters(prev => ({...prev, category: []}))} onToggleItem={(val) => toggleMultiFilter('category', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, category: [...new Set([...prev.category, ...vals])]}))} />
+                <MultiSelectFilter id="marca" label="Marca" options={dynamicOptions.marcas} selected={colFilters.marca} active={isFilterActive('marca')} isOpen={openDropdown === 'marca'} onToggle={() => setOpenDropdown(openDropdown === 'marca' ? null : 'marca')} onClear={() => setColFilters(prev => ({...prev, marca: []}))} onToggleItem={(val) => toggleMultiFilter('marca', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, marca: [...new Set([...prev.marca, ...vals])]}))} />
+                <MultiSelectFilter id="filial" label="Unidade" options={dynamicOptions.filiais} selected={colFilters.filial} active={isFilterActive('filial')} isOpen={openDropdown === 'filial'} onToggle={() => setOpenDropdown(openDropdown === 'filial' ? null : 'filial')} onClear={() => setColFilters(prev => ({...prev, filial: []}))} onToggleItem={(val) => toggleMultiFilter('filial', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, filial: [...new Set([...prev.filial, ...vals])]}))} />
               </div>
 
               {/* Segunda linha de filtros */}
@@ -1140,7 +1008,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <FilterTextInput label="Fornecedor" id="vendor" value={colFilters.vendor} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-2" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Descrição" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-3" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
-                <MultiSelectFilter id="recurring" label="Recorrência" options={dynamicOptions.recurrings} selected={colFilters.recurring} active={isFilterActive('recurring')} />
+                <MultiSelectFilter id="recurring" label="Recorrência" options={dynamicOptions.recurrings} selected={colFilters.recurring} active={isFilterActive('recurring')} isOpen={openDropdown === 'recurring'} onToggle={() => setOpenDropdown(openDropdown === 'recurring' ? null : 'recurring')} onClear={() => setColFilters(prev => ({...prev, recurring: []}))} onToggleItem={(val) => toggleMultiFilter('recurring', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, recurring: [...new Set([...prev.recurring, ...vals])]}))} />
               </div>
            </div>
         </div>
@@ -1602,6 +1470,118 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     </div>
   );
 };
+
+const MultiSelectFilter = React.memo(({ id, label, options, selected, active, isOpen, onToggle, onClear, onToggleItem, onSelectMultiple }: {
+  id: string; label: string; options: string[]; selected: string[]; active: boolean;
+  isOpen: boolean; onToggle: () => void; onClear: () => void; onToggleItem: (val: string) => void; onSelectMultiple: (vals: string[]) => void;
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    return options.filter((opt: string) =>
+      opt.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [options, searchTerm]);
+
+  // Limpar busca ao fechar e focar ao abrir
+  useEffect(() => {
+    if (isOpen) {
+      setSearchTerm('');
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  return (
+    <div className="space-y-0.5 relative multi-select-container">
+      <label className="text-[6.5px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</label>
+      <button
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+        className={`w-full flex items-center justify-between border p-1 rounded-none text-[8px] font-black transition-all ${active ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}
+      >
+        <span className="truncate pr-1 uppercase">{summary}</span>
+        <ChevronDown size={8} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div
+          className="absolute top-full left-0 z-[150] w-[220px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-50">
+            <div className="flex items-center gap-1">
+              <span className="text-[7px] font-black text-gray-400 uppercase">Filtro: {label}</span>
+              {searchTerm && (
+                <span className="text-[7px] font-bold text-[#1B75BB] bg-blue-50 px-1 rounded">
+                  {filteredOptions.length}
+                </span>
+              )}
+            </div>
+            <button onMouseDown={(e) => { e.preventDefault(); onClear(); }} className="text-[7px] font-black text-rose-500 uppercase hover:underline">Limpar</button>
+          </div>
+
+          <div className="mb-1.5 relative">
+            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-1.5 py-1 focus-within:border-[#1B75BB] focus-within:ring-1 focus-within:ring-[#1B75BB]">
+              <Search size={10} className="text-gray-400 flex-shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 text-[8px] font-bold bg-transparent outline-none"
+              />
+              {searchTerm && (
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setSearchTerm(''); searchInputRef.current?.focus(); }}
+                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                >
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {filteredOptions.length > 0 && filteredOptions.length < options.length && (
+            <div className="mb-1 pb-1 border-b border-gray-50">
+              <button
+                onMouseDown={(e) => { e.preventDefault(); onSelectMultiple(filteredOptions); }}
+                className="w-full px-1.5 py-0.5 text-[7px] font-black text-[#1B75BB] hover:bg-blue-50 rounded-sm transition-colors uppercase"
+              >
+                Selecionar Resultados ({filteredOptions.length})
+              </button>
+            </div>
+          )}
+
+          <div className="max-h-[200px] overflow-y-auto space-y-0.5 pr-1">
+            {filteredOptions.length === 0 ? (
+              <div className="text-center py-3 text-[8px] text-gray-400 font-bold">
+                Nenhum resultado encontrado
+              </div>
+            ) : (
+              filteredOptions.map((opt: string) => {
+                const isChecked = selected.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    onMouseDown={(e) => { e.preventDefault(); onToggleItem(opt); }}
+                    className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
+                  >
+                    <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
+                      {isChecked ? <CheckSquare size={10} /> : <Square size={10} />}
+                    </div>
+                    <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 const HeaderCell = ({ label, sortKey, config, setConfig, align = 'left', className = '' }: any) => {
   const isSorted = config.key === sortKey;
