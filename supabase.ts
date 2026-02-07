@@ -34,6 +34,7 @@ export interface DatabaseTransaction {
   vendor?: string | null;
   nat_orc?: string | null;
   chave_id?: string | null;
+  nome_filial?: string | null;
   created_at?: string;
   updated_at?: string;
 }

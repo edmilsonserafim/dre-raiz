@@ -52,6 +52,7 @@ const dbToTransaction = (db: DatabaseTransaction): Transaction => ({
   vendor: db.vendor || undefined,
   nat_orc: db.nat_orc || undefined,
   chave_id: db.chave_id || undefined,
+  nome_filial: db.nome_filial || undefined,
   updated_at: db.updated_at || new Date().toISOString()  // Campo obrigatório para sync
 });
 
@@ -119,6 +120,101 @@ const dbToManualChange = (db: DatabaseManualChange): ManualChange => ({
   originalTransaction: db.original_transaction
 });
 
+// ========== LOOKUP TABLES (Filial + Tags) ==========
+
+export interface FilialOption {
+  cia: string;          // marca
+  filialCodes: string[]; // todos os códigos de filial para esse grupo (vincula com transactions.filial)
+  nomefilial: string;   // nome
+  label: string;        // "CIA - NomeFilial" (pré-computado, unique)
+}
+
+export interface TagRecord {
+  tag1: string;
+  tag2: string;
+  tag3: string;
+}
+
+// Cache em variável do módulo (evita re-fetch desnecessário)
+let cachedFiliais: FilialOption[] | null = null;
+let cachedTagRecords: TagRecord[] | null = null;
+
+export const getFiliais = async (): Promise<FilialOption[]> => {
+  if (cachedFiliais) return cachedFiliais;
+
+  console.log('🏢 Carregando tabela filial...');
+  const { data, error } = await supabase
+    .from('filial')
+    .select('cia, filial, nomefilial')
+    .order('cia', { ascending: true })
+    .order('nomefilial', { ascending: true });
+
+  if (error) {
+    console.error('❌ Erro ao carregar filiais:', error);
+    return [];
+  }
+
+  // Agrupar por cia+nomefilial (label) → coletar todos os códigos de filial do grupo
+  const groupMap = new Map<string, FilialOption>();
+  for (const row of data || []) {
+    const cia = row.cia || '';
+    const nomefilial = row.nomefilial || '';
+    const filialCode = row.filial || '';
+    const label = `${cia} - ${nomefilial}`;
+
+    if (!filialCode) continue;
+
+    const existing = groupMap.get(label);
+    if (existing) {
+      if (!existing.filialCodes.includes(filialCode)) {
+        existing.filialCodes.push(filialCode);
+      }
+    } else {
+      groupMap.set(label, { cia, filialCodes: [filialCode], nomefilial, label });
+    }
+  }
+  cachedFiliais = Array.from(groupMap.values());
+
+  console.log(`✅ ${cachedFiliais.length} filiais carregadas (agrupadas por cia+nome)`);
+  return cachedFiliais;
+};
+
+export const getTagRecords = async (): Promise<TagRecord[]> => {
+  if (cachedTagRecords) return cachedTagRecords;
+
+  console.log('🏷️ Carregando combinações de tags de transactions...');
+
+  // Buscar DISTINCT tag01/tag02/tag03 direto da tabela transactions
+  // (tabela tags está vazia — os dados vivem em transactions)
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('tag01, tag02, tag03')
+    .not('tag01', 'is', null);
+
+  if (error) {
+    console.error('❌ Erro ao carregar tags:', error);
+    return [];
+  }
+
+  // Extrair combinações únicas
+  const seen = new Set<string>();
+  cachedTagRecords = [];
+  for (const row of data || []) {
+    const key = `${row.tag01 || ''}|${row.tag02 || ''}|${row.tag03 || ''}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      cachedTagRecords.push({
+        tag1: row.tag01 || '',
+        tag2: row.tag02 || '',
+        tag3: row.tag03 || ''
+      });
+    }
+  }
+
+  console.log(`✅ ${cachedTagRecords.length} combinações de tags carregadas`);
+  return cachedTagRecords;
+};
+
 // ========== TRANSACTIONS ==========
 
 export const getAllTransactions = async (monthsBack: number = 3): Promise<Transaction[]> => {
@@ -185,6 +281,7 @@ export interface TransactionFilters {
   monthTo?: string;        // YYYY-MM
   marca?: string[];
   filial?: string[];
+  nome_filial?: string[];  // "CIA - NomeFilial" (coluna calculada no banco)
   tag01?: string[];
   tag02?: string[];
   tag03?: string[];
@@ -216,6 +313,7 @@ const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
   // Filtros de array (marca, filial, tags, category, etc)
   if (filters.marca && filters.marca.length > 0) query = query.in('marca', filters.marca);
   if (filters.filial && filters.filial.length > 0) query = query.in('filial', filters.filial);
+  if (filters.nome_filial && filters.nome_filial.length > 0) query = query.in('nome_filial', filters.nome_filial);
   if (filters.tag01 && filters.tag01.length > 0) query = query.in('tag01', filters.tag01);
   if (filters.tag02 && filters.tag02.length > 0) query = query.in('tag02', filters.tag02);
   if (filters.tag03 && filters.tag03.length > 0) query = query.in('tag03', filters.tag03);
@@ -262,6 +360,7 @@ export const getFilteredTransactions = async (
   pagination?: PaginationParams
 ): Promise<PaginatedResponse<Transaction>> => {
   console.log('🔍 Buscando transações com filtros:', filters);
+
   if (pagination) {
     console.log(`📄 Paginação: Página ${pagination.pageNumber}, ${pagination.pageSize} registros/página`);
   }

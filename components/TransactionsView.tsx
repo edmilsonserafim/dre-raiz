@@ -26,7 +26,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
-import { getFilteredTransactions, TransactionFilters } from '../services/supabaseService';
+import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord } from '../services/supabaseService';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
 import {
@@ -104,6 +104,21 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchAllProgress, setSearchAllProgress] = useState({ current: 0, total: 0, loaded: 0 });
   const cancelSearchAllRef = useRef(false); // Usar ref para cancelamento funcionar no loop
 
+  // Opções de filtro carregadas do banco (filial + tags)
+  const [filterOptions, setFilterOptions] = useState<{
+    filiais: FilialOption[];
+    marcas: string[];
+    tagRecords: TagRecord[];
+  }>({ filiais: [], marcas: [], tagRecords: [] });
+
+  // Carregar opções de lookup ao montar
+  useEffect(() => {
+    Promise.all([getFiliais(), getTagRecords()]).then(([filiais, tagRecords]) => {
+      const marcas = [...new Set(filiais.map(f => f.cia))].sort();
+      setFilterOptions({ filiais, marcas, tagRecords });
+    });
+  }, []);
+
   const [showFilters, setShowFilters] = useState(true);
   const [isSyncing, setIsSyncing] = useState(initialSyncing);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -136,7 +151,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     monthFrom: '',
     monthTo: '',
     marca: [] as string[],
-    filial: [] as string[],
+    nome_filial: [] as string[],
     tag01: [] as string[],
     tag02: [] as string[],
     tag03: [] as string[],
@@ -183,52 +198,59 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [openDropdown]);
 
 
+  // Cascata: Marca → Filial (usando nome_filial do banco, ex: "CLV - Alfa")
+  const filteredFilialLabels = useMemo(() => {
+    let filiais = filterOptions.filiais;
+    if (colFilters.marca?.length > 0)
+      filiais = filiais.filter(f => colFilters.marca.includes(f.cia));
+    return [...new Set(filiais.map(f => f.label))].sort();
+  }, [filterOptions.filiais, colFilters.marca]);
+
+  // Tag1 (todos os distintos do banco)
+  const tag1Options = useMemo(() =>
+    [...new Set(filterOptions.tagRecords.map(r => r.tag1).filter(Boolean))].sort()
+  , [filterOptions.tagRecords]);
+
+  // Cascata: Tag1 → Tag2
+  const tag2Options = useMemo(() => {
+    let records = filterOptions.tagRecords;
+    if (colFilters.tag01?.length > 0)
+      records = records.filter(r => colFilters.tag01.includes(r.tag1));
+    return [...new Set(records.map(r => r.tag2).filter(Boolean))].sort();
+  }, [filterOptions.tagRecords, colFilters.tag01]);
+
+  // Cascata: Tag1 + Tag2 → Tag3
+  const tag3Options = useMemo(() => {
+    let records = filterOptions.tagRecords;
+    if (colFilters.tag01?.length > 0)
+      records = records.filter(r => colFilters.tag01.includes(r.tag1));
+    if (colFilters.tag02?.length > 0)
+      records = records.filter(r => colFilters.tag02.includes(r.tag2));
+    return [...new Set(records.map(r => r.tag3).filter(Boolean))].sort();
+  }, [filterOptions.tagRecords, colFilters.tag01, colFilters.tag02]);
+
+  // Categories e recurrings mantêm comportamento atual (extraídos dos dados carregados)
   const dynamicOptions = useMemo(() => {
-    // Gerar opções dinâmicas baseadas nos filtros ativos
-    // Mostra apenas as opções relevantes considerando os outros filtros
     const getOptions = (field: keyof Transaction) => {
-      const filtered = transactions.filter(t => {
-        return Object.entries(colFilters).every(([key, value]) => {
-          // Não filtrar pelo próprio campo que estamos gerando opções
-          if (key === field) return true;
-
-          // Ignorar filtros vazios
-          if (!value || (Array.isArray(value) && value.length === 0)) return true;
-
-          // Ignorar filtros de período (já aplicados no servidor)
-          if (key === 'monthFrom' || key === 'monthTo') return true;
-
-          // Filtros de array
-          const tValue = String(t[key as keyof Transaction] || '');
-          if (Array.isArray(value)) {
-            return value.includes(tValue);
-          }
-
-          // Filtros de texto
-          const filterValue = String(value).toLowerCase();
-          return tValue.toLowerCase().includes(filterValue);
-        });
-      });
-      return Array.from(new Set(filtered.map(t => t[field]).filter(Boolean))).sort() as string[];
+      return Array.from(new Set(transactions.map(t => t[field]).filter(Boolean))).sort() as string[];
     };
-
     return {
-      marcas: getOptions('marca'),
-      filiais: getOptions('filial'),
-      tag01s: getOptions('tag01'),
-      tag02s: getOptions('tag02'),
-      tag03s: getOptions('tag03'),
+      marcas: filterOptions.marcas,
+      filiais: filteredFilialLabels,
+      tag01s: tag1Options,
+      tag02s: tag2Options,
+      tag03s: tag3Options,
       categories: getOptions('category'),
       recurrings: ['Sim', 'Não']
     };
-  }, [transactions, colFilters]);
+  }, [filterOptions.marcas, filteredFilialLabels, tag1Options, tag2Options, tag3Options, transactions]);
 
-  const ALL_BRANDS = useMemo(() => Array.from(new Set(transactions.map(t => t.marca).filter(Boolean))).sort(), [transactions]);
+  const ALL_BRANDS = useMemo(() => filterOptions.marcas, [filterOptions.marcas]);
 
   useEffect(() => {
     if (externalFilters) {
       const formatted = { ...externalFilters };
-      ['marca', 'filial', 'tag01', 'tag02', 'tag03', 'category'].forEach(key => {
+      ['marca', 'nome_filial', 'tag01', 'tag02', 'tag03', 'category'].forEach(key => {
         if (formatted[key] && typeof formatted[key] === 'string' && formatted[key] !== 'all') {
           formatted[key] = [formatted[key]];
         } else if (formatted[key] === 'all' || !formatted[key]) {
@@ -314,7 +336,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         monthTo: colFilters.monthTo || undefined,
         scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
         marca: colFilters.marca?.length > 0 ? colFilters.marca : undefined,
-        filial: colFilters.filial?.length > 0 ? colFilters.filial : undefined,
+        nome_filial: colFilters.nome_filial?.length > 0 ? colFilters.nome_filial : undefined,
         tag01: colFilters.tag01?.length > 0 ? colFilters.tag01 : undefined,
         tag02: colFilters.tag02?.length > 0 ? colFilters.tag02 : undefined,
         tag03: colFilters.tag03?.length > 0 ? colFilters.tag03 : undefined,
@@ -374,7 +396,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         monthTo: colFilters.monthTo || undefined,
         scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
         marca: colFilters.marca && colFilters.marca.length > 0 ? colFilters.marca : undefined,
-        filial: colFilters.filial && colFilters.filial.length > 0 ? colFilters.filial : undefined,
+        nome_filial: colFilters.nome_filial && colFilters.nome_filial.length > 0 ? colFilters.nome_filial : undefined,
         tag01: colFilters.tag01 && colFilters.tag01.length > 0 ? colFilters.tag01 : undefined,
         tag02: colFilters.tag02 && colFilters.tag02.length > 0 ? colFilters.tag02 : undefined,
         tag03: colFilters.tag03 && colFilters.tag03.length > 0 ? colFilters.tag03 : undefined,
@@ -998,7 +1020,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <MultiSelectFilter id="tag03" label="Tag03" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} isOpen={openDropdown === 'tag03'} onToggle={() => setOpenDropdown(openDropdown === 'tag03' ? null : 'tag03')} onClear={() => setColFilters(prev => ({...prev, tag03: []}))} onToggleItem={(val) => toggleMultiFilter('tag03', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag03: [...new Set([...prev.tag03, ...vals])]}))} />
                 <MultiSelectFilter id="category" label="Conta" options={dynamicOptions.categories} selected={colFilters.category} active={isFilterActive('category')} isOpen={openDropdown === 'category'} onToggle={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')} onClear={() => setColFilters(prev => ({...prev, category: []}))} onToggleItem={(val) => toggleMultiFilter('category', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, category: [...new Set([...prev.category, ...vals])]}))} />
                 <MultiSelectFilter id="marca" label="Marca" options={dynamicOptions.marcas} selected={colFilters.marca} active={isFilterActive('marca')} isOpen={openDropdown === 'marca'} onToggle={() => setOpenDropdown(openDropdown === 'marca' ? null : 'marca')} onClear={() => setColFilters(prev => ({...prev, marca: []}))} onToggleItem={(val) => toggleMultiFilter('marca', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, marca: [...new Set([...prev.marca, ...vals])]}))} />
-                <MultiSelectFilter id="filial" label="Unidade" options={dynamicOptions.filiais} selected={colFilters.filial} active={isFilterActive('filial')} isOpen={openDropdown === 'filial'} onToggle={() => setOpenDropdown(openDropdown === 'filial' ? null : 'filial')} onClear={() => setColFilters(prev => ({...prev, filial: []}))} onToggleItem={(val) => toggleMultiFilter('filial', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, filial: [...new Set([...prev.filial, ...vals])]}))} />
+                <MultiSelectFilter id="nome_filial" label="Unidade" options={dynamicOptions.filiais} selected={colFilters.nome_filial} active={isFilterActive('nome_filial')} isOpen={openDropdown === 'nome_filial'} onToggle={() => setOpenDropdown(openDropdown === 'nome_filial' ? null : 'nome_filial')} onClear={() => setColFilters(prev => ({...prev, nome_filial: []}))} onToggleItem={(val) => toggleMultiFilter('nome_filial', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, nome_filial: [...new Set([...prev.nome_filial, ...vals])]}))} />
               </div>
 
               {/* Segunda linha de filtros */}
@@ -1439,8 +1461,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <ul className="list-disc list-inside space-y-1 text-blue-800">
                       {colFilters.monthFrom && <li>Período: {colFilters.monthFrom} a {colFilters.monthTo || 'hoje'}</li>}
                       {colFilters.marca && colFilters.marca.length > 0 && <li>Marca: {colFilters.marca.join(', ')}</li>}
-                      {colFilters.filial && colFilters.filial.length > 0 && <li>Filial: {colFilters.filial.join(', ')}</li>}
-                      {!colFilters.monthFrom && (!colFilters.marca || colFilters.marca.length === 0) && (!colFilters.filial || colFilters.filial.length === 0) && (
+                      {colFilters.nome_filial && colFilters.nome_filial.length > 0 && <li>Filial: {colFilters.nome_filial.join(', ')}</li>}
+                      {!colFilters.monthFrom && (!colFilters.marca || colFilters.marca.length === 0) && (!colFilters.nome_filial || colFilters.nome_filial.length === 0) && (
                         <li className="text-amber-600 font-black">⚠️ Nenhum filtro aplicado!</li>
                       )}
                     </ul>
@@ -1472,19 +1494,33 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 };
 
 const MultiSelectFilter = React.memo(({ id, label, options, selected, active, isOpen, onToggle, onClear, onToggleItem, onSelectMultiple }: {
-  id: string; label: string; options: string[]; selected: string[]; active: boolean;
+  id: string; label: string; options: (string | { value: string; label: string })[]; selected: string[]; active: boolean;
   isOpen: boolean; onToggle: () => void; onClear: () => void; onToggleItem: (val: string) => void; onSelectMultiple: (vals: string[]) => void;
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const summary = selected.length === 0 ? "Todos" : selected.length === 1 ? selected[0] : `${selected.length} Sel.`;
+
+  // Normalizar opções para { value, label }
+  const normalizedOptions = useMemo(() =>
+    options.map(opt => typeof opt === 'string' ? { value: opt, label: opt } : opt)
+  , [options]);
+
+  const summaryLabel = useMemo(() => {
+    if (selected.length === 0) return "Todos";
+    if (selected.length === 1) {
+      const found = normalizedOptions.find(o => o.value === selected[0]);
+      return found ? found.label : selected[0];
+    }
+    return `${selected.length} Sel.`;
+  }, [selected, normalizedOptions]);
 
   const filteredOptions = useMemo(() => {
-    if (!searchTerm) return options;
-    return options.filter((opt: string) =>
-      opt.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!searchTerm) return normalizedOptions;
+    const term = searchTerm.toLowerCase();
+    return normalizedOptions.filter(opt =>
+      opt.label.toLowerCase().includes(term)
     );
-  }, [options, searchTerm]);
+  }, [normalizedOptions, searchTerm]);
 
   // Limpar busca ao fechar e focar ao abrir
   useEffect(() => {
@@ -1501,7 +1537,7 @@ const MultiSelectFilter = React.memo(({ id, label, options, selected, active, is
         onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
         className={`w-full flex items-center justify-between border p-1 rounded-none text-[8px] font-black transition-all ${active ? 'bg-yellow-50 border-yellow-400 shadow-sm' : 'bg-gray-50 border-gray-100'}`}
       >
-        <span className="truncate pr-1 uppercase">{summary}</span>
+        <span className="truncate pr-1 uppercase">{summaryLabel}</span>
         <ChevronDown size={8} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
@@ -1543,10 +1579,10 @@ const MultiSelectFilter = React.memo(({ id, label, options, selected, active, is
             </div>
           </div>
 
-          {filteredOptions.length > 0 && filteredOptions.length < options.length && (
+          {filteredOptions.length > 0 && filteredOptions.length < normalizedOptions.length && (
             <div className="mb-1 pb-1 border-b border-gray-50">
               <button
-                onMouseDown={(e) => { e.preventDefault(); onSelectMultiple(filteredOptions); }}
+                onMouseDown={(e) => { e.preventDefault(); onSelectMultiple(filteredOptions.map(o => o.value)); }}
                 className="w-full px-1.5 py-0.5 text-[7px] font-black text-[#1B75BB] hover:bg-blue-50 rounded-sm transition-colors uppercase"
               >
                 Selecionar Resultados ({filteredOptions.length})
@@ -1560,18 +1596,18 @@ const MultiSelectFilter = React.memo(({ id, label, options, selected, active, is
                 Nenhum resultado encontrado
               </div>
             ) : (
-              filteredOptions.map((opt: string) => {
-                const isChecked = selected.includes(opt);
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt.value);
                 return (
                   <button
-                    key={opt}
-                    onMouseDown={(e) => { e.preventDefault(); onToggleItem(opt); }}
+                    key={opt.value}
+                    onMouseDown={(e) => { e.preventDefault(); onToggleItem(opt.value); }}
                     className={`w-full flex items-center gap-2 px-1.5 py-1 text-left rounded-sm transition-colors ${isChecked ? 'bg-yellow-50/50' : 'hover:bg-gray-50'}`}
                   >
                     <div className={isChecked ? 'text-yellow-600' : 'text-gray-300'}>
                       {isChecked ? <CheckSquare size={10} /> : <Square size={10} />}
                     </div>
-                    <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt}</span>
+                    <span className={`text-[8px] font-bold uppercase truncate ${isChecked ? 'text-yellow-800' : 'text-gray-600'}`}>{opt.label}</span>
                   </button>
                 );
               })

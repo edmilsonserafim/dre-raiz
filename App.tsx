@@ -377,11 +377,10 @@ const App: React.FC = () => {
         return updated;
       });
 
-      // Re-fetch para atualizar o status da transação no Context
-      await refreshData();
-
-      // Navegar para guia de Aprovação
-      setCurrentView('manual_changes');
+      // Atualizar status localmente nos searchedTransactions (sem re-fetch)
+      setSearchedTransactions(prev =>
+        prev.map(t => t.id === change.transactionId ? { ...t, status: 'Pendente' } : t)
+      );
 
       console.log('✅ Estados locais atualizados com SUCESSO!');
     } else {

@@ -29,6 +29,7 @@ export interface Transaction {
   recurring?: string;
   nat_orc?: string;
   chave_id?: string;
+  nome_filial?: string;
   justification?: string;
   updated_at: string;  // Campo obrigatório para optimistic locking e detecção de conflitos
 }
