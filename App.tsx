@@ -14,16 +14,18 @@ import PendingApprovalScreen from './components/PendingApprovalScreen';
 import TestAnalysisPack from './components/TestAnalysisPack';
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
-import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock } from 'lucide-react';
+import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X } from 'lucide-react';
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './contexts/AuthContext';
 import { usePermissions } from './hooks/usePermissions';
+import { useIsMobile } from './hooks/useIsMobile';
 import { TransactionsSyncUI } from './src/components/TransactionsSyncUI';
 import { useTransactions } from './src/hooks/useTransactions';
 
 const App: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, loading: permissionsLoading } = usePermissions();
+  const { isMobile, isTablet, isDesktop } = useIsMobile();
 
   // Hook do TransactionsContext (COM Realtime!)
   const {
@@ -35,6 +37,7 @@ const App: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Filtros Globais (agora arrays para seleção múltipla)
   const [selectedMarca, setSelectedMarca] = useState<string[]>([]);
@@ -611,31 +614,65 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#fcfcfc] overflow-hidden">
-        <div className={`${isSidebarVisible ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden shrink-0`}>
-          <Sidebar
-            currentView={currentView}
-            setCurrentView={setCurrentView}
-            selectedBrand={selectedMarca}
-            pendingCount={pendingApprovalsCount}
-          />
-        </div>
-      <main className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-40 bg-[#fcfcfc] px-6 pt-6 pb-6 mb-6 flex justify-between items-center border-b border-gray-200 shadow-sm">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-all">
-              <PanelLeftOpen size={20} />
-            </button>
+        {/* Sidebar: Desktop = fixa lateral; Mobile/Tablet = drawer overlay */}
+        {isDesktop ? (
+          <div className={`${isSidebarVisible ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden shrink-0`}>
+            <Sidebar
+              currentView={currentView}
+              setCurrentView={setCurrentView}
+              selectedBrand={selectedMarca}
+              pendingCount={pendingApprovalsCount}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Backdrop */}
+            {isDrawerOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-[60] transition-opacity"
+                onClick={() => setIsDrawerOpen(false)}
+              />
+            )}
+            {/* Drawer */}
+            <div className={`fixed inset-y-0 left-0 z-[70] w-64 transform transition-transform duration-300 ${isDrawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+              <Sidebar
+                currentView={currentView}
+                setCurrentView={setCurrentView}
+                selectedBrand={selectedMarca}
+                pendingCount={pendingApprovalsCount}
+                isDrawer={true}
+                onClose={() => setIsDrawerOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+      <main className="flex-1 overflow-y-auto min-w-0">
+        <div className="sticky top-0 z-40 bg-[#fcfcfc] px-3 md:px-4 lg:px-6 pt-3 md:pt-4 lg:pt-6 pb-3 md:pb-4 lg:pb-6 mb-3 md:mb-4 lg:mb-6 flex justify-between items-center border-b border-gray-200 shadow-sm gap-2 flex-wrap">
+          <div className="flex items-center gap-2 lg:gap-4 flex-wrap">
+            {/* Hamburger para mobile/tablet */}
+            {!isDesktop && (
+              <button onClick={() => setIsDrawerOpen(true)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-all">
+                <Menu size={20} />
+              </button>
+            )}
+            {/* Toggle sidebar para desktop */}
+            {isDesktop && (
+              <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-all">
+                <PanelLeftOpen size={20} />
+              </button>
+            )}
             <button onClick={toggleFullscreen} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 flex items-center gap-2 text-xs font-bold transition-all" title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
               {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
 
             {/* Indicador de Permissões Restritas */}
             {hasPermissions && (
-              <div className="flex items-center gap-3 bg-yellow-50 border-2 border-yellow-200 px-4 py-2 rounded-xl">
-                <Lock size={16} className="text-yellow-600" />
-                <div className="flex flex-col">
+              <div className={`flex items-center gap-2 lg:gap-3 bg-yellow-50 border-2 border-yellow-200 px-2 lg:px-4 py-1.5 lg:py-2 rounded-xl ${isMobile ? 'hidden' : ''}`}>
+                <Lock size={16} className="text-yellow-600 shrink-0" />
+                <div className="flex flex-col min-w-0">
                   <span className="text-[9px] font-black text-yellow-900 uppercase tracking-wider">Acesso Restrito</span>
-                  <div className="flex gap-2 text-[10px] font-bold text-yellow-700">
+                  <div className="flex gap-2 text-[10px] font-bold text-yellow-700 flex-wrap">
                     {allowedMarcas.length > 0 && <span>Marcas: {allowedMarcas.join(', ')}</span>}
                     {allowedFiliais.length > 0 && <span>Filiais: {allowedFiliais.join(', ')}</span>}
                     {allowedCategories.length > 0 && <span>Categorias: {allowedCategories.join(', ')}</span>}
@@ -655,7 +692,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="px-6 pb-6">
+        <div className="px-3 md:px-4 lg:px-6 pb-3 md:pb-4 lg:pb-6">
           {currentView === 'dashboard' && (
             <DashboardEnhanced
               kpis={kpis}

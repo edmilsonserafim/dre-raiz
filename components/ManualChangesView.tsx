@@ -322,19 +322,19 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700 pb-8">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="bg-[#1B75BB] text-white p-2.5 rounded-xl shadow-lg">
             <History size={24} />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight leading-none">Aprovações</h2>
+            <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight leading-none">Aprovações</h2>
             <p className="text-gray-500 text-[10px] font-medium mt-1">
               {isAdmin ? 'Gestão de reclassificações financeiras.' : 'Minhas solicitações de aprovação.'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Export Button */}
           <button
             onClick={handleExportCSV}
@@ -468,7 +468,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
 
       <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
         <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-          <table className="w-full text-left table-fixed min-w-0">
+          <table className="w-full text-left table-fixed min-w-[800px]">
             <thead className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm border-b border-gray-100 text-[8px] font-black text-gray-400 uppercase tracking-widest h-12 shadow-sm">
               <tr>
                 <th className="px-4 w-[180px]">Solicitante</th>

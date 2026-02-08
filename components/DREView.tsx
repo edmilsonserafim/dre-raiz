@@ -1059,7 +1059,7 @@ const DREView: React.FC<DREViewProps> = ({
       <div ref={refObj} className="relative">
         <button 
           onClick={() => setOpen(!isOpen)}
-          className={`flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[200px] shadow-sm hover:shadow-md ${isOpen ? `border-${color} ring-4 ring-${color}/10` : isActive ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50' : 'border-gray-100'}`}
+          className={`flex items-center gap-3 bg-white px-3 md:px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[160px] md:min-w-[200px] shadow-sm hover:shadow-md ${isOpen ? `border-${color} ring-4 ring-${color}/10` : isActive ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50' : 'border-gray-100'}`}
         >
           <div className={`p-2 rounded-xl transition-colors ${isActive ? 'bg-yellow-400 text-black' : 'bg-gray-50 text-gray-400'}`}>
             <Icon size={16} />

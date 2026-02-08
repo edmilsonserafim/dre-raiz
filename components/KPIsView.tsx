@@ -146,18 +146,18 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <header className="bg-gray-50 p-4 border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between">
+      <header className="bg-gray-50 p-3 md:p-4 border-b border-gray-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
-              <h2 className="text-xl font-black text-gray-900 tracking-tight">Indicadores e KPIs</h2>
+              <h2 className="text-lg md:text-xl font-black text-gray-900 tracking-tight">Indicadores e KPIs</h2>
             </div>
             <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Métricas operacionais e de consumo detalhadas</p>
           </div>
 
           {/* Comparison Mode and Month Range Filters */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Comparison Mode Selector */}
             <div className="flex items-center gap-2">
               <button

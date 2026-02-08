@@ -872,7 +872,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           </h2>
           <p className="text-gray-500 text-[7px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
            {/* Botão Voltar para DRE - só aparece quando há filtros de drill-down */}
            {externalFilters && onBackToDRE && (
              <button
@@ -954,11 +954,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                  <div className="bg-blue-50 p-1.5 rounded-none text-[#1B75BB]"><Filter size={12}/></div>
                  <h3 className="text-[9px] font-black text-gray-900 uppercase tracking-tighter">Painel de Refinamento Dinâmico</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => handleSearchData()}
                   disabled={isSearching}
-                  className="flex items-center gap-2 px-3 py-2 bg-[#1B75BB] hover:bg-[#152e55] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] md:min-h-0 bg-[#1B75BB] hover:bg-[#152e55] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSearching ? (
                     <>
@@ -975,13 +975,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <button
                   onClick={() => setShowSearchAllModal(true)}
                   disabled={isSearching}
-                  className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] md:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Buscar todos os dados (pode demorar)"
                 >
                   <Download size={14} />
                   Buscar Tudo
                 </button>
-                <button onClick={handleClearAllFilters} className="flex items-center gap-2 px-3 py-2 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95">
+                <button onClick={handleClearAllFilters} className="flex items-center gap-2 px-3 py-2 min-h-[44px] md:min-h-0 bg-[#F44C00] hover:bg-[#d44200] text-white rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-sm active:scale-95">
                   <FilterX size={14} />
                   Limpar Filtros
                 </button>
@@ -1081,7 +1081,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* Barra de paginação acima da tabela */}
       {hasSearchedTransactions && filteredAndSorted.length > 0 && (
-        <div className="bg-[#152e55] text-white px-4 py-2 flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
+        <div className="bg-[#152e55] text-white px-2 md:px-4 py-2 flex items-center gap-3 md:gap-6 text-[10px] font-black uppercase tracking-widest flex-wrap">
           <div className="flex items-center gap-2">
             <ListOrdered size={14} className="text-[#4AC8F4]" />
             <span>ITENS: <span className="text-[#4AC8F4]">{filteredAndSorted.length}</span></span>
@@ -1100,7 +1100,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <button
                   onClick={goToPrevPage}
                   disabled={currentPageNumber <= 1 || isSearching}
-                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
+                  className="px-3 py-1.5 min-h-[44px] md:min-h-0 md:py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
                 >
                   <ArrowLeft size={12} className="inline mr-1" />
                   ANTERIOR
@@ -1111,7 +1111,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <button
                   onClick={goToNextPage}
                   disabled={currentPageNumber >= totalPages || isSearching}
-                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
+                  className="px-3 py-1.5 min-h-[44px] md:min-h-0 md:py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[11px] font-bold"
                 >
                   PRÓXIMA
                   <ArrowRight size={12} className="inline ml-1" />
@@ -1124,7 +1124,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       <div className="bg-white border border-gray-200 overflow-hidden shadow-sm rounded-none">
         <div ref={parentRef} className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-420px)] relative">
-          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
+          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[900px]">
             <thead>
               <tr className="whitespace-nowrap">
                 <HeaderCell label="Cen" sortKey="scenario" config={sortConfig} setConfig={setSortConfig} className="w-[50px]" />
@@ -1237,7 +1237,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             </tbody>
           </table>
 
-          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[1200px]">
+          <table className="w-full border-separate border-spacing-0 text-left table-fixed min-w-[900px]">
             <tfoot className="sticky bottom-0 z-50 bg-[#152e55] text-white">
               <tr className="h-10 border-t border-white/20 whitespace-nowrap">
                 <td colSpan={14} className="px-4 text-[10px] font-black uppercase tracking-widest bg-[#152e55]">
@@ -1260,17 +1260,17 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* --- MODAL DE SOLICITAÇÃO DE AJUSTE --- */}
       {editingTransaction && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden rounded-none">
-            <div className="bg-[#F44C00] p-4 text-white flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-2">
-                 <Edit3 size={18} />
-                 <h3 className="text-sm font-black uppercase">Solicitar Ajuste Operacional: {editingTransaction.ticket || 'AVULSO'}</h3>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white shadow-2xl w-full h-full md:h-[80vh] md:max-w-5xl flex flex-col overflow-hidden rounded-none">
+            <div className="bg-[#F44C00] p-3 md:p-4 text-white flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-2 min-w-0">
+                 <Edit3 size={18} className="shrink-0" />
+                 <h3 className="text-xs md:text-sm font-black uppercase truncate">Solicitar Ajuste: {editingTransaction.ticket || 'AVULSO'}</h3>
                </div>
-               <button onClick={() => setEditingTransaction(null)} className="p-1 hover:bg-white/10 rounded"><X size={20} /></button>
+               <button onClick={() => setEditingTransaction(null)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-white/10 rounded"><X size={20} /></button>
             </div>
-            <div className="flex-1 flex overflow-hidden">
-              <div className="w-1/3 bg-gray-50 p-6 border-r border-gray-100 overflow-y-auto space-y-4">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+              <div className="lg:w-1/3 bg-gray-50 p-4 lg:p-6 border-b lg:border-b-0 lg:border-r border-gray-100 overflow-y-auto space-y-4">
                  <div className="bg-white p-4 border border-gray-100 shadow-sm space-y-2">
                     <p className="text-[8px] font-black text-gray-400 uppercase">Contexto do Lançamento</p>
                     <p className="text-[10px] font-bold text-gray-900 leading-tight">{editingTransaction.description}</p>
@@ -1280,8 +1280,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </div>
                  </div>
               </div>
-              <div className="flex-1 p-8 overflow-y-auto bg-white">
-                 <div className="grid grid-cols-2 gap-6">
+              <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-white">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Competência</label>
@@ -1336,14 +1336,14 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                         disabled={true}
                       />
                     </div>
-                    <div className="col-span-2 space-y-1 pt-4">
+                    <div className="md:col-span-2 space-y-1 pt-4">
                       <label className="text-[8px] font-black text-[#F44C00] uppercase">Justificativa da Solicitação (Obrigatório)</label>
                       <textarea value={editForm.justification} onChange={e => setEditForm({...editForm, justification: e.target.value})} placeholder="Explique o motivo deste ajuste para aprovação da diretoria..." className="w-full border border-gray-200 p-3 text-[10px] font-bold h-32 outline-none focus:border-[#F44C00] bg-gray-50/10" />
                     </div>
                  </div>
-                 <div className="mt-8 flex gap-4">
-                    <button onClick={() => setEditingTransaction(null)} className="flex-1 py-3 bg-gray-100 text-gray-500 font-black text-[10px] uppercase">Cancelar</button>
-                    <button onClick={handleSubmitAjuste} disabled={!editForm.justification.trim()} className="flex-[2] py-3 bg-[#F44C00] text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-50">Enviar p/ Aprovação</button>
+                 <div className="mt-6 md:mt-8 flex gap-3 md:gap-4">
+                    <button onClick={() => setEditingTransaction(null)} className="flex-1 py-3 min-h-[44px] bg-gray-100 text-gray-500 font-black text-[10px] uppercase">Cancelar</button>
+                    <button onClick={handleSubmitAjuste} disabled={!editForm.justification.trim()} className="flex-[2] py-3 min-h-[44px] bg-[#F44C00] text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-50">Enviar p/ Aprovação</button>
                  </div>
               </div>
             </div>
@@ -1353,17 +1353,17 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* --- MODAL DE RATEIO ESTRUTURAL --- */}
       {rateioTransaction && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden rounded-none">
-            <div className="bg-[#1B75BB] p-4 text-white flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-2">
-                 <Split size={18} />
-                 <h3 className="text-sm font-black uppercase">Rateio Estrutural: {rateioTransaction.ticket || 'AVULSO'}</h3>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white shadow-2xl w-full h-full md:h-[80vh] md:max-w-5xl flex flex-col overflow-hidden rounded-none">
+            <div className="bg-[#1B75BB] p-3 md:p-4 text-white flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-2 min-w-0">
+                 <Split size={18} className="shrink-0" />
+                 <h3 className="text-xs md:text-sm font-black uppercase truncate">Rateio Estrutural: {rateioTransaction.ticket || 'AVULSO'}</h3>
                </div>
-               <button onClick={() => setRateioTransaction(null)} className="p-1 hover:bg-white/10 rounded"><X size={20} /></button>
+               <button onClick={() => setRateioTransaction(null)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-white/10 rounded"><X size={20} /></button>
             </div>
-            <div className="flex-1 flex overflow-hidden">
-               <div className="w-1/4 bg-gray-50 p-6 border-r border-gray-100 space-y-4">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+               <div className="lg:w-1/4 bg-gray-50 p-4 lg:p-6 border-b lg:border-b-0 lg:border-r border-gray-100 space-y-4">
                   <div className="bg-white p-4 border border-gray-100 shadow-sm">
                     <p className="text-[8px] font-black text-gray-400 uppercase">Montante Original</p>
                     <p className="text-xl font-black text-gray-900">R$ {rateioTransaction.amount.toLocaleString()}</p>
@@ -1383,10 +1383,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     )}
                   </div>
                </div>
-               <div className="flex-1 p-6 bg-white overflow-y-auto">
+               <div className="flex-1 p-4 md:p-6 bg-white overflow-y-auto">
                   <div className="space-y-2">
                     {rateioParts.map((part) => (
-                      <div key={part.id} className="grid grid-cols-12 gap-2 bg-gray-50 p-2 border border-gray-100 items-center">
+                      <div key={part.id} className="grid grid-cols-6 md:grid-cols-12 gap-2 bg-gray-50 p-2 border border-gray-100 items-center">
                          <div className="col-span-3">
                            <select value={part.filial} onChange={e => updateRateioPart(part.id, { filial: e.target.value })} className="w-full bg-white border border-gray-100 p-1.5 text-[8px] font-black outline-none focus:border-[#1B75BB]">
                              {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
@@ -1422,9 +1422,9 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                        <textarea value={rateioJustification} onChange={e => setRateioJustification(e.target.value)} placeholder="Descreva o critério utilizado para este rateio..." className="w-full border border-gray-100 p-3 text-[10px] font-bold h-24 outline-none focus:border-[#1B75BB] bg-gray-50/20" />
                     </div>
                   </div>
-                  <div className="mt-8 flex gap-4">
-                    <button onClick={() => setRateioTransaction(null)} className="flex-1 py-3 bg-gray-100 text-gray-500 font-black text-[10px] uppercase">Cancelar</button>
-                    <button onClick={handleSubmitRateio} disabled={!isRateioFullyAllocated || !rateioJustification.trim()} className="flex-[2] py-3 bg-[#1B75BB] text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-50">Confirmar Rateio</button>
+                  <div className="mt-6 md:mt-8 flex gap-3 md:gap-4">
+                    <button onClick={() => setRateioTransaction(null)} className="flex-1 py-3 min-h-[44px] bg-gray-100 text-gray-500 font-black text-[10px] uppercase">Cancelar</button>
+                    <button onClick={handleSubmitRateio} disabled={!isRateioFullyAllocated || !rateioJustification.trim()} className="flex-[2] py-3 min-h-[44px] bg-[#1B75BB] text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-50">Confirmar Rateio</button>
                   </div>
                </div>
             </div>
@@ -1435,7 +1435,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       {/* --- MODAL DE CONFIRMAÇÃO "BUSCAR TUDO" --- */}
       {showSearchAllModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-[95vw] md:w-full p-4 md:p-6 animate-in zoom-in-95 duration-200">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-amber-600" />
@@ -1542,7 +1542,7 @@ const MultiSelectFilter = React.memo(({ id, label, options, selected, active, is
       </button>
       {isOpen && (
         <div
-          className="absolute top-full left-0 z-[150] w-[220px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute top-full left-0 z-[150] w-[calc(100vw-2rem)] sm:w-[220px] max-w-[220px] bg-white border border-gray-200 shadow-2xl mt-1 p-2 animate-in fade-in slide-in-from-top-1 duration-150"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-50">

@@ -23,9 +23,11 @@ interface SidebarProps {
   setCurrentView: (view: ViewType) => void;
   selectedBrand: string;
   pendingCount?: number;
+  isDrawer?: boolean;
+  onClose?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selectedBrand, pendingCount = 0 }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selectedBrand, pendingCount = 0, isDrawer = false, onClose }) => {
   const { user, signOut, isAdmin } = useAuth();
 
   const menuItems = [
@@ -42,6 +44,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
     ] : []),
   ];
 
+  const handleNavClick = (viewId: string) => {
+    setCurrentView(viewId as ViewType);
+    if (isDrawer && onClose) {
+      onClose();
+    }
+  };
+
   return (
     <aside className="w-64 bg-white border-r border-gray-200 h-screen sticky top-0 flex flex-col">
       <div className="p-6 flex items-center gap-3">
@@ -53,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
           <span className="text-[10px] font-bold text-[#7AC5BF] uppercase tracking-widest -mt-0.5">educação</span>
         </div>
       </div>
-      
+
       <nav className="flex-1 px-4 space-y-1.5 mt-4 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -61,10 +70,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentView(item.id as ViewType)}
+              onClick={() => handleNavClick(item.id)}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-                isActive 
-                  ? 'bg-[#FFF4ED] text-[#F44C00] font-bold shadow-sm' 
+                isActive
+                  ? 'bg-[#FFF4ED] text-[#F44C00] font-bold shadow-sm'
                   : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >

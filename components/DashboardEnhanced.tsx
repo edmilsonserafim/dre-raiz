@@ -13,8 +13,11 @@ import {
 import { SchoolKPIs, Transaction } from '../types';
 import { BRANCHES } from '../constants';
 import { EChartsOption } from 'echarts';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, ChevronDown, FileSpreadsheet, FileType } from 'lucide-react';
 import { exportDashboardToPPT } from '../services/pptExportService';
+import { exportDashboardToPDF } from '../services/pdfExportService';
+import { exportDashboardToDOCX } from '../services/docxExportService';
+import { generatePresentation, createDRESlides } from '../services/slidePptxService';
 
 interface DashboardEnhancedProps {
   kpis: SchoolKPIs;
@@ -160,7 +163,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
         }
       }
     ],
-    grid: { left: 70, right: 40, top: 60, bottom: 50 }
+    grid: { left: '15%', right: '5%', top: 60, bottom: 50 }
   };
 
   // ============================================
@@ -360,7 +363,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
           }
         }
       ],
-      grid: { left: 70, right: 40, top: 60, bottom: 80 }
+      grid: { left: '15%', right: '5%', top: 60, bottom: 80 }
     };
   }, [branchData, branchMetric, comparisonMode]);
 
@@ -446,28 +449,114 @@ ${branchData.length > 0 ? `- A **${topBranch.branch}** lidera com ${topBranchPer
   // ============================================
   // FUNÇÃO DE EXPORT
   // ============================================
+  const [showExportMenu, setShowExportMenu] = React.useState(false);
+  const [exporting, setExporting] = React.useState('');
+
+  const getFilteredTransactions = () => {
+    let exportTrans = transactions.filter(t => t.scenario === 'Real');
+    if (selectedMarca.length > 0) {
+      exportTrans = exportTrans.filter(t => selectedMarca.includes(t.marca || ''));
+    }
+    if (selectedFilial.length > 0) {
+      exportTrans = exportTrans.filter(t => selectedFilial.includes(t.filial || ''));
+    }
+    return exportTrans;
+  };
+
   const handleExportPPT = async () => {
     try {
-      // Filtrar transações para export
-      let exportTrans = transactions.filter(t => t.scenario === 'Real');
-      if (selectedMarca.length > 0) {
-        exportTrans = exportTrans.filter(t => selectedMarca.includes(t.marca || ''));
-      }
-      if (selectedFilial.length > 0) {
-        exportTrans = exportTrans.filter(t => selectedFilial.includes(t.filial || ''));
-      }
-
+      setExporting('ppt');
+      setShowExportMenu(false);
       await exportDashboardToPPT({
         kpis,
-        transactions: exportTrans,
+        transactions: getFilteredTransactions(),
         selectedBrand: selectedMarca,
         selectedBranch: selectedFilial
       });
-
-      alert('✅ Apresentação exportada com sucesso!');
+      alert('Apresentação PPT exportada com sucesso!');
     } catch (error) {
       console.error('Erro ao exportar PPT:', error);
-      alert('❌ Erro ao exportar apresentação. Verifique o console.');
+      alert('Erro ao exportar apresentação.');
+    } finally {
+      setExporting('');
+    }
+  };
+
+  const handleExportPPTAdvanced = async () => {
+    try {
+      setExporting('ppt-adv');
+      setShowExportMenu(false);
+      const exportTrans = getFilteredTransactions();
+      const slides = createDRESlides(
+        {
+          receita: kpis.totalRevenue,
+          ebitda: kpis.ebitda,
+          margem: kpis.netMargin,
+          alunos: kpis.activeStudents,
+          receitaPorAluno: kpis.revenuePerStudent,
+        },
+        branchData.map(b => ({
+          branch: b.branch,
+          revenue: b.revenue,
+          costs: b.costs,
+          ebitda: b.ebitda,
+          margin: b.margin,
+        })),
+        monthlyData.map(d => ({
+          month: d.name,
+          revenue: d.revenue,
+          ebitda: d.ebitda,
+        })),
+        { title: 'Relatório Executivo DRE RAIZ' }
+      );
+      await generatePresentation(slides, {
+        title: 'Relatório Executivo DRE RAIZ',
+        theme: 'corporate',
+      });
+      alert('Apresentação avançada exportada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao exportar PPT Avançado:', error);
+      alert('Erro ao exportar apresentação avançada.');
+    } finally {
+      setExporting('');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      setExporting('pdf');
+      setShowExportMenu(false);
+      await exportDashboardToPDF({
+        kpis,
+        transactions: getFilteredTransactions(),
+        selectedBrand: selectedMarca,
+        selectedBranch: selectedFilial,
+      });
+      alert('PDF exportado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      alert('Erro ao exportar PDF.');
+    } finally {
+      setExporting('');
+    }
+  };
+
+  const handleExportDOCX = async () => {
+    try {
+      setExporting('docx');
+      setShowExportMenu(false);
+      await exportDashboardToDOCX({
+        kpis,
+        transactions: getFilteredTransactions(),
+        selectedBrand: selectedMarca,
+        selectedBranch: selectedFilial,
+      });
+      alert('DOCX exportado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao exportar DOCX:', error);
+      alert('Erro ao exportar DOCX.');
+    } finally {
+      setExporting('');
     }
   };
 
@@ -487,13 +576,53 @@ ${branchData.length > 0 ? `- A **${topBranch.branch}** lidera com ${topBranchPer
             Visualizações detalhadas e resumo executivo
           </p>
         </div>
-        <button
-          onClick={handleExportPPT}
-          className="flex items-center gap-2 px-4 py-2 bg-[#F44C00] text-white rounded-lg font-bold text-sm hover:bg-[#d43d00] transition-all shadow-lg"
-        >
-          <Download size={16} />
-          Exportar PPT
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={!!exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-[#F44C00] text-white rounded-lg font-bold text-sm hover:bg-[#d43d00] transition-all shadow-lg disabled:opacity-50"
+          >
+            <Download size={16} />
+            {exporting ? 'Exportando...' : 'Exportar'}
+            <ChevronDown size={14} />
+          </button>
+          {showExportMenu && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 min-w-[220px] py-1">
+              <button
+                onClick={handleExportPPTAdvanced}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 text-left text-sm text-gray-700 font-medium"
+              >
+                <FileText size={16} className="text-[#1B75BB]" />
+                PPT Avançado (12 layouts)
+              </button>
+              <button
+                onClick={handleExportPPT}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 text-left text-sm text-gray-700 font-medium"
+              >
+                <FileText size={16} className="text-[#F44C00]" />
+                PPT Simples
+              </button>
+              <div className="border-t border-gray-100 my-1" />
+              <button
+                onClick={handleExportPDF}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-left text-sm text-gray-700 font-medium"
+              >
+                <FileType size={16} className="text-red-600" />
+                Exportar PDF
+              </button>
+              <button
+                onClick={handleExportDOCX}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 text-left text-sm text-gray-700 font-medium"
+              >
+                <FileSpreadsheet size={16} className="text-blue-600" />
+                Exportar DOCX
+              </button>
+            </div>
+          )}
+          {showExportMenu && (
+            <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+          )}
+        </div>
       </div>
 
       {/* Novos Componentes */}

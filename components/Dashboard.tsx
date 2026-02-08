@@ -465,7 +465,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         }
       `}</style>
       <div id="dashboard-wrapper" className="animate-in fade-in duration-500 pb-10">
-      <header className="sticky top-0 z-40 bg-gray-50 -mx-6 px-6 pt-4 pb-4 border-b border-gray-200 shadow-sm">
+      <header className="sticky top-0 z-40 bg-gray-50 -mx-3 md:-mx-4 lg:-mx-6 px-3 md:px-4 lg:px-6 pt-4 pb-4 border-b border-gray-200 shadow-sm">
         <div className="flex flex-col gap-4">
           {/* Título */}
           <div>
@@ -662,7 +662,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Da Receita Bruta até o Resultado Operacional</p>
               </div>
             </div>
-            <div className="h-[400px] w-full relative">
+            <div className="h-[250px] md:h-[350px] lg:h-[400px] w-full relative">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={waterfallData} margin={{top: 50, right: 30, left: 20, bottom: 5}}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
@@ -759,9 +759,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
       {/* Cards Grid - 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
         {/* Target Achievement */}
-        <div className="bg-[#1B75BB] p-5 rounded-xl text-white shadow-lg h-[180px] relative overflow-hidden flex flex-col justify-between group">
+        <div className="bg-[#1B75BB] p-4 md:p-5 rounded-xl text-white shadow-lg min-h-[160px] lg:h-[180px] relative overflow-hidden flex flex-col justify-between group">
           <div className="relative z-10">
             <span className="text-[9px] font-black text-blue-100 uppercase tracking-widest">Atingimento da Meta</span>
             <p className="text-5xl font-black mt-3 leading-none">{((enhancedKpis.ebitda / Math.max(1, enhancedKpis.targetEbitdaValue)) * 100).toFixed(0)}%</p>
@@ -781,7 +781,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Dynamic Performance Status */}
-        <div className={`p-5 rounded-xl shadow-lg h-[180px] flex flex-col justify-center ${
+        <div className={`p-4 md:p-5 rounded-xl shadow-lg min-h-[160px] lg:h-[180px] flex flex-col justify-center ${
           enhancedKpis.isBelowTarget
             ? 'bg-gradient-to-br from-orange-500 to-orange-600'
             : 'bg-gradient-to-br from-teal-500 to-teal-600'
@@ -806,7 +806,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Principais Alertas */}
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm h-[180px] flex flex-col">
+        <div className="bg-white p-4 md:p-5 rounded-xl border border-gray-100 shadow-sm min-h-[160px] lg:h-[180px] flex flex-col">
           <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 flex-shrink-0">
             <AlertCircle size={14} />
             Atenção Necessária
@@ -1066,7 +1066,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     {/* Modal de Detalhamento de Variação */}
     {showVariationDetail && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+        <div className="bg-white rounded-xl shadow-2xl w-[95vw] md:max-w-4xl md:w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
           {/* Header */}
           <div className="sticky top-0 bg-gradient-to-r from-[#1B75BB] to-[#4AC8F4] p-4 rounded-t-xl flex items-center justify-between">
             <div>
@@ -1093,7 +1093,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                 Atingimento da Meta de EBITDA (25%)
               </h4>
-              <div className="grid grid-cols-3 gap-3 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-2">
                 <div>
                   <p className="text-[9px] text-gray-500 font-bold mb-0.5">Meta (25%)</p>
                   <p className="text-base font-black text-gray-900">
@@ -1235,7 +1235,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     {/* Modal de Detalhamento dos Alertas */}
     {showAlertsDetail && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
+        <div className="bg-white rounded-xl shadow-2xl w-[95vw] md:max-w-5xl md:w-full max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
           {/* Header */}
           <div className="bg-gradient-to-r from-[#F44C00] to-[#FF6B35] p-3 rounded-t-xl flex items-center justify-between flex-shrink-0">
             <div>
