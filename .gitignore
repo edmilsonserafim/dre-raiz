@@ -30,3 +30,4 @@ dist-ssr
 *.sw?
 
 .vercel
+registros_com_erro_*.json
