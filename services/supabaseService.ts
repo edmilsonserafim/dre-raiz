@@ -1,5 +1,5 @@
 import { supabase, DatabaseTransaction, DatabaseManualChange } from '../supabase';
-import { Transaction, ManualChange, PaginationParams, PaginatedResponse } from '../types';
+import { Transaction, ManualChange, PaginationParams, PaginatedResponse, ContaContabilOption } from '../types';
 
 // Converter Transaction do app para formato do banco
 // Remove campos que não existem na tabela: ticket, vendor, recurring, justification
@@ -19,6 +19,7 @@ const transactionToDb = (t: Transaction): DatabaseTransaction => {
   // Adicionar campos opcionais apenas se existirem
   if (t.category) dbTransaction.category = t.category;  // Reservado para futuro
   if (t.marca) dbTransaction.marca = t.marca;
+  // tag0 NÃO existe na tabela transactions (resolvido via tag0_map JOIN)
   if (t.tag01) dbTransaction.tag01 = t.tag01;
   if (t.tag02) dbTransaction.tag02 = t.tag02;
   if (t.tag03) dbTransaction.tag03 = t.tag03;
@@ -44,6 +45,7 @@ const dbToTransaction = (db: DatabaseTransaction): Transaction => ({
   status: db.status,
   filial: db.filial,
   marca: db.marca || undefined,
+  tag0: db.tag0 || undefined,
   tag01: db.tag01 || undefined,
   tag02: db.tag02 || undefined,
   tag03: db.tag03 || undefined,
@@ -135,6 +137,53 @@ export interface TagRecord {
   tag3: string;
 }
 
+// ========== TAG0 MAP (tag01 → tag0) ==========
+
+export interface Tag0MapEntry {
+  tag1_norm: string;
+  tag0: string;
+  tag1_raw: string;
+}
+
+let cachedTag0Map: Map<string, string> | null = null;
+
+/**
+ * Carrega tag0_map do Supabase e retorna Map<tag01_normalizado, tag0>
+ * Normaliza: lowercase + trim para matching robusto
+ */
+export const getTag0Map = async (): Promise<Map<string, string>> => {
+  if (cachedTag0Map) return cachedTag0Map;
+
+  console.log('🏷️ Carregando tag0_map...');
+  const { data, error } = await supabase
+    .from('tag0_map')
+    .select('tag1_norm, tag0, tag1_raw');
+
+  if (error) {
+    console.error('❌ Erro ao carregar tag0_map:', error);
+    return new Map();
+  }
+
+  cachedTag0Map = new Map();
+  for (const row of data || []) {
+    // Mapear tanto pela versão normalizada quanto pela raw
+    if (row.tag1_norm) cachedTag0Map.set(row.tag1_norm.toLowerCase().trim(), row.tag0);
+    if (row.tag1_raw) cachedTag0Map.set(row.tag1_raw.toLowerCase().trim(), row.tag0);
+  }
+
+  console.log(`✅ ${cachedTag0Map.size} entradas de tag0_map carregadas`);
+  return cachedTag0Map;
+};
+
+/**
+ * Resolve tag0 a partir de tag01 usando o tag0_map cacheado
+ */
+export const resolveTag0 = (tag01: string | undefined | null, tag0Map: Map<string, string>): string | undefined => {
+  if (!tag01 || tag0Map.size === 0) return undefined;
+  const normalized = tag01.toLowerCase().trim();
+  return tag0Map.get(normalized);
+};
+
 // Cache em variável do módulo (evita re-fetch desnecessário)
 let cachedFiliais: FilialOption[] | null = null;
 let cachedTagRecords: TagRecord[] | null = null;
@@ -215,6 +264,122 @@ export const getTagRecords = async (): Promise<TagRecord[]> => {
   return cachedTagRecords;
 };
 
+// ========== DRE AGGREGATED DATA (RPC) ==========
+
+export interface DRESummaryRow {
+  scenario: string;
+  conta_contabil: string;
+  year_month: string;  // 'YYYY-MM'
+  tag0: string;
+  tag01: string;
+  tipo: string;        // type (REVENUE, FIXED_COST, etc.)
+  total_amount: number;
+  tx_count: number;
+}
+
+export interface DREDimensionRow {
+  dimension_value: string;
+  year_month: string;
+  total_amount: number;
+}
+
+export interface DREFilterOptions {
+  marcas: string[];
+  nome_filiais: string[];
+  tags01: string[];
+}
+
+/**
+ * Buscar resumo DRE agregado no servidor (1 API call, ~500-2000 linhas)
+ * Substitui o carregamento de 119k transações brutas
+ */
+export const getDRESummary = async (params: {
+  monthFrom?: string;
+  monthTo?: string;
+  marcas?: string[];
+  nomeFiliais?: string[];
+  tags01?: string[];
+}): Promise<DRESummaryRow[]> => {
+  console.log('📊 getDRESummary: Buscando dados agregados...', params);
+
+  const { data, error } = await supabase.rpc('get_dre_summary', {
+    p_month_from: params.monthFrom || null,
+    p_month_to: params.monthTo || null,
+    p_marcas: params.marcas && params.marcas.length > 0 ? params.marcas : null,
+    p_nome_filiais: params.nomeFiliais && params.nomeFiliais.length > 0 ? params.nomeFiliais : null,
+    p_tags01: params.tags01 && params.tags01.length > 0 ? params.tags01 : null,
+  });
+
+  if (error) {
+    console.error('❌ Erro ao buscar DRE summary:', error);
+    return [];
+  }
+
+  console.log(`✅ getDRESummary: ${data?.length || 0} linhas agregadas retornadas`);
+  return (data || []) as DRESummaryRow[];
+};
+
+/**
+ * Buscar detalhe por dimensão dinâmica (1 API call, ~50-200 linhas)
+ * Usado quando o usuário expande um drill-down na DRE
+ */
+export const getDREDimension = async (params: {
+  monthFrom?: string;
+  monthTo?: string;
+  contaContabils?: string[];
+  scenario?: string;
+  dimension: string;
+  marcas?: string[];
+  nomeFiliais?: string[];
+  tags01?: string[];
+}): Promise<DREDimensionRow[]> => {
+  console.log('📊 getDREDimension: Buscando dimensão', params.dimension);
+
+  const { data, error } = await supabase.rpc('get_dre_dimension', {
+    p_month_from: params.monthFrom || null,
+    p_month_to: params.monthTo || null,
+    p_conta_contabils: params.contaContabils && params.contaContabils.length > 0 ? params.contaContabils : null,
+    p_scenario: params.scenario || null,
+    p_dimension: params.dimension,
+    p_marcas: params.marcas && params.marcas.length > 0 ? params.marcas : null,
+    p_nome_filiais: params.nomeFiliais && params.nomeFiliais.length > 0 ? params.nomeFiliais : null,
+    p_tags01: params.tags01 && params.tags01.length > 0 ? params.tags01 : null,
+  });
+
+  if (error) {
+    console.error('❌ Erro ao buscar DRE dimension:', error);
+    return [];
+  }
+
+  console.log(`✅ getDREDimension: ${data?.length || 0} linhas retornadas`);
+  return (data || []) as DREDimensionRow[];
+};
+
+/**
+ * Buscar opções de filtro disponíveis (1 API call)
+ * Retorna listas de marcas, filiais e tags01 disponíveis no período
+ */
+export const getDREFilterOptions = async (params: {
+  monthFrom?: string;
+  monthTo?: string;
+}): Promise<DREFilterOptions> => {
+  console.log('📊 getDREFilterOptions: Buscando opções de filtro...');
+
+  const { data, error } = await supabase.rpc('get_dre_filter_options', {
+    p_month_from: params.monthFrom || null,
+    p_month_to: params.monthTo || null,
+  });
+
+  if (error) {
+    console.error('❌ Erro ao buscar opções de filtro DRE:', error);
+    return { marcas: [], nome_filiais: [], tags01: [] };
+  }
+
+  const result = data?.[0] || { marcas: [], nome_filiais: [], tags01: [] };
+  console.log(`✅ getDREFilterOptions: ${result.marcas?.length || 0} marcas, ${result.nome_filiais?.length || 0} filiais, ${result.tags01?.length || 0} tags01`);
+  return result as DREFilterOptions;
+};
+
 // ========== TRANSACTIONS ==========
 
 export const getAllTransactions = async (monthsBack: number = 3): Promise<Transaction[]> => {
@@ -259,15 +424,22 @@ export const getAllTransactions = async (monthsBack: number = 3): Promise<Transa
     });
   }
 
-  const mapped = data.map(dbToTransaction);
+  // Enriquecer com tag0 via tag0_map
+  const tag0Map = await getTag0Map();
+  const mapped = data.map(db => {
+    const t = dbToTransaction(db);
+    if (!t.tag0 && t.tag01) {
+      t.tag0 = resolveTag0(t.tag01, tag0Map);
+    }
+    return t;
+  });
 
   // Debug: Verificar após mapeamento
   if (mapped.length > 0) {
     console.log('🔍 DEBUG - Primeira transação DEPOIS do mapeamento (para o app):', {
       id: mapped[0].id,
-      chave_id: mapped[0].chave_id,
-      ticket: mapped[0].ticket,
-      vendor: mapped[0].vendor,
+      tag0: mapped[0].tag0,
+      tag01: mapped[0].tag01,
       description: mapped[0].description?.substring(0, 50)
     });
   }
@@ -282,16 +454,19 @@ export interface TransactionFilters {
   marca?: string[];
   filial?: string[];
   nome_filial?: string[];  // "CIA - NomeFilial" (coluna calculada no banco)
+  tag0?: string[];
   tag01?: string[];
   tag02?: string[];
   tag03?: string[];
   category?: string[];
+  conta_contabil?: string[];
   ticket?: string;
   chave_id?: string;
   vendor?: string;
   description?: string;
   amount?: string;
   recurring?: string[];
+  status?: string[];
   scenario?: string;       // Para filtrar por aba (Real, Orçamento, etc)
 }
 
@@ -314,10 +489,12 @@ const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
   if (filters.marca && filters.marca.length > 0) query = query.in('marca', filters.marca);
   if (filters.filial && filters.filial.length > 0) query = query.in('filial', filters.filial);
   if (filters.nome_filial && filters.nome_filial.length > 0) query = query.in('nome_filial', filters.nome_filial);
+  // tag0 NÃO existe na tabela (resolvido via tag0_map) — filtro aplicado client-side após fetch
   if (filters.tag01 && filters.tag01.length > 0) query = query.in('tag01', filters.tag01);
   if (filters.tag02 && filters.tag02.length > 0) query = query.in('tag02', filters.tag02);
   if (filters.tag03 && filters.tag03.length > 0) query = query.in('tag03', filters.tag03);
   if (filters.category && filters.category.length > 0) query = query.in('category', filters.category);
+  if (filters.conta_contabil && filters.conta_contabil.length > 0) query = query.in('conta_contabil', filters.conta_contabil);
   if (filters.chave_id && filters.chave_id.trim() !== '') query = query.ilike('chave_id', `%${filters.chave_id.trim()}%`);
   if (filters.recurring && filters.recurring.length > 0) {
     // Expandir variações com/sem acento para busca case-insensitive
@@ -349,8 +526,18 @@ const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
     if (!isNaN(amountValue)) query = query.eq('amount', amountValue);
   }
 
+  // Filtro de status
+  if (filters.status && filters.status.length > 0) query = query.in('status', filters.status);
+
   // Filtro de cenário (aba ativa)
-  if (filters.scenario) query = query.ilike('scenario', filters.scenario);
+  // Real: scenario IS NULL ou 'Real' (DRE usa COALESCE(scenario, 'Real'))
+  if (filters.scenario) {
+    if (filters.scenario === 'Real') {
+      query = query.or('scenario.is.null,scenario.ilike.Real');
+    } else {
+      query = query.ilike('scenario', filters.scenario);
+    }
+  }
 
   return query;
 };
@@ -363,24 +550,17 @@ export const getFilteredTransactions = async (
 
   if (pagination) {
     console.log(`📄 Paginação: Página ${pagination.pageNumber}, ${pagination.pageSize} registros/página`);
-  }
 
-  // Iniciar query com contagem
-  let query = supabase
-    .from('transactions')
-    .select('*', { count: 'exact' });
+    // Iniciar query com contagem
+    let query = supabase
+      .from('transactions')
+      .select('*', { count: 'exact' });
 
-  // Aplicar todos os filtros
-  query = applyTransactionFilters(query, filters);
+    query = applyTransactionFilters(query, filters);
+    query = query.order('date', { ascending: false }).order('id', { ascending: true });
 
-  // Ordenar com desempate por id para paginação estável
-  query = query.order('date', { ascending: false }).order('id', { ascending: true });
-
-  // Aplicar paginação se fornecida
-  if (pagination) {
     const { pageNumber, pageSize } = pagination;
 
-    // Validar parâmetros
     if (pageNumber < 1) {
       console.error('❌ Erro: pageNumber deve ser >= 1');
       return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
@@ -395,53 +575,118 @@ export const getFilteredTransactions = async (
     query = query.range(offset, rangeEnd);
 
     console.log(`📥 Buscando registros ${offset + 1} a ${offset + pageSize} (range: ${offset}-${rangeEnd})...`);
-  } else {
-    // Sem paginação - buscar até 50k (comportamento legado)
-    console.log('⚠️ Sem paginação - buscando até 50k registros (modo legado)');
-    query = query.limit(50000);
-  }
 
-  // Executar query
-  const { data, count, error } = await query;
+    const { data, count, error } = await query;
 
-  if (error) {
-    console.error('❌ Erro ao buscar transações:', error);
-    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
-  }
+    if (error) {
+      console.error('❌ Erro ao buscar transações:', error);
+      return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+    }
 
-  const totalCount = count || 0;
-  console.log(`📊 Total de registros filtrados: ${totalCount}`);
+    const totalCount = count || 0;
+    console.log(`📊 Total de registros filtrados: ${totalCount}`);
 
-  if (!data || data.length === 0) {
-    console.log('⚠️ Nenhuma transação encontrada com os filtros aplicados');
-    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
-  }
+    if (!data || data.length === 0) {
+      return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+    }
 
-  console.log(`✅ ${data.length} transações retornadas nesta página`);
+    const tag0Map = await getTag0Map();
+    const enriched = data.map(db => {
+      const t = dbToTransaction(db);
+      if (!t.tag0 && t.tag01) t.tag0 = resolveTag0(t.tag01, tag0Map);
+      return t;
+    });
 
-  // Preparar resposta paginada
-  if (pagination) {
-    const { pageNumber, pageSize } = pagination;
     const totalPages = Math.ceil(totalCount / pageSize);
-    const hasMore = pageNumber < totalPages;
-
     return {
-      data: data.map(dbToTransaction),
+      data: enriched,
       totalCount,
       currentPage: pageNumber,
       totalPages,
-      hasMore
-    };
-  } else {
-    // Modo legado - retornar como PaginatedResponse mas sem paginação real
-    return {
-      data: data.map(dbToTransaction),
-      totalCount,
-      currentPage: 1,
-      totalPages: 1,
-      hasMore: false
+      hasMore: pageNumber < totalPages
     };
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEM PAGINAÇÃO: Busca em lotes PARALELOS para contornar limite do Supabase
+  // O Supabase tem limite de ~1000 linhas por request (server-side).
+  // Buscamos em lotes de 10000 usando .range(), 6 lotes em paralelo.
+  // ═══════════════════════════════════════════════════════════
+  const BATCH_SIZE = 1000;   // Limite real do Supabase server (max-rows)
+  const PARALLEL_BATCHES = 10; // 10 requests simultâneos
+
+  // Primeiro: obter contagem total
+  let countQuery = supabase
+    .from('transactions')
+    .select('*', { count: 'exact', head: true });
+  countQuery = applyTransactionFilters(countQuery, filters);
+  const { count: totalCountRaw, error: countError } = await countQuery;
+
+  if (countError) {
+    console.error('❌ Erro ao contar transações:', countError);
+    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+  }
+
+  const totalCount = totalCountRaw || 0;
+  console.log(`📊 Total de registros filtrados: ${totalCount}`);
+
+  if (totalCount === 0) {
+    return { data: [], totalCount: 0, currentPage: 1, totalPages: 0, hasMore: false };
+  }
+
+  // Criar todas as promises de lotes
+  const totalBatches = Math.ceil(totalCount / BATCH_SIZE);
+  console.log(`📦 Buscando ${totalCount} registros em ${totalBatches} lotes de ${BATCH_SIZE} (${PARALLEL_BATCHES} em paralelo)...`);
+
+  const fetchBatch = async (batchIdx: number) => {
+    const from = batchIdx * BATCH_SIZE;
+    const to = from + BATCH_SIZE - 1;
+
+    let batchQuery = supabase.from('transactions').select('*');
+    batchQuery = applyTransactionFilters(batchQuery, filters);
+    batchQuery = batchQuery.order('date', { ascending: false }).order('id', { ascending: true });
+    batchQuery = batchQuery.range(from, to);
+
+    const { data, error } = await batchQuery;
+    if (error) {
+      console.error(`❌ Erro no lote ${batchIdx + 1}/${totalBatches}:`, error);
+      return [];
+    }
+    return data || [];
+  };
+
+  // Executar lotes em paralelo (grupos de PARALLEL_BATCHES)
+  const allData: any[] = [];
+  for (let i = 0; i < totalBatches; i += PARALLEL_BATCHES) {
+    const batchIndices = Array.from(
+      { length: Math.min(PARALLEL_BATCHES, totalBatches - i) },
+      (_, j) => i + j
+    );
+
+    const results = await Promise.all(batchIndices.map(fetchBatch));
+    for (const result of results) {
+      allData.push(...result);
+    }
+    console.log(`  ✅ Lotes ${i + 1}-${i + batchIndices.length}/${totalBatches}: acumulado ${allData.length} registros`);
+  }
+
+  console.log(`✅ ${allData.length} transações carregadas de ${totalCount} total`);
+
+  // Enriquecer com tag0
+  const tag0Map = await getTag0Map();
+  const enriched = allData.map(db => {
+    const t = dbToTransaction(db);
+    if (!t.tag0 && t.tag01) t.tag0 = resolveTag0(t.tag01, tag0Map);
+    return t;
+  });
+
+  return {
+    data: enriched,
+    totalCount,
+    currentPage: 1,
+    totalPages: 1,
+    hasMore: false
+  };
 };
 
 export const addTransaction = async (transaction: Omit<Transaction, 'id'>): Promise<Transaction> => {
@@ -806,7 +1051,7 @@ export const getUserPermissions = async (userId: string) => {
   return data;
 };
 
-export const addUserPermission = async (userId: string, permissionType: 'centro_custo' | 'cia' | 'filial', permissionValue: string) => {
+export const addUserPermission = async (userId: string, permissionType: 'centro_custo' | 'cia' | 'filial' | 'tag01' | 'tag02' | 'tag03', permissionValue: string) => {
   const { error } = await supabase
     .from('user_permissions')
     .insert([{
@@ -1122,4 +1367,74 @@ const shouldIncludeTransaction = (
   }
 
   return true;
+};
+
+// ============================================
+// Conta Contábil - Hierarquia
+// ============================================
+
+let contaContabilCache: ContaContabilOption[] | null = null;
+
+export const getContaContabilOptions = async (): Promise<ContaContabilOption[]> => {
+  if (contaContabilCache && contaContabilCache.length > 0) return contaContabilCache;
+
+  // Estratégia: tentar tabela conta_contabil primeiro (tem nome_nat_orc correto)
+  // Se não existir, fallback para DISTINCT de transactions
+  try {
+    // 1) Tentar tabela conta_contabil (plano de contas com nomes corretos)
+    console.log('📋 Tentando tabela conta_contabil...');
+    const { data: ccData, error: ccError } = await supabase
+      .from('conta_contabil')
+      .select('cod_conta, tag1, tag2, tag3, tag4, nome_nat_orc, nat_orc')
+      .order('cod_conta', { ascending: true });
+
+    if (!ccError && ccData && ccData.length > 0) {
+      console.log(`✅ Tabela conta_contabil encontrada com ${ccData.length} registros`);
+      contaContabilCache = ccData.map(row => ({
+        cod_conta: row.cod_conta,
+        nome_nat_orc: row.nome_nat_orc || row.nat_orc || null,
+        tag0: row.tag1 || null,
+        tag01: row.tag2 || null,
+        tag02: row.tag3 || null,
+        tag03: row.tag4 || null,
+      }));
+      return contaContabilCache;
+    }
+
+    // 2) Fallback: buscar DISTINCT de transactions
+    console.log('📋 Fallback: carregando contas de transactions...');
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('conta_contabil, nat_orc, tag01, tag02, tag03')
+      .not('conta_contabil', 'is', null);
+
+    if (error) {
+      console.error('❌ Erro ao buscar contas:', error.message);
+      return [];
+    }
+
+    const tag0Map = await getTag0Map();
+
+    const contaMap = new Map<string, ContaContabilOption>();
+    for (const row of data || []) {
+      const cod = row.conta_contabil;
+      if (!cod || contaMap.has(cod)) continue;
+      contaMap.set(cod, {
+        cod_conta: cod,
+        nome_nat_orc: row.tag03 || null,
+        tag0: resolveTag0(row.tag01, tag0Map) || null,
+        tag01: row.tag01 || null,
+        tag02: row.tag02 || null,
+        tag03: row.tag03 || null,
+      });
+    }
+
+    contaContabilCache = Array.from(contaMap.values()).sort((a, b) => a.cod_conta.localeCompare(b.cod_conta));
+    console.log(`✅ ${contaContabilCache.length} contas únicas carregadas (fallback transactions)`);
+
+    return contaContabilCache;
+  } catch (e) {
+    console.error('❌ EXCEPTION:', e);
+    return [];
+  }
 };
