@@ -28,7 +28,7 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
     return transactions.filter(t => {
-      const month = new Date(t.date).getMonth();
+      const month = parseInt(t.date.substring(5, 7), 10) - 1;
       return month >= selectedMonthStart && month <= selectedMonthEnd;
     });
   }, [transactions, selectedMonthStart, selectedMonthEnd]);

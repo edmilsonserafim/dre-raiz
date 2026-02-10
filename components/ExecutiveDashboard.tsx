@@ -150,7 +150,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
     const real = transactions.filter(t => t.scenario === 'Real');
 
     return months.map((month, idx) => {
-      const monthTrans = real.filter(t => new Date(t.date).getMonth() === idx);
+      const monthTrans = real.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === idx);
       const revenue = monthTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const costs = monthTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const ebitda = revenue - costs;

@@ -64,7 +64,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
     return transactions.filter(t => {
-      const month = new Date(t.date).getMonth();
+      const month = parseInt(t.date.substring(5, 7), 10) - 1;
       return month >= selectedMonthStart && month <= selectedMonthEnd;
     });
   }, [transactions, selectedMonthStart, selectedMonthEnd]);
@@ -378,7 +378,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
 
       // Usar filteredByMonth que já aplica os filtros de data, marca e unidade
-      let monthTransactions = filteredByMonth.filter(t => new Date(t.date).getMonth() === idx && t.scenario === 'Real');
+      let monthTransactions = filteredByMonth.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === idx && t.scenario === 'Real');
       const revenue = monthTransactions.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const variableCosts = monthTransactions.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
       const fixedCosts = monthTransactions.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);

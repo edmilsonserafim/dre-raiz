@@ -46,7 +46,7 @@ const XDREView: React.FC<XDREViewProps> = ({ transactions, onDrillDown }) => {
       const scenario = (t.scenario as 'Real' | 'Orçado' | 'A-1') || 'Real';
       let colKey = '';
       if (pivot === 'month') {
-        colKey = months[new Date(t.date).getMonth()];
+        colKey = months[parseInt(t.date.substring(5, 7), 10) - 1];
       } else {
         colKey = (t[pivot] as string) || 'Não Classificado';
       }

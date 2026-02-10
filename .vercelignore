@@ -1,0 +1,26 @@
+node_modules
+dist
+.git
+*.log
+.env
+.env.local
+.env.*.local
+nul
+
+# Data files (large)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.*.json
+!vercel.json
+!*.config.json
+
+# Large files
+*.xlsx
+*.pdf
+*.pptx
+Modelo PPT
+agentes-versao-definitiva.md
+guia-slides-graficos-raiz.md
+*.txt

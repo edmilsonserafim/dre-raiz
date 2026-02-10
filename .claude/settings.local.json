@@ -25,7 +25,23 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Implementar Virtual Scrolling com Server-Side Pagination e Buscar Tudo\n\nFuncionalidades implementadas:\n- Virtual scrolling substituído por scroll infinito com paginação server-side \\(500 registros/página\\)\n- Botão \"Buscar Tudo\" com modal de confirmação e todos os filtros aplicados\n- Barra de progresso visual com porcentagem e contador de páginas\n- Botão de cancelamento durante busca \\(usando useRef para closure\\)\n- Aplicação de TODOS os 14 filtros no servidor \\(período, marca, filial, tags, categoria, etc\\)\n- Atualização incremental da UI \\(a cada 5 páginas\\)\n- Logs detalhados de progresso no console\n- Limite de segurança \\(150 páginas = 150k registros\\)\n\nPerformance:\n- Loading inicial: 10-15s → ~0.5s \\(primeira página\\)\n- Memória: 500MB → ~50-100MB\n- Scroll: 20-30 FPS → 60 FPS\n- Suporte ilimitado de registros \\(114k+\\)\n\nArquivos modificados:\n- components/TransactionsView.tsx: Scroll infinito, buscar tudo, barra de progresso\n- services/supabaseService.ts: Paginação server-side com todos os filtros\n- types.ts: PaginationParams e PaginatedResponse\n- package.json: Remoção de @tanstack/react-virtual\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Corrigir funcionalidade de ajustes e rateios + campo chave_id\n\nCorreções aplicadas:\n\n1. Campo chave_id desabilitado \\(não pode mais ser editado\\)\n   - Adicionado disabled={true} no input de chave_id\n\n2. Campo justification agora enviado corretamente\n   - handleSubmitAjuste: Adiciona justification: editForm.justification\n   - handleSubmitRateio: Adiciona justification: rateioJustification\n   - Antes enviava apenas description, causando falha no INSERT\n\n3. Coluna approved_by_name adicionada ao schema\n   - Interface TypeScript tinha o campo mas banco não tinha a coluna\n   - Causava falha silenciosa no INSERT de ManualChange\n   - Criada migração SQL: migrations/add_approved_by_name_column.sql\n\n4. Logs detalhados adicionados\n   - App.tsx: handleRequestChange com logs\n   - supabaseService.ts: manualChangeToDb com logs de justification\n\nArquivos modificados:\n- components/TransactionsView.tsx \\(chave_id + justification\\)\n- App.tsx \\(logs de debugging\\)\n- services/supabaseService.ts \\(logs\\)\n- schema.sql \\(approved_by_name\\)\n- migrations/add_approved_by_name_column.sql \\(NOVO\\)\n- INVESTIGACAO_APROVACOES.md \\(NOVO - relatório completo\\)\n\n⚠️ AÇÃO NECESSÁRIA: Execute a migração SQL no Supabase:\nALTER TABLE manual_changes ADD COLUMN IF NOT EXISTS approved_by_name TEXT;\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(node -e:*)",
+      "Bash(npx vite build)",
+      "Bash(npx vite --port 5173)",
+      "WebFetch(domain:localhost)",
+      "Bash(findstr:*)",
+      "Bash(npx vercel:*)",
+      "Bash(git push:*)",
+      "Bash(du:*)",
+      "Bash(set NODE_OPTIONS=--max-old-space-size=4096)",
+      "Bash(done)",
+      "Bash(set NODE_OPTIONS=--max-old-space-size=8192)",
+      "Bash(where:*)",
+      "Bash(ping:*)",
+      "Bash(find:*)"
     ]
   }
 }

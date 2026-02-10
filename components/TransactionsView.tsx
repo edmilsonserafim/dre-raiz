@@ -24,9 +24,10 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams } from '../types';
+import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams, ContaContabilOption } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
-import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord } from '../services/supabaseService';
+import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions } from '../services/supabaseService';
+import ContaContabilSelector from './ContaContabilSelector';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
 import {
@@ -103,6 +104,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [showSearchAllModal, setShowSearchAllModal] = useState(false);
   const [searchAllProgress, setSearchAllProgress] = useState({ current: 0, total: 0, loaded: 0 });
   const cancelSearchAllRef = useRef(false); // Usar ref para cancelamento funcionar no loop
+  const [autoSearchTrigger, setAutoSearchTrigger] = useState(0); // Trigger para auto-busca após drill-down
 
   // Opções de filtro carregadas do banco (filial + tags)
   const [filterOptions, setFilterOptions] = useState<{
@@ -144,7 +146,9 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const filterContainerRef = useRef<HTMLDivElement>(null);
 
   const [rateioParts, setRateioParts] = useState<RateioPart[]>([]);
-  const [editForm, setEditForm] = useState({ category: '', date: '', filial: '', marca: '', justification: '', amount: 0, recurring: 'Sim', chave_id: '' });
+  const [editForm, setEditForm] = useState({ category: '', categoryLabel: '', date: '', filial: '', marca: '', justification: '', amount: 0, recurring: 'Sim', chave_id: '', tag01: '', tag02: '', tag03: '', nat_orc: '' });
+  const [contaSelectorOpen, setContaSelectorOpen] = useState(false);
+  const [contaContabilData, setContaContabilData] = useState<ContaContabilOption[]>([]);
   const [rateioJustification, setRateioJustification] = useState('');
 
   const initialFilters = {
@@ -152,22 +156,25 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     monthTo: '',
     marca: [] as string[],
     nome_filial: [] as string[],
+    tag0: [] as string[],
     tag01: [] as string[],
     tag02: [] as string[],
     tag03: [] as string[],
     category: [] as string[],
+    conta_contabil: [] as string[],
     ticket: '',
     chave_id: '',
     vendor: '',
     description: '',
     amount: '',
-    recurring: ['Sim'] as string[]  // Filtro padrão: apenas "Sim"
+    recurring: ['Sim'] as string[],  // Filtro padrão: apenas "Sim"
+    status: [] as string[]
   };
 
   const [colFilters, setColFilters] = useState(() => {
-    // Carregar filtros salvos do sessionStorage
+    // Carregar filtros salvos do sessionStorage (merge com defaults para evitar campos undefined)
     const saved = sessionStorage.getItem('transactionsColFilters');
-    return saved ? JSON.parse(saved) : initialFilters;
+    return saved ? { ...initialFilters, ...JSON.parse(saved) } : initialFilters;
   });
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -206,6 +213,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return [...new Set(filiais.map(f => f.label))].sort();
   }, [filterOptions.filiais, colFilters.marca]);
 
+  // Tag0 (distintos direto das transactions)
+  const tag0Options = useMemo(() =>
+    [...new Set(transactions.map(t => t.tag0).filter(Boolean))].sort() as string[]
+  , [transactions]);
+
   // Tag1 (todos os distintos do banco)
   const tag1Options = useMemo(() =>
     [...new Set(filterOptions.tagRecords.map(r => r.tag1).filter(Boolean))].sort()
@@ -237,20 +249,22 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return {
       marcas: filterOptions.marcas,
       filiais: filteredFilialLabels,
+      tag0s: tag0Options,
       tag01s: tag1Options,
       tag02s: tag2Options,
       tag03s: tag3Options,
       categories: getOptions('category'),
-      recurrings: ['Sim', 'Não']
+      recurrings: ['Sim', 'Não'],
+      statuses: ['Normal', 'Pendente', 'Ajustado', 'Rateado', 'Excluído']
     };
-  }, [filterOptions.marcas, filteredFilialLabels, tag1Options, tag2Options, tag3Options, transactions]);
+  }, [filterOptions.marcas, filteredFilialLabels, tag0Options, tag1Options, tag2Options, tag3Options, transactions]);
 
   const ALL_BRANDS = useMemo(() => filterOptions.marcas, [filterOptions.marcas]);
 
   useEffect(() => {
     if (externalFilters) {
       const formatted = { ...externalFilters };
-      ['marca', 'nome_filial', 'tag01', 'tag02', 'tag03', 'category'].forEach(key => {
+      ['marca', 'nome_filial', 'tag0', 'tag01', 'tag02', 'tag03', 'category', 'conta_contabil'].forEach(key => {
         if (formatted[key] && typeof formatted[key] === 'string' && formatted[key] !== 'all') {
           formatted[key] = [formatted[key]];
         } else if (formatted[key] === 'all' || !formatted[key]) {
@@ -259,6 +273,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       });
       setColFilters(prev => ({ ...prev, ...formatted }));
       setShowFilters(true);
+      // Trigger auto-search: batched com setColFilters, garante que roda após atualização
+      setAutoSearchTrigger(prev => prev + 1);
     }
   }, [externalFilters]);
 
@@ -283,14 +299,19 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   useEffect(() => {
     if (editingTransaction) {
       setEditForm({
-        category: editingTransaction.category,
+        category: editingTransaction.conta_contabil || editingTransaction.category || '',
+        categoryLabel: editingTransaction.conta_contabil || editingTransaction.category || '',
         date: editingTransaction.date,
         filial: editingTransaction.filial,
         marca: editingTransaction.marca || 'SAP',
         justification: '',
         amount: editingTransaction.amount,
         recurring: editingTransaction.recurring || 'Sim',
-        chave_id: editingTransaction.chave_id || ''
+        chave_id: editingTransaction.chave_id || '',
+        tag01: editingTransaction.tag01 || '',
+        tag02: editingTransaction.tag02 || '',
+        tag03: editingTransaction.tag03 || '',
+        nat_orc: editingTransaction.nat_orc || ''
       });
     }
   }, [editingTransaction]);
@@ -337,12 +358,15 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
         marca: colFilters.marca?.length > 0 ? colFilters.marca : undefined,
         nome_filial: colFilters.nome_filial?.length > 0 ? colFilters.nome_filial : undefined,
+        tag0: colFilters.tag0?.length > 0 ? colFilters.tag0 : undefined,
         tag01: colFilters.tag01?.length > 0 ? colFilters.tag01 : undefined,
         tag02: colFilters.tag02?.length > 0 ? colFilters.tag02 : undefined,
         tag03: colFilters.tag03?.length > 0 ? colFilters.tag03 : undefined,
         category: colFilters.category?.length > 0 ? colFilters.category : undefined,
+        conta_contabil: colFilters.conta_contabil?.length > 0 ? colFilters.conta_contabil : undefined,
         chave_id: colFilters.chave_id || undefined,
         recurring: colFilters.recurring?.length > 0 ? colFilters.recurring : undefined,
+        status: colFilters.status?.length > 0 ? colFilters.status : undefined,
         ticket: colFilters.ticket || undefined,
         vendor: colFilters.vendor || undefined,
         description: colFilters.description || undefined,
@@ -381,6 +405,15 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     }
   };
 
+  // Auto-busca após drill-down da DRE
+  // autoSearchTrigger é batched com setColFilters/setActiveTab, então quando este
+  // effect roda, colFilters e activeTab já estão atualizados nesta renderização
+  useEffect(() => {
+    if (autoSearchTrigger > 0) {
+      handleSearchData(1);
+    }
+  }, [autoSearchTrigger]);
+
   // Função para buscar TODOS os dados (loop paginado com progresso)
   const handleSearchAll = async () => {
     setShowSearchAllModal(false);
@@ -397,6 +430,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         scenario: activeTab === 'real' ? 'Real' : activeTab === 'orcamento' ? 'Orçamento' : undefined,
         marca: colFilters.marca && colFilters.marca.length > 0 ? colFilters.marca : undefined,
         nome_filial: colFilters.nome_filial && colFilters.nome_filial.length > 0 ? colFilters.nome_filial : undefined,
+        tag0: colFilters.tag0 && colFilters.tag0.length > 0 ? colFilters.tag0 : undefined,
         tag01: colFilters.tag01 && colFilters.tag01.length > 0 ? colFilters.tag01 : undefined,
         tag02: colFilters.tag02 && colFilters.tag02.length > 0 ? colFilters.tag02 : undefined,
         tag03: colFilters.tag03 && colFilters.tag03.length > 0 ? colFilters.tag03 : undefined,
@@ -639,10 +673,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [filteredAndSorted, transactions]);
 
   const handleExportExcel = () => {
-    const headers = ["Cenário", "Data", "Tag 01", "Tag 02", "Tag 03", "Conta", "Unidade", "Marca", "Ticket", "Fornecedor", "Descrição", "Valor", "Recorrente", "ID", "Status", "Justificativa"];
+    const headers = ["Cenário", "Data", "Tag 0", "Tag 01", "Tag 02", "Tag 03", "Conta", "Unidade", "Marca", "Ticket", "Fornecedor", "Descrição", "Valor", "Recorrente", "ID", "Status", "Justificativa"];
     const rows = filteredAndSorted.map(t => [
       t.scenario || 'Real',
       t.date,
+      t.tag0 || '',
       t.tag01 || '',
       t.tag02 || '',
       t.tag03 || '',
@@ -771,7 +806,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     const newTransactions: Transaction[] = rateioParts.filter(p => p.amount !== 0).map((p, idx) => ({
       ...rateioTransaction,
       id: crypto.randomUUID(),
-      chave_id: `${rateioTransaction.chave_id || rateioTransaction.id}-R${idx}`,
+      chave_id: rateioTransaction.chave_id,
       filial: p.filial,
       marca: p.marca,
       date: p.date,
@@ -1015,6 +1050,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     </div>
                   </div>
                 </div>
+                <MultiSelectFilter id="tag0" label="Tag0" options={dynamicOptions.tag0s} selected={colFilters.tag0} active={isFilterActive('tag0')} isOpen={openDropdown === 'tag0'} onToggle={() => setOpenDropdown(openDropdown === 'tag0' ? null : 'tag0')} onClear={() => setColFilters(prev => ({...prev, tag0: []}))} onToggleItem={(val) => toggleMultiFilter('tag0', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag0: [...new Set([...prev.tag0, ...vals])]}))} />
                 <MultiSelectFilter id="tag01" label="Tag01" options={dynamicOptions.tag01s} selected={colFilters.tag01} active={isFilterActive('tag01')} isOpen={openDropdown === 'tag01'} onToggle={() => setOpenDropdown(openDropdown === 'tag01' ? null : 'tag01')} onClear={() => setColFilters(prev => ({...prev, tag01: []}))} onToggleItem={(val) => toggleMultiFilter('tag01', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag01: [...new Set([...prev.tag01, ...vals])]}))} />
                 <MultiSelectFilter id="tag02" label="Tag02" options={dynamicOptions.tag02s} selected={colFilters.tag02} active={isFilterActive('tag02')} isOpen={openDropdown === 'tag02'} onToggle={() => setOpenDropdown(openDropdown === 'tag02' ? null : 'tag02')} onClear={() => setColFilters(prev => ({...prev, tag02: []}))} onToggleItem={(val) => toggleMultiFilter('tag02', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag02: [...new Set([...prev.tag02, ...vals])]}))} />
                 <MultiSelectFilter id="tag03" label="Tag03" options={dynamicOptions.tag03s} selected={colFilters.tag03} active={isFilterActive('tag03')} isOpen={openDropdown === 'tag03'} onToggle={() => setOpenDropdown(openDropdown === 'tag03' ? null : 'tag03')} onClear={() => setColFilters(prev => ({...prev, tag03: []}))} onToggleItem={(val) => toggleMultiFilter('tag03', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, tag03: [...new Set([...prev.tag03, ...vals])]}))} />
@@ -1031,6 +1067,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <FilterTextInput label="Descrição" id="description" value={colFilters.description} colFilters={colFilters} setColFilters={setColFilters} className="xl:col-span-3" debouncedSetFilter={debouncedSetFilter} />
                 <FilterTextInput label="Valor" id="amount" value={colFilters.amount} colFilters={colFilters} setColFilters={setColFilters} debouncedSetFilter={debouncedSetFilter} />
                 <MultiSelectFilter id="recurring" label="Recorrência" options={dynamicOptions.recurrings} selected={colFilters.recurring} active={isFilterActive('recurring')} isOpen={openDropdown === 'recurring'} onToggle={() => setOpenDropdown(openDropdown === 'recurring' ? null : 'recurring')} onClear={() => setColFilters(prev => ({...prev, recurring: []}))} onToggleItem={(val) => toggleMultiFilter('recurring', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, recurring: [...new Set([...prev.recurring, ...vals])]}))} />
+                <MultiSelectFilter id="status" label="Status" options={dynamicOptions.statuses} selected={colFilters.status} active={isFilterActive('status')} isOpen={openDropdown === 'status'} onToggle={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')} onClear={() => setColFilters(prev => ({...prev, status: []}))} onToggleItem={(val) => toggleMultiFilter('status', val)} onSelectMultiple={(vals) => setColFilters(prev => ({...prev, status: [...new Set([...prev.status, ...vals])]}))} />
               </div>
            </div>
         </div>
@@ -1129,6 +1166,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
               <tr className="whitespace-nowrap">
                 <HeaderCell label="Cen" sortKey="scenario" config={sortConfig} setConfig={setSortConfig} className="w-[50px]" />
                 <HeaderCell label="Data" sortKey="date" config={sortConfig} setConfig={setSortConfig} className="w-[65px]" />
+                <HeaderCell label="Tag0" sortKey="tag0" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
                 <HeaderCell label="Tag01" sortKey="tag01" config={sortConfig} setConfig={setSortConfig} className="w-[75px]" />
                 <HeaderCell label="Tag02" sortKey="tag02" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
                 <HeaderCell label="Tag03" sortKey="tag03" config={sortConfig} setConfig={setSortConfig} className="w-[85px]" />
@@ -1196,6 +1234,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                   >
                     <td className="px-2 py-1 border-r border-gray-100 text-center whitespace-nowrap overflow-hidden"><span className="px-1.5 py-0.5 rounded-none text-[8px] font-black uppercase border bg-blue-50 text-blue-700">{t.scenario || 'Real'}</span></td>
                     <td className="px-2 py-1 text-[8px] font-mono text-gray-500 border-r border-gray-100 whitespace-nowrap overflow-hidden">{formatDateToMMAAAA(t.date)}</td>
+                    <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag0 || '-'}</td>
                     <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag01 || '-'}</td>
                     <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag02 || '-'}</td>
                     <td className="px-2 py-1 text-[8px] font-bold text-gray-600 border-r border-gray-100 uppercase truncate">{t.tag03 || '-'}</td>
@@ -1310,11 +1349,24 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
                         <label className="text-[8px] font-black text-gray-500 uppercase">Nova Conta Contábil</label>
-                        <DeParaVisualizer oldValue={editingTransaction.category} newValue={editForm.category} />
+                        <DeParaVisualizer oldValue={editingTransaction.conta_contabil || editingTransaction.category} newValue={editForm.category} />
                       </div>
-                      <select value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})} className="w-full border border-gray-200 p-2 text-[10px] font-black outline-none focus:border-[#F44C00] bg-gray-50/30">
-                        {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                      <div className="flex gap-1">
+                        <div className="flex-1 border border-gray-200 p-2 text-[10px] font-black bg-gray-50/30 truncate min-h-[34px]">
+                          {editForm.categoryLabel || editForm.category || '—'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const data = await getContaContabilOptions();
+                            setContaContabilData(data);
+                            setContaSelectorOpen(true);
+                          }}
+                          className="px-3 py-2 bg-[#F44C00] text-white text-[9px] font-black uppercase whitespace-nowrap"
+                        >
+                          Selecionar
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
@@ -1489,6 +1541,26 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Seletor de Conta Contábil - fora dos modais para evitar stacking context do backdrop-blur */}
+      <ContaContabilSelector
+        isOpen={contaSelectorOpen}
+        onClose={() => setContaSelectorOpen(false)}
+        onSelect={(codConta, label) => {
+          const conta = contaContabilData.find(c => c.cod_conta === codConta);
+          setEditForm(prev => ({
+            ...prev,
+            category: codConta,
+            categoryLabel: label,
+            tag01: conta?.tag01 || '',
+            tag02: conta?.tag02 || '',
+            tag03: conta?.tag03 || '',
+            nat_orc: conta?.tag03 || ''
+          }));
+        }}
+        currentValue={editForm.category}
+        contas={contaContabilData}
+      />
     </div>
   );
 };
@@ -1622,12 +1694,20 @@ const MultiSelectFilter = React.memo(({ id, label, options, selected, active, is
 const HeaderCell = ({ label, sortKey, config, setConfig, align = 'left', className = '' }: any) => {
   const isSorted = config.key === sortKey;
   return (
-    <th 
-      onClick={() => setConfig({ key: sortKey, direction: isSorted && config.direction === 'asc' ? 'desc' : 'asc' })} 
+    <th
+      onClick={() => setConfig({ key: sortKey, direction: isSorted && config.direction === 'asc' ? 'desc' : 'asc' })}
       className={`sticky top-0 z-[60] bg-[#1B75BB] text-white text-left border-b border-white/10 border-r border-white/20 px-2 py-2.5 cursor-pointer hover:bg-[#152e55] transition-colors whitespace-nowrap ${className}`}
     >
-      <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+      <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
         <span className="text-[8px] font-black uppercase tracking-tighter truncate leading-none">{label}</span>
+        <span className={`flex flex-col leading-none ${isSorted ? 'opacity-100' : 'opacity-30'}`}>
+          <svg width="7" height="4" viewBox="0 0 7 4" className={`${isSorted && config.direction === 'asc' ? 'text-yellow-300' : 'text-white/60'}`}>
+            <path d="M3.5 0L7 4H0L3.5 0Z" fill="currentColor"/>
+          </svg>
+          <svg width="7" height="4" viewBox="0 0 7 4" className={`${isSorted && config.direction === 'desc' ? 'text-yellow-300' : 'text-white/60'}`}>
+            <path d="M3.5 4L0 0H7L3.5 4Z" fill="currentColor"/>
+          </svg>
+        </span>
       </div>
     </th>
   );

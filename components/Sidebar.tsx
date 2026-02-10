@@ -12,8 +12,7 @@ import {
   LogOut,
   User as UserIcon,
   Shield,
-  FileText,
-  FlaskConical
+  FileText
 } from 'lucide-react';
 import { ViewType } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,8 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
     { id: 'forecasting', label: 'Forecasting', icon: LineChart },
     ...(isAdmin ? [
-      { id: 'admin', label: 'Admin', icon: Shield },
-      { id: 'teste', label: 'Teste AnalysisPack', icon: FlaskConical }
+      { id: 'admin', label: 'Admin', icon: Shield }
     ] : []),
   ];
 
@@ -129,15 +127,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
           </button>
         </div>
 
-        {/* Status do Grupo */}
-        <div className="bg-gradient-to-br from-[#1B75BB] to-[#4AC8F4] p-3 rounded-xl text-white shadow-lg relative overflow-hidden group">
-          <div className="relative z-10">
-            <p className="text-[9px] font-black opacity-80 uppercase tracking-widest mb-1">Status do Grupo</p>
-            <p className="text-xs font-black uppercase tracking-tighter">
-              Consolidação Raiz
-            </p>
-          </div>
-        </div>
       </div>
     </aside>
   );

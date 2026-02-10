@@ -20,6 +20,7 @@ export interface Transaction {
   filial: string;
   status: TransactionStatus;
   scenario?: string;
+  tag0?: string;
   tag01?: string;
   tag02?: string;
   tag03?: string;
@@ -82,7 +83,7 @@ export interface IAInsight {
   category: 'Driver Positivo' | 'Driver Negativo' | 'Ação Recomendada';
 }
 
-export type ViewType = 'dashboard' | 'kpis' | 'dre' | 'forecasting' | 'manual_changes' | 'movements' | 'admin' | 'teste' | 'analysis';
+export type ViewType = 'dashboard' | 'kpis' | 'dre' | 'forecasting' | 'manual_changes' | 'movements' | 'admin' | 'analysis';
 
 // Chart Types for AI-Generated Visualizations
 export type ChartType = 'bar' | 'line' | 'waterfall' | 'composed' | 'heatmap';
@@ -201,6 +202,19 @@ export type AnalysisPack = {
   charts: ChartDef[];
   slides: Slide[];
 };
+
+// ============================================
+// Conta Contábil (Hierarquia)
+// ============================================
+
+export interface ContaContabilOption {
+  cod_conta: string;
+  nome_nat_orc: string | null;
+  tag0: string | null;   // Nível 1 - resolvido via tag0_map (ex: RECEITA, CUSTOS)
+  tag01: string | null;  // Nível 2 - direto de transactions (ex: Receita Bruta)
+  tag02: string | null;  // Nível 3
+  tag03: string | null;  // Nível 4
+}
 
 // ============================================
 // Virtual Scrolling & Pagination Types

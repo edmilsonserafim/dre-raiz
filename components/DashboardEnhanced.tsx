@@ -85,7 +85,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
         return { name: month, revenue: 0, ebitda: 0, costs: 0 };
       }
 
-      const monthTrans = filteredTrans.filter(t => new Date(t.date).getMonth() === index);
+      const monthTrans = filteredTrans.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === index);
       const revenue = monthTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const costs = monthTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const ebitda = revenue - costs;
@@ -172,7 +172,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const branchData = useMemo(() => {
     // Filtrar por cenário Real, marca e mês
     let filteredTrans = transactions.filter(t => {
-      const month = new Date(t.date).getMonth();
+      const month = parseInt(t.date.substring(5, 7), 10) - 1;
       return t.scenario === 'Real' && month >= monthRange.start && month <= monthRange.end;
     });
     if (selectedMarca.length > 0) {
@@ -182,7 +182,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     // Filtrar transações de comparação (Orçado ou A-1)
     const comparisonScenario = comparisonMode === 'budget' ? 'Orçado' : 'A-1';
     let comparisonTrans = transactions.filter(t => {
-      const month = new Date(t.date).getMonth();
+      const month = parseInt(t.date.substring(5, 7), 10) - 1;
       return t.scenario === comparisonScenario && month >= monthRange.start && month <= monthRange.end;
     });
     if (selectedMarca.length > 0) {

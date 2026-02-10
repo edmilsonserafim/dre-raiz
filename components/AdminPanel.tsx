@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, X, Plus, Trash2, Save, AlertTriangle, CheckCircle2, User as UserIcon, Database, Search, Upload, Download, FileSpreadsheet, Eye, CheckCircle, Table } from 'lucide-react';
+import { Shield, Users, X, Plus, Trash2, Save, AlertTriangle, CheckCircle2, User as UserIcon, Database, Search, Upload, Download, FileSpreadsheet, Eye, CheckCircle } from 'lucide-react';
 import * as supabaseService from '../services/supabaseService';
 import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
 import { Transaction } from '../types';
-import DREHierarchyManager from './DREHierarchyManager';
 
 interface User {
   id: string;
@@ -19,7 +18,7 @@ interface User {
 interface Permission {
   id: string;
   user_id: string;
-  permission_type: 'centro_custo' | 'cia' | 'filial';
+  permission_type: 'centro_custo' | 'cia' | 'filial' | 'tag01';
   permission_value: string;
 }
 
@@ -32,15 +31,16 @@ const AdminPanel: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showValuesHelper, setShowValuesHelper] = useState(false);
-  const [availableValues, setAvailableValues] = useState<{marcas: string[], filiais: string[], categories: string[], tags: string[]}>({
+  const [availableValues, setAvailableValues] = useState<{marcas: string[], filiais: string[], categories: string[], tags: string[], tag01Values: string[]}>({
     marcas: [],
     filiais: [],
     categories: [],
-    tags: []
+    tags: [],
+    tag01Values: []
   });
 
   // Estado para adicionar nova permissão
-  const [newPermissionType, setNewPermissionType] = useState<'centro_custo' | 'cia' | 'filial'>('centro_custo');
+  const [newPermissionType, setNewPermissionType] = useState<'centro_custo' | 'cia' | 'filial' | 'tag01'>('centro_custo');
   const [newPermissionValue, setNewPermissionValue] = useState('');
 
   // Estados para importação de dados
@@ -51,7 +51,7 @@ const AdminPanel: React.FC = () => {
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
   // Estado para controle de abas
-  const [activeTab, setActiveTab] = useState<'import' | 'users' | 'dre'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'users'>('import');
 
   // Estado para busca de usuários
   const [userSearch, setUserSearch] = useState('');
@@ -78,13 +78,14 @@ const AdminPanel: React.FC = () => {
       const marcas = [...new Set(transactions.map(t => t.marca).filter(Boolean))].sort();
       const filiais = [...new Set(transactions.map(t => t.filial).filter(Boolean))].sort();
       const categories = [...new Set(transactions.map(t => t.category).filter(Boolean))].sort();
+      const tag01Values = [...new Set(transactions.map(t => t.tag01).filter(Boolean))].sort() as string[];
       const tags = [...new Set([
         ...transactions.map(t => t.tag01).filter(Boolean),
         ...transactions.map(t => t.tag02).filter(Boolean),
         ...transactions.map(t => t.tag03).filter(Boolean)
       ])].sort();
 
-      setAvailableValues({ marcas, filiais, categories, tags });
+      setAvailableValues({ marcas, filiais, categories, tags, tag01Values });
     } catch (error) {
       console.error('Erro ao carregar valores disponíveis:', error);
     }
@@ -417,26 +418,10 @@ const AdminPanel: React.FC = () => {
         >
           <div className="flex items-center gap-1.5">
             <Users size={14} />
-            👥 Usuários
+            Usuários
           </div>
           {activeTab === 'users' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 rounded-t"></div>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('dre')}
-          className={`px-4 py-2 font-bold text-xs uppercase transition-all relative ${
-            activeTab === 'dre'
-              ? 'text-blue-700 bg-blue-50'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Table size={14} />
-            📊 Estrutura DRE
-          </div>
-          {activeTab === 'dre' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t"></div>
           )}
         </button>
       </div>
@@ -760,9 +745,26 @@ const AdminPanel: React.FC = () => {
               )}
             </div>
 
-            {/* Tags */}
+            {/* Tag01 */}
+            <div className="bg-teal-50 border border-teal-200 rounded p-2">
+              <p className="font-bold text-[10px] text-teal-900 uppercase mb-1">🏷️ Tag 01:</p>
+              {availableValues.tag01Values.length > 0 ? (
+                <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
+                  {availableValues.tag01Values.slice(0, 15).map(tag => (
+                    <span key={tag} className="block bg-teal-200 px-1.5 py-0.5 rounded font-mono text-[9px]">{tag}</span>
+                  ))}
+                  {availableValues.tag01Values.length > 15 && (
+                    <p className="text-[9px] text-teal-600 italic">+{availableValues.tag01Values.length - 15} mais...</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[10px] text-teal-600">Nenhuma</p>
+              )}
+            </div>
+
+            {/* Tags (todas) */}
             <div className="bg-pink-50 border border-pink-200 rounded p-2">
-              <p className="font-bold text-[10px] text-pink-900 uppercase mb-1">🏷️ Tags:</p>
+              <p className="font-bold text-[10px] text-pink-900 uppercase mb-1">🏷️ Tags (todas):</p>
               {availableValues.tags.length > 0 ? (
                 <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
                   {availableValues.tags.slice(0, 15).map(tag => (
@@ -949,6 +951,7 @@ const AdminPanel: React.FC = () => {
                           <span className={`px-1 py-0.5 rounded text-[8px] font-black uppercase mr-1 ${
                             perm.permission_type === 'centro_custo' ? 'bg-blue-100 text-blue-700' :
                             perm.permission_type === 'cia' ? 'bg-green-100 text-green-700' :
+                            perm.permission_type === 'tag01' ? 'bg-teal-100 text-teal-700' :
                             'bg-orange-100 text-orange-700'
                           }`}>
                             {perm.permission_type.replace('_', ' ')}
@@ -987,6 +990,7 @@ const AdminPanel: React.FC = () => {
                       <option value="centro_custo">Centro de Custo</option>
                       <option value="cia">CIA (Marca)</option>
                       <option value="filial">Filial</option>
+                      <option value="tag01">Tag 01</option>
                     </select>
                     <div className="relative">
                       <input
@@ -1006,6 +1010,9 @@ const AdminPanel: React.FC = () => {
                         ))}
                         {newPermissionType === 'centro_custo' && availableValues.categories.map(c => (
                           <option key={c} value={c} />
+                        ))}
+                        {newPermissionType === 'tag01' && availableValues.tag01Values.map(t => (
+                          <option key={t} value={t} />
                         ))}
                       </datalist>
                     </div>
@@ -1044,10 +1051,6 @@ const AdminPanel: React.FC = () => {
         </>
       )}
 
-      {/* Aba: Estrutura DRE */}
-      {activeTab === 'dre' && (
-        <DREHierarchyManager />
-      )}
     </div>
   );
 };

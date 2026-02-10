@@ -36,7 +36,7 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
     transactions
       .filter(t => t.scenario === 'Real')
       .forEach(t => {
-        const monthIdx = new Date(t.date).getMonth();
+        const monthIdx = parseInt(t.date.substring(5, 7), 10) - 1;
         if (t.type === 'REVENUE') {
           monthlyData[monthIdx].revenue += t.amount;
         } else {

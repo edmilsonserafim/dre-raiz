@@ -11,7 +11,6 @@ import ForecastingView from './components/ForecastingView';
 import LoginScreen from './components/LoginScreen';
 import AdminPanel from './components/AdminPanel';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
-import TestAnalysisPack from './components/TestAnalysisPack';
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
 import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X } from 'lucide-react';
@@ -44,6 +43,7 @@ const App: React.FC = () => {
   const [selectedFilial, setSelectedFilial] = useState<string[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasMountedDRE, setHasMountedDRE] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [preFullscreenSidebarState, setPreFullscreenSidebarState] = useState(true);
 
@@ -78,12 +78,16 @@ const App: React.FC = () => {
   const isLoading = isLoadingTransactions || permissionsLoading;
 
   // Carregar transações iniciais ao montar (via Context)
+  // useRef evita execução duplicada do React StrictMode
+  const initialLoadRef = React.useRef(false);
   useEffect(() => {
-    if (!currentFilters) {
-      // Carregar últimos 3 meses por padrão
+    if (!currentFilters && !initialLoadRef.current) {
+      initialLoadRef.current = true;
+      // Carregar ano atual completo (jan-dez) para DRE
+      const year = new Date().getFullYear();
       applyFilters({
-        startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
+        monthFrom: `${year}-01`,
+        monthTo: `${year}-12`
       });
     }
   }, [applyFilters, currentFilters]);
@@ -125,6 +129,11 @@ const App: React.FC = () => {
       sessionStorage.removeItem('drillDownActiveTab');
     }
   }, [drillDownActiveTab]);
+
+  // Manter DRE montada após primeira visita (preservar estado ao trocar guias)
+  useEffect(() => {
+    if (currentView === 'dre') setHasMountedDRE(true);
+  }, [currentView]);
 
   // Contador de pendências para o Sidebar
   const pendingApprovalsCount = useMemo(() =>
@@ -186,13 +195,14 @@ const App: React.FC = () => {
   }) => {
     const { categories, monthIdx, scenario, filters = {} } = drillDownData;
 
-    // Formatar mês se fornecido no formato YYYY-MM
-    const monthFilter = monthIdx !== undefined ? `2024-${String(monthIdx + 1).padStart(2, '0')}` : '';
+    // Formatar mês usando ano dinâmico (não fixo 2024)
+    const year = new Date().getFullYear();
+    const monthFilter = monthIdx !== undefined ? `${year}-${String(monthIdx + 1).padStart(2, '0')}` : '';
 
     // Construir filtros para TransactionsView
     const drillFilters: any = {
-      // Categorias: passa o array diretamente
-      category: categories || [],
+      // conta_contabil: array de contas da linha clicada na DRE
+      conta_contabil: categories || [],
 
       // Data: passa o mês específico ou vazio
       monthFrom: monthFilter,
@@ -201,11 +211,12 @@ const App: React.FC = () => {
       // NÃO passa scenario aqui, pois a aba ativa vai cuidar disso
 
       // Filtros acumulados das dimensões dinâmicas da DRE
+      tag0: Array.isArray(filters.tag0) ? filters.tag0 : (filters.tag0 ? [filters.tag0] : []),
       tag01: Array.isArray(filters.tag01) ? filters.tag01 : (filters.tag01 ? [filters.tag01] : []),
       tag02: Array.isArray(filters.tag02) ? filters.tag02 : (filters.tag02 ? [filters.tag02] : []),
       tag03: Array.isArray(filters.tag03) ? filters.tag03 : (filters.tag03 ? [filters.tag03] : []),
       marca: Array.isArray(filters.marca) ? filters.marca : (filters.marca ? [filters.marca] : []),
-      filial: Array.isArray(filters.filial) ? filters.filial : (filters.filial ? [filters.filial] : []),
+      nome_filial: Array.isArray(filters.nome_filial) ? filters.nome_filial : (filters.nome_filial ? [filters.nome_filial] : []),
       ticket: filters.ticket || '',
       vendor: filters.vendor || ''
     };
@@ -234,24 +245,6 @@ const App: React.FC = () => {
     setDrillDownActiveTab(activeTab);
     setCurrentView('movements');
   };
-
-  // Função para atualizar DRE manualmente
-  const handleRefreshDRE = React.useCallback(async () => {
-    console.log('🔄 DRE: Forçando atualização...');
-
-    // Reaplicar filtros atuais (força busca no Supabase)
-    if (currentFilters) {
-      await applyFilters(currentFilters);
-    } else {
-      // Se não há filtros, carregar últimos 3 meses
-      await applyFilters({
-        startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
-      });
-    }
-
-    console.log('✅ DRE: Atualização concluída');
-  }, [applyFilters, currentFilters]);
 
   const mapCategoryToType = (category: string): TransactionType => {
     if (CATEGORIES.FIXED_COST.includes(category)) return 'FIXED_COST';
@@ -414,11 +407,11 @@ const App: React.FC = () => {
 
       if (change.type === 'RATEIO') {
         const rawParts = (parsedValue.transactions || (Array.isArray(parsedValue) ? parsedValue : [])) as Transaction[];
-        // Gerar novo id (UUID) e chave_id único para cada part, remover updated_at
+        // Gerar novo id (UUID), manter chave_id original, marcar rateio na description
         const newParts = rawParts.map(({ updated_at, id, ...rest }, idx) => ({
           ...rest,
           id: crypto.randomUUID(),
-          chave_id: `${rest.chave_id || id}-R${idx}`
+          description: `${rest.description} [R${idx + 1}/${rawParts.length}]`
         }));
         console.log('✂️ RATEIO: criando', newParts.length, 'novas transações');
         console.log('📦 Primeira part:', JSON.stringify(newParts[0]));
@@ -440,12 +433,18 @@ const App: React.FC = () => {
         console.log('✏️ Tipo:', change.type, '- atualizando transação');
 
         // Para MULTI, CONTA, DATA, MARCA, FILIAL
-        // Remover apenas justification (campo que não existe no banco)
-        const { justification, ...transactionData } = parsedValue;
+        // Remover justification e categoryLabel (campos que não existem no banco)
+        const { justification, categoryLabel, ...transactionData } = parsedValue;
         const updatedData = {
           ...transactionData,
+          conta_contabil: transactionData.category || undefined,
           status: 'Ajustado',
-          type: transactionData.category ? mapCategoryToType(transactionData.category) : undefined
+          type: transactionData.category ? mapCategoryToType(transactionData.category) : undefined,
+          // Atualizar tags e nat_orc para refletir a hierarquia da nova conta
+          tag01: transactionData.tag01 || undefined,
+          tag02: transactionData.tag02 || undefined,
+          tag03: transactionData.tag03 || undefined,
+          nat_orc: transactionData.nat_orc || undefined,
         };
 
         console.log('📝 Dados para atualizar:', updatedData);
@@ -515,6 +514,7 @@ const App: React.FC = () => {
   const clearGlobalFilters = () => {
     setSelectedMarca([]);
     setSelectedFilial([]);
+    setDrillDownFilters(null);
     setDrillDownActiveTab(undefined);
   };
 
@@ -725,18 +725,16 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
-          {currentView === 'dre' && (
-            <DREView
-              transactions={filteredTransactions}
-              onDrillDown={handleDrillDown}
-              onRefresh={handleRefreshDRE}
-              isRefreshing={isLoadingTransactions}
-            />
+          {hasMountedDRE && (
+            <div style={{ display: currentView === 'dre' ? undefined : 'none' }}>
+              <DREView
+                onDrillDown={handleDrillDown}
+              />
+            </div>
           )}
           {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
           {currentView === 'analysis' && <AnalysisView transactions={filteredTransactions} kpis={kpis} />}
           {currentView === 'admin' && <AdminPanel />}
-          {currentView === 'teste' && <TestAnalysisPack />}
         </div>
       </main>
     </div>

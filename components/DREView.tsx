@@ -1,8 +1,16 @@
 
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { Transaction } from '../types';
-import { DRE_STRUCTURE, TAG_STRUCTURE } from '../constants';
-import { useDREHierarchy } from '../src/hooks/useDREHierarchy';  // NOVO: Hook para hierarquia dinâmica
+import {
+  getDRESummary,
+  getDREDimension,
+  getDREFilterOptions,
+  getFiliais,
+  DRESummaryRow,
+  DREDimensionRow,
+  DREFilterOptions,
+  FilialOption
+} from '../services/supabaseService';
 import {
   ChevronRight,
   ChevronDown,
@@ -23,41 +31,49 @@ import {
   FilterX,
   ArrowLeftRight,
   RefreshCw,
-  Loader2
+  Loader2,
+  ArrowUpDown,
+  ArrowDownAZ,
+  ArrowDown10,
+  ArrowUp10
 } from 'lucide-react';
 
 interface DREViewProps {
-  transactions: Transaction[];
+  transactions?: Transaction[];  // Mantido para compatibilidade, mas NÃO usado para DRE
   onDrillDown: (drillDownData: {
     categories: string[];
     monthIdx?: number;
     scenario?: string;
     filters?: Record<string, string>;
   }) => void;
-  onRefresh?: () => void;  // NOVO: callback para atualizar DRE
-  isRefreshing?: boolean;  // NOVO: estado de loading
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  dreYear?: number;  // Ano para buscar dados (default: ano atual)
 }
 
 const DRE_DIMENSIONS = [
-  { id: 'tag01', label: 'tag01' },  // Renomeado para minúscula
-  { id: 'tag02', label: 'tag02' },  // Renomeado para minúscula
-  { id: 'tag03', label: 'tag03' },  // Renomeado para minúscula
-  { id: 'category', label: 'CC (Centro de Custo)' },  // NOVO!
+  { id: 'tag02', label: 'tag02' },
+  { id: 'tag03', label: 'tag03' },
   { id: 'marca', label: 'Marca' },
-  { id: 'filial', label: 'Unidade' },
+  { id: 'nome_filial', label: 'Unidade' },
   { id: 'vendor', label: 'Fornecedor' },
   { id: 'ticket', label: 'Ticket' },
 ];
 
 const DREView: React.FC<DREViewProps> = ({
-  transactions,
   onDrillDown,
   onRefresh,
-  isRefreshing = false
+  isRefreshing = false,
+  dreYear
 }) => {
-  // NOVO: Hook para hierarquia DRE dinâmica do banco
-  const { groupedHierarchy, isLoading: isLoadingHierarchy, error: hierarchyError } = useDREHierarchy();
-
+  // Estado para dados agregados do servidor
+  const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
+  const [filterOptions, setFilterOptions] = useState<DREFilterOptions>({ marcas: [], nome_filiais: [], tags01: [] });
+  const [filialTable, setFilialTable] = useState<FilialOption[]>([]); // Tabela filial (master)
+  const [isLoadingDRE, setIsLoadingDRE] = useState(true);
+  const [dimensionCache, setDimensionCache] = useState<Record<string, DREDimensionRow[]>>({});
+  const currentYear = dreYear || new Date().getFullYear();
+  const fetchIdRef = useRef(0);  // Para evitar race conditions
   const [selectedMonthStart, setSelectedMonthStart] = useState<number>(() => {
     const saved = sessionStorage.getItem('dreMonthStart');
     return saved ? JSON.parse(saved) : 0;
@@ -83,8 +99,8 @@ const DREView: React.FC<DREViewProps> = ({
 
   // Estados para controlar colunas visíveis (novo sistema de filtros)
   const [showReal, setShowReal] = useState<boolean>(true);
-  const [showOrcado, setShowOrcado] = useState<boolean>(true);
-  const [showA1, setShowA1] = useState<boolean>(true);
+  const [showOrcado, setShowOrcado] = useState<boolean>(false);
+  const [showA1, setShowA1] = useState<boolean>(false);
   const [showDeltaPercOrcado, setShowDeltaPercOrcado] = useState<boolean>(false);
   const [showDeltaPercA1, setShowDeltaPercA1] = useState<boolean>(false);
   const [showDeltaAbsOrcado, setShowDeltaAbsOrcado] = useState<boolean>(false);
@@ -104,6 +120,8 @@ const DREView: React.FC<DREViewProps> = ({
   const [isBranchFilterOpen, setIsBranchFilterOpen] = useState(false);
 
   const [dynamicPath, setDynamicPath] = useState<string[]>([]);
+  // Ordenação de dimensões: 'alpha' (A-Z), 'desc' (maior→menor), 'asc' (menor→maior)
+  const [dimensionSort, setDimensionSort] = useState<'alpha' | 'desc' | 'asc'>('desc');
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({
     '01': true, '02': true, '03': true, '04': true
   });
@@ -132,6 +150,49 @@ const DREView: React.FC<DREViewProps> = ({
   useEffect(() => {
     sessionStorage.setItem('dreBranches', JSON.stringify(selectedFiliais));
   }, [selectedFiliais]);
+
+  // ========== BUSCA DE DADOS AGREGADOS DO SERVIDOR ==========
+  const fetchDREData = useCallback(async () => {
+    const fetchId = ++fetchIdRef.current;
+    setIsLoadingDRE(true);
+    setDimensionCache({});  // Limpar cache de dimensões
+
+    const monthFrom = `${currentYear}-01`;
+    const monthTo = `${currentYear}-12`;
+
+    try {
+      const [summary, options, filiais] = await Promise.all([
+        getDRESummary({
+          monthFrom,
+          monthTo,
+          marcas: selectedMarcas.length > 0 ? selectedMarcas : undefined,
+          nomeFiliais: selectedFiliais.length > 0 ? selectedFiliais : undefined,
+          tags01: selectedTags01.length > 0 ? selectedTags01 : undefined,
+        }),
+        getDREFilterOptions({ monthFrom, monthTo }),
+        getFiliais(),
+      ]);
+
+      // Verificar se este fetch ainda é o mais recente
+      if (fetchId !== fetchIdRef.current) return;
+
+      setSummaryRows(summary);
+      setFilterOptions(options);
+      setFilialTable(filiais);
+      console.log(`✅ DRE: ${summary.length} linhas agregadas carregadas`);
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados DRE:', error);
+    } finally {
+      if (fetchId === fetchIdRef.current) {
+        setIsLoadingDRE(false);
+      }
+    }
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+
+  // Carregar dados na montagem e quando filtros mudam
+  useEffect(() => {
+    fetchDREData();
+  }, [fetchDREData]);
 
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
@@ -187,18 +248,20 @@ const DREView: React.FC<DREViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Opções dinâmicas baseadas nos dados recebidos
-  const availableBrands = useMemo(() =>
-    Array.from(new Set(transactions.map(t => t.marca).filter(Boolean))).sort() as string[]
-  , [transactions]);
+  // Opções de marca/filial da tabela filial (master)
+  const availableBrands = useMemo(() => {
+    const cias = new Set(filialTable.map(f => f.cia));
+    return Array.from(cias).sort();
+  }, [filialTable]);
 
+  // Filiais filtradas pela marca selecionada (formato "CIA - NomeFilial")
   const availableBranches = useMemo(() => {
-    let filtered = transactions;
+    let filtered = filialTable;
     if (selectedMarcas.length > 0) {
-      filtered = transactions.filter(t => selectedMarcas.includes(t.marca || ''));
+      filtered = filialTable.filter(f => selectedMarcas.includes(f.cia));
     }
-    return Array.from(new Set(filtered.map(t => t.filial).filter(Boolean))).sort() as string[];
-  }, [transactions, selectedMarcas]);
+    return filtered.map(f => f.label).sort();
+  }, [filialTable, selectedMarcas]);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -229,38 +292,25 @@ const DREView: React.FC<DREViewProps> = ({
 
   const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarcas.length > 0 || selectedFiliais.length > 0;
 
-  // Lógica de filtragem global para a DRE
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const matchTag = selectedTags01.length === 0 || selectedTags01.includes(t.tag01 || '');
-      const matchMarca = selectedMarcas.length === 0 || selectedMarcas.includes(t.marca || '');
-      const matchFilial = selectedFiliais.length === 0 || selectedFiliais.includes(t.filial || '');
-      return matchTag && matchMarca && matchFilial;
-    });
-  }, [transactions, selectedTags01, selectedMarcas, selectedFiliais]);
+  // ========== CONSTRUIR dataMap E dreStructure A PARTIR DE summaryRows ==========
 
   const dataMap = useMemo(() => {
     const map: Record<string, Record<string, number[]>> = { Real: {}, Orçado: {}, 'A-1': {} };
 
-    console.log('🔵 DRE: Total de transações recebidas:', transactions.length);
-    console.log('🔵 DRE: Transações filtradas:', filteredTransactions.length);
+    console.log('🔵 DRE: Construindo dataMap a partir de', summaryRows.length, 'linhas agregadas');
 
-    if (filteredTransactions.length > 0) {
-      console.log('🔵 DRE: Primeira transação:', filteredTransactions[0]);
-      console.log('🔵 DRE: Cenários encontrados:', [...new Set(filteredTransactions.map(t => t.scenario))]);
-      console.log('🔵 DRE: Contas contábeis encontradas:', [...new Set(filteredTransactions.map(t => t.conta_contabil))].slice(0, 10));
-    }
-
-    filteredTransactions.forEach(t => {
-      // Normalizar scenario: 'Original' vira 'Real', undefined vira 'Real'
-      let scenario = t.scenario || 'Real';
+    summaryRows.forEach(row => {
+      // Normalizar scenario
+      let scenario = row.scenario || 'Real';
       if (scenario === 'Original') scenario = 'Real';
 
-      const month = new Date(t.date).getMonth();
-      // CORRIGIDO: usar conta_contabil em vez de category
-      const key = t.conta_contabil;
+      // Extrair mês do year_month (YYYY-MM)
+      const monthIdx = parseInt(row.year_month.substring(5, 7), 10) - 1;
+      const key = row.conta_contabil;
+
+      if (!map[scenario]) map[scenario] = {};
       if (!map[scenario][key]) map[scenario][key] = new Array(12).fill(0);
-      map[scenario][key][month] += t.amount;
+      map[scenario][key][monthIdx] += Number(row.total_amount);
     });
 
     console.log('🔵 DRE: DataMap criado:', {
@@ -270,84 +320,60 @@ const DREView: React.FC<DREViewProps> = ({
     });
 
     return map;
-  }, [filteredTransactions, transactions]);
+  }, [summaryRows]);
 
-  // NOVO: Preparar estrutura DRE (dinâmica do banco ou fallback)
+  // Construir hierarquia DRE a partir de summaryRows (tag0 → tag01 → conta_contabil)
   const dreStructure = useMemo(() => {
-    // Se hierarquia carregou do banco, usar ela
-    if (!isLoadingHierarchy && groupedHierarchy && Object.keys(groupedHierarchy).length > 0) {
-      console.log('✅ DRE: Usando hierarquia dinâmica do banco');
-      return { source: 'database', data: groupedHierarchy };
-    }
+    console.log('🔵 DRE: Construindo hierarquia a partir de summaryRows...');
 
-    // Fallback: usar estrutura hardcoded
-    console.log('⚠️ DRE: Usando hierarquia hardcoded (fallback)');
-    return {
-      source: 'fallback',
-      data: {
-        '01': {
-          label: DRE_STRUCTURE.REVENUE.label,
-          items: Object.values(DRE_STRUCTURE.REVENUE.children).map((child: any, idx: number) => ({
-            id: `temp-01-${idx}`,
-            nivel_1_code: '01',
-            nivel_1_label: DRE_STRUCTURE.REVENUE.label,
-            nivel_2_code: `01.${idx + 1}`,
-            nivel_2_label: child.label,
-            items: child.items,
-            ordem: idx + 1,
-            ativo: true,
-            created_at: '',
-            updated_at: ''
-          }))
-        },
-        '02': {
-          label: DRE_STRUCTURE.VARIABLE_COST.label,
-          items: Object.values(DRE_STRUCTURE.VARIABLE_COST.children).map((child: any, idx: number) => ({
-            id: `temp-02-${idx}`,
-            nivel_1_code: '02',
-            nivel_1_label: DRE_STRUCTURE.VARIABLE_COST.label,
-            nivel_2_code: `02.${idx + 1}`,
-            nivel_2_label: child.label,
-            items: child.items,
-            ordem: idx + 1,
-            ativo: true,
-            created_at: '',
-            updated_at: ''
-          }))
-        },
-        '03': {
-          label: DRE_STRUCTURE.FIXED_COST.label,
-          items: Object.values(DRE_STRUCTURE.FIXED_COST.children).map((child: any, idx: number) => ({
-            id: `temp-03-${idx}`,
-            nivel_1_code: '03',
-            nivel_1_label: DRE_STRUCTURE.FIXED_COST.label,
-            nivel_2_code: `03.${idx + 1}`,
-            nivel_2_label: child.label,
-            items: child.items,
-            ordem: idx + 1,
-            ativo: true,
-            created_at: '',
-            updated_at: ''
-          }))
-        },
-        '04': {
-          label: DRE_STRUCTURE.SGA.label,
-          items: Object.values(DRE_STRUCTURE.SGA.children).map((child: any, idx: number) => ({
-            id: `temp-04-${idx}`,
-            nivel_1_code: '04',
-            nivel_1_label: DRE_STRUCTURE.SGA.label,
-            nivel_2_code: `04.${idx + 1}`,
-            nivel_2_label: child.label,
-            items: child.items,
-            ordem: idx + 1,
-            ativo: true,
-            created_at: '',
-            updated_at: ''
-          }))
-        }
-      }
-    };
-  }, [groupedHierarchy, isLoadingHierarchy]);
+    const tag0Map = new Map<string, Map<string, Set<string>>>();
+    const tag0TypeCount = new Map<string, Record<string, number>>();
+
+    summaryRows.forEach(row => {
+      const tag0 = row.tag0 || 'Sem Classificação';
+      const tag01 = row.tag01 || 'Sem Subclassificação';
+      const conta = row.conta_contabil;
+
+      if (!tag0Map.has(tag0)) tag0Map.set(tag0, new Map());
+      const tag01Map = tag0Map.get(tag0)!;
+      if (!tag01Map.has(tag01)) tag01Map.set(tag01, new Set());
+      tag01Map.get(tag01)!.add(conta);
+
+      if (!tag0TypeCount.has(tag0)) tag0TypeCount.set(tag0, {});
+      const counts = tag0TypeCount.get(tag0)!;
+      counts[row.tipo] = (counts[row.tipo] || 0) + Number(row.tx_count);
+    });
+
+    const data: Record<string, { label: string; type: string; items: Array<{ id: string; nivel_2_label: string; items: string[] }> }> = {};
+
+    const sortedTag0s = Array.from(tag0Map.keys()).sort((a, b) => {
+      if (a === 'Sem Classificação') return 1;
+      if (b === 'Sem Classificação') return -1;
+      return a.localeCompare(b);
+    });
+
+    sortedTag0s.forEach((tag0, idx) => {
+      const code = String(idx + 1).padStart(2, '0');
+      const tag01Map = tag0Map.get(tag0)!;
+      const sortedTag01s = Array.from(tag01Map.keys()).sort();
+
+      const counts = tag0TypeCount.get(tag0) || {};
+      const predominantType = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'FIXED_COST';
+
+      data[code] = {
+        label: tag0,
+        type: predominantType,
+        items: sortedTag01s.map((tag01, jdx) => ({
+          id: `${code}-${jdx}`,
+          nivel_2_label: tag01,
+          items: Array.from(tag01Map.get(tag01)!).sort()
+        }))
+      };
+    });
+
+    console.log(`✅ DRE: Hierarquia construída - ${sortedTag0s.length} níveis 1 encontrados:`, sortedTag0s);
+    return { source: 'data', data };
+  }, [summaryRows]);
 
   const getValues = (scenario: string, categories: string[]) => {
     const values = new Array(12).fill(0);
@@ -360,26 +386,67 @@ const DREView: React.FC<DREViewProps> = ({
     return values;
   };
 
+  // getDynamicValues: usa cache de dimensões carregadas do servidor
+  // Para o nível de dimensão dinâmica, os dados são pré-carregados via getDREDimension
   const getDynamicValues = (categories: string[], dimensionKey: string, dimensionValue: string, filters: Record<string, string>, scenario: string) => {
     const vals = new Array(12).fill(0);
-    filteredTransactions
-      .filter(t => {
-        const matchesScenario = t.scenario === scenario;
-        // CORRIGIDO: usar conta_contabil em vez de category
-        const matchesCat = categories.includes(t.conta_contabil);
-        const matchesThisDim = String(t[dimensionKey as keyof Transaction] || 'N/A') === dimensionValue;
 
-        const matchesAllParentFilters = Object.entries(filters).every(([key, val]) =>
-          String(t[key as keyof Transaction] || 'N/A') === val
-        );
+    // Construir chave do cache (inclui filtros acumulados dos níveis anteriores)
+    // Remove a dimensão atual dos filtros para montar a key correta
+    const parentFilters = { ...filters };
+    delete parentFilters[dimensionKey];
+    const filtersKey = Object.entries(parentFilters).sort().map(([k, v]) => `${k}=${v}`).join('&');
+    const cacheKey = `${scenario}|${categories.sort().join(',')}|${dimensionKey}|${filtersKey}`;
+    const cachedRows = dimensionCache[cacheKey];
 
-        return matchesScenario && matchesCat && matchesThisDim && matchesAllParentFilters;
-      })
-      .forEach(t => {
-        vals[new Date(t.date).getMonth()] += t.amount;
-      });
+    if (cachedRows) {
+      cachedRows
+        .filter(row => row.dimension_value === dimensionValue)
+        .forEach(row => {
+          const monthIdx = parseInt(row.year_month.substring(5, 7), 10) - 1;
+          vals[monthIdx] += Number(row.total_amount);
+        });
+    }
+
     return vals;
   };
+
+  // Função para carregar dados de dimensão sob demanda
+  const loadDimensionData = useCallback(async (
+    categories: string[],
+    dimensionKey: string,
+    scenario: string,
+    accFilters: Record<string, string> = {}
+  ) => {
+    // Cache key inclui accumulatedFilters para diferenciar marca QI vs CGS
+    const filtersKey = Object.entries(accFilters).sort().map(([k, v]) => `${k}=${v}`).join('&');
+    const cacheKey = `${scenario}|${categories.sort().join(',')}|${dimensionKey}|${filtersKey}`;
+    if (dimensionCache[cacheKey]) return; // Já carregado
+
+    const monthFrom = `${currentYear}-01`;
+    const monthTo = `${currentYear}-12`;
+
+    // Merge filtros do dropdown + filtros acumulados do drill-down
+    const mergedMarcas = accFilters.marca
+      ? [accFilters.marca]
+      : (selectedMarcas.length > 0 ? selectedMarcas : undefined);
+    const mergedFiliais = accFilters.nome_filial
+      ? [accFilters.nome_filial]
+      : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
+
+    const rows = await getDREDimension({
+      monthFrom,
+      monthTo,
+      contaContabils: categories,
+      scenario,
+      dimension: dimensionKey,
+      marcas: mergedMarcas,
+      nomeFiliais: mergedFiliais,
+      tags01: selectedTags01.length > 0 ? selectedTags01 : undefined,
+    });
+
+    setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, dimensionCache]);
 
   const renderRow = (
     id: string,
@@ -392,16 +459,17 @@ const DREView: React.FC<DREViewProps> = ({
     const isExpanded = expandedRows[id];
 
     // Obter valores para todos os cenários
+    // level 1-2: dados do summary (getValues), level 3+: drill-down dinâmico
     const scenarioValues: Record<string, number[]> = {
-      'Real': level <= 3
+      'Real': level <= 2
         ? getValues('Real', categories)
-        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Real'),
-      'Orçado': level <= 3
+        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'Real'),
+      'Orçado': level <= 2
         ? getValues('Orçado', categories)
-        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'Orçado'),
-      'A-1': level <= 3
+        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'Orçado'),
+      'A-1': level <= 2
         ? getValues('A-1', categories)
-        : getDynamicValues(categories, dynamicPath[level - 4], label, accumulatedFilters, 'A-1')
+        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'A-1')
     };
 
     // Calcular YTDs para todos os cenários
@@ -437,7 +505,7 @@ const DREView: React.FC<DREViewProps> = ({
     return (
       <React.Fragment key={id}>
         <tr className={`${bgClass} transition-all text-[11px] h-8 group`}>
-          <td className={`sticky left-0 z-30 ${viewMode === 'scenario' ? 'border-r-2 border-r-gray-300' : ''} shadow-[2px_0_4px_rgba(0,0,0,0.1)] w-[280px] ${level === 1 ? 'bg-[#152e55]' : 'bg-inherit'} group-hover:bg-yellow-50`}>
+          <td className={`sticky left-0 z-30 ${viewMode === 'scenario' ? 'border-r-2 border-r-gray-300' : ''} shadow-[2px_0_4px_rgba(0,0,0,0.1)] w-[280px] ${level === 1 ? 'bg-[#152e55] group-hover:bg-[#1e3d6e]' : 'bg-inherit group-hover:bg-yellow-100/60'} transition-colors cursor-pointer`}>
             <div className="flex items-center gap-1 px-1.5 overflow-hidden" style={{ paddingLeft }}>
               {hasChildren && (
                 <button onClick={() => toggleRow(id)} className={`p-0.5 rounded-none shrink-0 ${level === 1 ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
@@ -481,7 +549,7 @@ const DREView: React.FC<DREViewProps> = ({
                             ...accumulatedFilters,
                             ...(selectedTags01.length > 0 ? { tag01: selectedTags01 } : {}),
                             ...(selectedMarcas.length > 0 ? { marca: selectedMarcas } : {}),
-                            ...(selectedFiliais.length > 0 ? { filial: selectedFiliais } : {})
+                            ...(selectedFiliais.length > 0 ? { nome_filial: selectedFiliais } : {})
                           }
                         })}
                         className={`px-1 text-right font-mono font-bold cursor-pointer hover:bg-yellow-100/60 transition-colors w-[80px] ${colors[element as keyof typeof colors].text} ${isLastMonth ? '' : 'border-r border-gray-100'}`}
@@ -605,7 +673,7 @@ const DREView: React.FC<DREViewProps> = ({
                                 ...accumulatedFilters,
                                 ...(selectedTags01.length > 0 ? { tag01: selectedTags01 } : {}),
                                 ...(selectedMarcas.length > 0 ? { marca: selectedMarcas } : {}),
-                                ...(selectedFiliais.length > 0 ? { filial: selectedFiliais } : {})
+                                ...(selectedFiliais.length > 0 ? { nome_filial: selectedFiliais } : {})
                               }
                             })}
                             className={`px-1 text-right font-mono font-bold cursor-pointer hover:bg-yellow-100/60 transition-colors w-[80px] ${colors[element as keyof typeof colors].text} ${monthSeparator}`}
@@ -722,38 +790,76 @@ const DREView: React.FC<DREViewProps> = ({
         
         {isExpanded && hasChildren && (() => {
           if (level === 1) {
-            const structure = (DRE_STRUCTURE as any)[id === '01' ? 'REVENUE' : id === '02' ? 'VARIABLE_COST' : id === '03' ? 'FIXED_COST' : 'SGA'];
-            return Object.entries(structure.children).map(([childId, child]: any) => 
-              renderRow(childId, child.label, 2, child.items, true)
+            // Expandir para nível 2 (tag01 groups) a partir de dreStructure
+            const nivel1Data = dreStructure.data[id];
+            if (!nivel1Data) return null;
+            const hasDynamic = dynamicPath.length > 0;
+
+            // Ordenar itens do nível 2 conforme dimensionSort
+            let sortedItems = [...nivel1Data.items];
+            if (dimensionSort !== 'alpha') {
+              sortedItems.sort((a: any, b: any) => {
+                const ytdA = getValues('Real', a.items).reduce((s: number, v: number) => s + v, 0);
+                const ytdB = getValues('Real', b.items).reduce((s: number, v: number) => s + v, 0);
+                return dimensionSort === 'desc'
+                  ? Math.abs(ytdB) - Math.abs(ytdA)
+                  : Math.abs(ytdA) - Math.abs(ytdB);
+              });
+            }
+
+            return sortedItems.map((item: any, idx: number) =>
+              renderRow(`${id}.${idx}`, item.nivel_2_label, 2, item.items, hasDynamic)
             );
           }
-          
-          if (level === 2) {
-            return categories.map((cat, idx) => {
-              const hasDynamic = dynamicPath.length > 0;
-              return renderRow(`${id}.${idx}`, cat, 3, [cat], hasDynamic);
-            });
-          }
 
-          if (level >= 3 && dynamicPath.length > (level - 3)) {
-            const currentDimKey = dynamicPath[level - 3];
-            
-            const uniqueValues = Array.from(new Set(
-              filteredTransactions
-                .filter(t => {
-                  // CORRIGIDO: usar conta_contabil em vez de category
-                  const matchesCat = categories.includes(t.conta_contabil);
-                  const matchesAllParents = Object.entries(accumulatedFilters).every(([key, val]) =>
-                    String(t[key as keyof Transaction] || 'N/A') === val
-                  );
-                  return matchesCat && matchesAllParents;
-                })
-                .map(t => String(t[currentDimKey as keyof Transaction] || 'N/A'))
-            )).sort();
+          // Nível 2+: expande para drill-down dinâmico (dimensões selecionadas)
+          // dynamicPath[0] = primeira dimensão, dynamicPath[1] = segunda, etc.
+          // Para level=2: usa dynamicPath[0], level=3: dynamicPath[1], etc.
+          if (level >= 2 && dynamicPath.length > (level - 2)) {
+            const dimIndex = level - 2;  // level 2 → index 0, level 3 → index 1, etc.
+            const currentDimKey = dynamicPath[dimIndex];
 
-            return uniqueValues.map((val, idx) => {
+            // Carregar dados de dimensão do servidor (sob demanda)
+            // accumulatedFilters contém filtros dos níveis anteriores (ex: { marca: 'QI' })
+            const accFiltersKey = Object.entries(accumulatedFilters).sort().map(([k, v]) => `${k}=${v}`).join('&');
+            for (const scenario of ['Real', 'Orçado', 'A-1']) {
+              const cacheKey = `${scenario}|${categories.sort().join(',')}|${currentDimKey}|${accFiltersKey}`;
+              if (!dimensionCache[cacheKey]) {
+                loadDimensionData(categories, currentDimKey, scenario, accumulatedFilters);
+                return <tr key={`loading-${id}`}><td colSpan={99} className="text-center text-gray-400 text-xs py-2"><Loader2 className="inline w-3 h-3 animate-spin mr-1" />Carregando...</td></tr>;
+              }
+            }
+
+            // Extrair valores únicos de dimensão do cache
+            const allDimensionValues = new Set<string>();
+            for (const scenario of ['Real', 'Orçado', 'A-1']) {
+              const cacheKey = `${scenario}|${categories.sort().join(',')}|${currentDimKey}|${accFiltersKey}`;
+              const cachedRows = dimensionCache[cacheKey] || [];
+              cachedRows.forEach(row => allDimensionValues.add(row.dimension_value));
+            }
+
+            // Ordenar valores conforme o modo selecionado
+            let sortedValues = Array.from(allDimensionValues);
+            if (dimensionSort === 'alpha') {
+              sortedValues.sort((a, b) => a.localeCompare(b));
+            } else {
+              // Calcular YTD do cenário Real para ordenar por valor
+              const ytdMap = new Map<string, number>();
+              const realCacheKey = `Real|${categories.sort().join(',')}|${currentDimKey}|${accFiltersKey}`;
+              const realRows = dimensionCache[realCacheKey] || [];
+              realRows.forEach(row => {
+                ytdMap.set(row.dimension_value, (ytdMap.get(row.dimension_value) || 0) + Number(row.total_amount));
+              });
+              if (dimensionSort === 'desc') {
+                sortedValues.sort((a, b) => Math.abs(ytdMap.get(b) || 0) - Math.abs(ytdMap.get(a) || 0));
+              } else {
+                sortedValues.sort((a, b) => Math.abs(ytdMap.get(a) || 0) - Math.abs(ytdMap.get(b) || 0));
+              }
+            }
+
+            return sortedValues.map((val, idx) => {
               const nextId = `${id}-${currentDimKey}-${idx}`;
-              const hasMoreLevels = dynamicPath.length > (level - 2);
+              const hasMoreLevels = dynamicPath.length > (dimIndex + 1);
               const nextFilters = { ...accumulatedFilters, [currentDimKey]: val };
               return renderRow(nextId, val, level + 1, categories, hasMoreLevels, nextFilters);
             });
@@ -781,13 +887,15 @@ const DREView: React.FC<DREViewProps> = ({
       calcValues['Real'][i] = baseReal[i];
       calcValues['Orçado'][i] = baseBudget[i];
       calcValues['A-1'][i] = baseA1[i];
+      // Custos já são negativos no banco, então SOMAR (não subtrair)
+      // Ex: Receita=1.000.000, Custos=-500.000 → EBITDA = 1.000.000 + (-500.000) = 500.000
       negCategories.forEach(cats => {
         const negReal = getValues('Real', cats);
         const negBudget = getValues('Orçado', cats);
         const negA1 = getValues('A-1', cats);
-        calcValues['Real'][i] -= negReal[i];
-        calcValues['Orçado'][i] -= negBudget[i];
-        calcValues['A-1'][i] -= negA1[i];
+        calcValues['Real'][i] += negReal[i];
+        calcValues['Orçado'][i] += negBudget[i];
+        calcValues['A-1'][i] += negA1[i];
       });
     }
 
@@ -1033,9 +1141,10 @@ const DREView: React.FC<DREViewProps> = ({
     );
   };
 
-  const getSummary = (selected: string[], all: string[], label: string) => {
-    if (selected.length === 0) return `TODAS AS ${label}S`;
-    if (selected.length === all.length) return `TODAS SELECIONADAS`;
+  const getSummary = (selected: string[], all: string[], labelPlural: string) => {
+    const feminino = labelPlural.endsWith('AS'); // MARCAS, FILIAIS → feminino
+    if (selected.length === 0) return `${feminino ? 'TODAS AS' : 'TODOS OS'} ${labelPlural}`;
+    if (selected.length === all.length) return `${feminino ? 'TODAS SELECIONADAS' : 'TODOS SELECIONADOS'}`;
     if (selected.length === 1) return selected[0].toUpperCase();
     return `${selected[0].toUpperCase()} + ${selected.length - 1}`;
   };
@@ -1132,37 +1241,35 @@ const DREView: React.FC<DREViewProps> = ({
           )}
 
           {/* Botão Atualizar DRE */}
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-black text-[8px] uppercase tracking-widest shadow-sm"
-              title="Forçar atualização dos dados da DRE"
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Atualizando...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Atualizar DRE</span>
-                </>
-              )}
-            </button>
-          )}
+          <button
+            onClick={fetchDREData}
+            disabled={isLoadingDRE}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-black text-[8px] uppercase tracking-widest shadow-sm"
+            title="Forçar atualização dos dados da DRE"
+          >
+            {isLoadingDRE ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Atualizando...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Atualizar DRE</span>
+              </>
+            )}
+          </button>
 
-          {/* Dropdown de Centro de Custo */}
-          <MultiSelectDropdown 
-            label="Centro de Custo"
-            summary={getSummary(selectedTags01, TAG_STRUCTURE.TAG01.options, "UNIDADE")}
+          {/* Dropdown de Pacotes */}
+          <MultiSelectDropdown
+            label="Pacotes"
+            summary={getSummary(selectedTags01, filterOptions.tags01, "PACOTES")}
             isOpen={isTagFilterOpen}
             setOpen={setIsTagFilterOpen}
-            options={TAG_STRUCTURE.TAG01.options}
+            options={filterOptions.tags01}
             selected={selectedTags01}
             toggle={(opt: string) => toggleFilter(selectedTags01, setSelectedTags01, opt)}
-            allSelect={() => selectAll(selectedTags01, setSelectedTags01, TAG_STRUCTURE.TAG01.options)}
+            allSelect={() => selectAll(selectedTags01, setSelectedTags01, filterOptions.tags01)}
             icon={Filter}
             color="[#1B75BB]"
             refObj={tagRef}
@@ -1171,7 +1278,7 @@ const DREView: React.FC<DREViewProps> = ({
           {/* Dropdown de Marca */}
           <MultiSelectDropdown
             label="Marca"
-            summary={getSummary(selectedMarcas, availableBrands, "MARCA")}
+            summary={getSummary(selectedMarcas, availableBrands, "MARCAS")}
             isOpen={isBrandFilterOpen}
             setOpen={setIsBrandFilterOpen}
             options={availableBrands}
@@ -1192,7 +1299,7 @@ const DREView: React.FC<DREViewProps> = ({
           {/* Dropdown de Filial */}
           <MultiSelectDropdown
             label="Filial"
-            summary={getSummary(selectedFiliais, availableBranches, "FILIAL")}
+            summary={getSummary(selectedFiliais, availableBranches, "FILIAIS")}
             isOpen={isBranchFilterOpen}
             setOpen={setIsBranchFilterOpen}
             options={availableBranches}
@@ -1380,7 +1487,7 @@ const DREView: React.FC<DREViewProps> = ({
               title="Variação % vs Orçado"
             >
               {showDeltaPercOrcado ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
-              <span className="text-[9px] font-black uppercase">Δ% Or</span>
+              <span className="text-[9px] font-black uppercase">Δ% Orç</span>
               {showDeltaPercOrcado && activeElements.indexOf('DeltaPercOrcado') >= 0 && (
                 <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaPercOrcado') + 1}º</span>
               )}
@@ -1414,7 +1521,7 @@ const DREView: React.FC<DREViewProps> = ({
               title="Variação R$ vs Orçado"
             >
               {showDeltaAbsOrcado ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
-              <span className="text-[9px] font-black uppercase">ΔR$ Or</span>
+              <span className="text-[9px] font-black uppercase">ΔR$ Orç</span>
               {showDeltaAbsOrcado && activeElements.indexOf('DeltaAbsOrcado') >= 0 && (
                 <span className="ml-1 bg-white/30 px-1 rounded text-[8px]">{activeElements.indexOf('DeltaAbsOrcado') + 1}º</span>
               )}
@@ -1488,8 +1595,18 @@ const DREView: React.FC<DREViewProps> = ({
               </button>
             );
           })}
+          <div className="h-5 w-px bg-gray-200 mx-0.5" />
+          <button
+            onClick={() => setDimensionSort(prev => prev === 'desc' ? 'asc' : prev === 'asc' ? 'alpha' : 'desc')}
+            className="px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all flex items-center gap-1 border bg-[#1B75BB] text-white border-[#1B75BB] shadow-sm"
+            title={dimensionSort === 'desc' ? 'Maior → Menor' : dimensionSort === 'asc' ? 'Menor → Maior' : 'Alfabético (A-Z)'}
+          >
+            {dimensionSort === 'desc' && <><ArrowDown10 size={11} /> Maior→Menor</>}
+            {dimensionSort === 'asc' && <><ArrowUp10 size={11} /> Menor→Maior</>}
+            {dimensionSort === 'alpha' && <><ArrowDownAZ size={11} /> A-Z</>}
+          </button>
           {dynamicPath.length > 0 && (
-            <button onClick={() => setDynamicPath([])} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg ml-1">
+            <button onClick={() => setDynamicPath([])} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg ml-0.5">
               <X size={12} />
             </button>
           )}
@@ -1497,6 +1614,16 @@ const DREView: React.FC<DREViewProps> = ({
       </div>
 
       <div className="bg-white rounded-none border border-gray-100 shadow-2xl overflow-hidden relative">
+        {/* Loading overlay */}
+        {isLoadingDRE && (
+          <div className="absolute inset-0 bg-white/80 z-[100] flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-[#1B75BB] mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-600">Carregando DRE...</p>
+              <p className="text-xs text-gray-400">Agregando dados no servidor</p>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-scroll max-h-[calc(100vh-260px)] overflow-y-auto dre-scrollbar">
           <table className="border-separate border-spacing-0 text-left table-fixed">
             <thead className="sticky top-0 z-50">
@@ -1667,7 +1794,7 @@ const DREView: React.FC<DREViewProps> = ({
                               );
                             } else {
                               const isPercentual = element.includes('Perc');
-                              const compareLabel = element.includes('Orcado') ? 'ΔOr' : 'ΔA1';
+                              const compareLabel = element.includes('Orcado') ? 'ΔOrç' : 'ΔA1';
                               const colWidth = isPercentual ? 'w-[70px]' : 'w-[85px]';
                               return (
                                 <th key={`${month}-${element}`} className={`px-1 py-1 text-center text-[9px] font-black ${colWidth} ${borderClass}`} style={{ backgroundColor: '#1B75BB' }}>
@@ -1699,7 +1826,7 @@ const DREView: React.FC<DREViewProps> = ({
                         );
                       } else {
                         const isPercentual = element.includes('Perc');
-                        const compareLabel = element.includes('Orcado') ? 'ΔOr' : 'ΔA1';
+                        const compareLabel = element.includes('Orcado') ? 'ΔOrç' : 'ΔA1';
                         const colWidth = 'w-[100px]';
 
                         return (
@@ -1714,44 +1841,69 @@ const DREView: React.FC<DREViewProps> = ({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {/* NOVO: Renderização dinâmica da hierarquia DRE */}
-              {Object.entries(dreStructure.data)
-                .sort(([a], [b]) => a.localeCompare(b)) // Ordenar por código (01, 02, 03, 04, 05)
-                .map(([nivel1Code, nivel1Data]) => {
-                  // Coletar todas as categorias deste nível 1 para passar ao renderRow
-                  const allCategories = nivel1Data.items.flatMap(item => item.items);
+              {/* Renderização dinâmica da hierarquia DRE baseada em tag0/tag01 */}
+              {(() => {
+                // Filtrar apenas grupos que compõem o EBITDA: 01 (Receita), 02 (CV), 03 (CF), 04 (SG&A)
+                const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
+                const entries = Object.entries(dreStructure.data)
+                  .filter(([, nivel1Data]) => ebitdaPrefixes.some(p => nivel1Data.label.startsWith(p)))
+                  .sort(([a], [b]) => a.localeCompare(b));
 
-                  return (
-                    <React.Fragment key={nivel1Code}>
-                      {renderRow(nivel1Code, nivel1Data.label, 1, allCategories, true)}
+                // Classificar grupos pelo prefixo do tag0 (ex: "01." = receita, "02."/"03." = custos diretos)
+                const revenueCategories: string[] = [];        // 01.* = Receita
+                const variableCostCategories: string[] = [];   // 02.* = Custos Variáveis
+                const fixedCostCategories: string[] = [];      // 03.* = Custos Fixos
+                const allCostCategories: string[][] = [];      // Todos os custos (para EBITDA)
 
-                      {/* Linha calculada após custos (MARGEM) */}
-                      {nivel1Code === '03' && renderCalculationLine(
-                        '06. MARGEM DE CONTRIBUIÇÃO',
-                        dreStructure.data['01']?.items.flatMap(i => i.items) || [],
-                        [
-                          dreStructure.data['02']?.items.flatMap(i => i.items) || [],
-                          dreStructure.data['03']?.items.flatMap(i => i.items) || []
-                        ],
-                        'bg-[#F44C00]'
-                      )}
-                    </React.Fragment>
-                  );
-                })
-              }
+                entries.forEach(([, nivel1Data]) => {
+                  const allCats = nivel1Data.items.flatMap((item: any) => item.items);
+                  const label = nivel1Data.label;
 
-              {/* EBITDA: Receita - (Custos Var + Custos Fix + SGA + RATEIO CSC se existir) */}
-              {renderCalculationLine(
-                '09. EBITDA OPERACIONAL',
-                dreStructure.data['01']?.items.flatMap(i => i.items) || [],
-                [
-                  dreStructure.data['02']?.items.flatMap(i => i.items) || [],
-                  dreStructure.data['03']?.items.flatMap(i => i.items) || [],
-                  dreStructure.data['04']?.items.flatMap(i => i.items) || [],
-                  ...(dreStructure.data['05'] ? [dreStructure.data['05'].items.flatMap(i => i.items)] : [])
-                ],
-                'bg-[#152e55]'
-              )}
+                  if (label.startsWith('01.')) {
+                    revenueCategories.push(...allCats);
+                  } else {
+                    allCostCategories.push(allCats);
+                    if (label.startsWith('02.')) {
+                      variableCostCategories.push(...allCats);
+                    } else if (label.startsWith('03.')) {
+                      fixedCostCategories.push(...allCats);
+                    }
+                  }
+                });
+
+                // Encontrar o índice após "03. CUSTOS FIXOS" para inserir MARGEM
+                const margemAfterIdx = entries.findIndex(([, d]) => d.label.startsWith('03.'));
+
+                return (
+                  <>
+                    {entries.map(([nivel1Code, nivel1Data], entryIdx) => {
+                      const allCategories = nivel1Data.items.flatMap((item: any) => item.items);
+
+                      return (
+                        <React.Fragment key={nivel1Code}>
+                          {renderRow(nivel1Code, nivel1Data.label, 1, allCategories, true)}
+
+                          {/* MARGEM DE CONTRIBUIÇÃO: Receita - (Custos Var + Custos Fix), após grupo 03 */}
+                          {entryIdx === margemAfterIdx && margemAfterIdx >= 0 && revenueCategories.length > 0 && renderCalculationLine(
+                            '05. MARGEM DE CONTRIBUIÇÃO',
+                            revenueCategories,
+                            [variableCostCategories, fixedCostCategories].filter(c => c.length > 0),
+                            'bg-[#F44C00]'
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* EBITDA: Receita - todos os custos */}
+                    {revenueCategories.length > 0 && allCostCategories.length > 0 && renderCalculationLine(
+                      'EBITDA OPERACIONAL',
+                      revenueCategories,
+                      allCostCategories,
+                      'bg-[#152e55]'
+                    )}
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>

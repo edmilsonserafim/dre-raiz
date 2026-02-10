@@ -250,7 +250,7 @@ export async function exportDashboardToDOCX(
     const realTrans = data.transactions.filter(t => t.scenario === 'Real');
 
     const monthlyData = months.map((month, index) => {
-      const monthTrans = realTrans.filter(t => new Date(t.date).getMonth() === index);
+      const monthTrans = realTrans.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === index);
       const revenue = monthTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const costs = monthTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
       const ebitda = revenue - costs;

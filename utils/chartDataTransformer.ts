@@ -22,7 +22,7 @@ export const aggregateByMonth = (
 
     scenarios.forEach(scenario => {
       const monthTransactions = transactions.filter(
-        t => new Date(t.date).getMonth() === monthIdx && t.scenario === scenario
+        t => parseInt(t.date.substring(5, 7), 10) - 1 === monthIdx && t.scenario === scenario
       );
 
       metrics.forEach(metric => {
@@ -245,7 +245,7 @@ export const buildHeatmapData = (
 
   for (let monthIdx = timeframe.start; monthIdx <= timeframe.end; monthIdx++) {
     const monthTransactions = transactions.filter(
-      t => new Date(t.date).getMonth() === monthIdx && t.scenario === 'Real'
+      t => parseInt(t.date.substring(5, 7), 10) - 1 === monthIdx && t.scenario === 'Real'
     );
 
     const revenue = monthTransactions.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
