@@ -10,7 +10,7 @@ interface User {
   email: string;
   name: string;
   photo_url: string | null;
-  role: 'admin' | 'manager' | 'viewer' | 'pending';
+  role: 'admin' | 'manager' | 'viewer' | 'approver' | 'pending';
   created_at: string;
   last_login: string | null;
 }
@@ -108,7 +108,7 @@ const AdminPanel: React.FC = () => {
     await loadUserPermissions(user.id);
   };
 
-  const handleUpdateRole = async (userId: string, newRole: 'admin' | 'manager' | 'viewer' | 'pending') => {
+  const handleUpdateRole = async (userId: string, newRole: 'admin' | 'manager' | 'viewer' | 'approver' | 'pending') => {
     setSaving(true);
     const success = await supabaseService.updateUserRole(userId, newRole);
 
@@ -601,7 +601,7 @@ const AdminPanel: React.FC = () => {
       {activeTab === 'users' && (
         <>
       {/* Estatísticas de Usuários */}
-      <div className="grid grid-cols-5 gap-2 mb-4">
+      <div className="grid grid-cols-6 gap-2 mb-4">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-2">
           <p className="text-[8px] font-black text-purple-500 uppercase tracking-wider mb-0.5">Total</p>
           <p className="text-2xl font-black text-purple-900">{users.length}</p>
@@ -613,6 +613,10 @@ const AdminPanel: React.FC = () => {
         <div className="bg-green-50 border border-green-200 rounded-lg p-2">
           <p className="text-[8px] font-black text-green-500 uppercase tracking-wider mb-0.5">Gestores</p>
           <p className="text-2xl font-black text-green-900">{users.filter(u => u.role === 'manager').length}</p>
+        </div>
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2">
+          <p className="text-[8px] font-black text-indigo-500 uppercase tracking-wider mb-0.5">Aprovadores</p>
+          <p className="text-2xl font-black text-indigo-900">{users.filter(u => u.role === 'approver').length}</p>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
           <p className="text-[8px] font-black text-gray-500 uppercase tracking-wider mb-0.5">Viewers</p>
@@ -842,11 +846,13 @@ const AdminPanel: React.FC = () => {
                     <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
                       user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
                       user.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+                      user.role === 'approver' ? 'bg-indigo-100 text-indigo-700' :
                       user.role === 'pending' ? 'bg-amber-100 text-amber-700 animate-pulse' :
                       'bg-gray-100 text-gray-700'
                     }`}>
                       {user.role === 'admin' ? 'ADM' :
                        user.role === 'manager' ? 'GST' :
+                       user.role === 'approver' ? 'APV' :
                        user.role === 'pending' ? '⏳' :
                        'VWR'}
                     </span>
@@ -910,8 +916,8 @@ const AdminPanel: React.FC = () => {
               {/* Alterar Função */}
               <div>
                 <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">Função</h3>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(['viewer', 'manager', 'admin'] as const).map(role => (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['viewer', 'manager', 'approver', 'admin'] as const).map(role => (
                     <button
                       key={role}
                       onClick={() => handleUpdateRole(selectedUser.id, role)}
@@ -920,11 +926,12 @@ const AdminPanel: React.FC = () => {
                         selectedUser.role === role
                           ? role === 'admin' ? 'bg-purple-600 text-white' :
                             role === 'manager' ? 'bg-blue-600 text-white' :
+                            role === 'approver' ? 'bg-indigo-600 text-white' :
                             'bg-gray-600 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       } ${saving || selectedUser.id === currentUser?.uid ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {role === 'admin' ? 'Admin' : role === 'manager' ? 'Gestor' : 'Viewer'}
+                      {role === 'admin' ? 'Admin' : role === 'manager' ? 'Gestor' : role === 'approver' ? 'Aprovador' : 'Viewer'}
                     </button>
                   ))}
                 </div>
@@ -1044,7 +1051,8 @@ const AdminPanel: React.FC = () => {
         <ul className="text-[9px] text-blue-800 space-y-0.5">
           <li><strong>Viewer:</strong> Visualiza dados conforme permissões</li>
           <li><strong>Gestor:</strong> Visualiza e solicita alterações</li>
-          <li><strong>Admin:</strong> Acesso total ao sistema</li>
+          <li><strong>Aprovador:</strong> Visualiza, solicita e aprova alterações (não acessa Admin)</li>
+          <li><strong>Admin:</strong> Acesso total ao sistema (inclui painel Admin)</li>
           <li><strong>Permissões:</strong> Limitam acesso a dados específicos</li>
         </ul>
       </div>

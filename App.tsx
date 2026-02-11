@@ -25,7 +25,7 @@ import { TransactionsSyncUI } from './src/components/TransactionsSyncUI';
 import { useTransactions } from './src/hooks/useTransactions';
 
 const App: React.FC = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isApprover } = useAuth();
   const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, loading: permissionsLoading } = usePermissions();
   const { isMobile, isTablet, isDesktop } = useIsMobile();
 
@@ -110,8 +110,8 @@ const App: React.FC = () => {
         console.log('✅ Manual changes carregados:', {
           total: loadedChanges.length,
           pendentes: loadedChanges.filter(c => c.status === 'Pendente').length,
-          aprovados: loadedChanges.filter(c => c.status === 'Aprovado').length,
-          rejeitados: loadedChanges.filter(c => c.status === 'Rejeitado').length,
+          aplicados: loadedChanges.filter(c => c.status === 'Aplicado').length,
+          reprovados: loadedChanges.filter(c => c.status === 'Reprovado').length,
           primeiros5IDs: loadedChanges.slice(0, 5).map(c => ({ id: c.id, type: c.type, status: c.status }))
         });
         setManualChanges(loadedChanges);
@@ -313,8 +313,8 @@ const App: React.FC = () => {
       type: change.type,
       description: change.description,
       justification: change.justification,
-      hasNewValues: !!change.newValues,
-      newValuesKeys: change.newValues ? Object.keys(change.newValues) : []
+      hasNewValue: !!change.newValue,
+      newValueKeys: change.newValue ? Object.keys(JSON.parse(change.newValue)) : []
     });
 
     const original = transactions.find(t => t.id === change.transactionId)
@@ -352,7 +352,7 @@ const App: React.FC = () => {
       requestedBy: newChange.requestedBy,
       requestedByName: newChange.requestedByName,
       hasOriginalTransaction: !!newChange.originalTransaction,
-      hasNewValues: !!newChange.newValues
+      hasNewValue: !!newChange.newValue
     });
 
     // Salvar no Supabase
@@ -399,9 +399,9 @@ const App: React.FC = () => {
   };
 
   const handleApproveChange = async (changeId: string) => {
-    // Verificar se o usuário é admin
-    if (user?.role !== 'admin') {
-      alert('⚠️ Acesso negado!\n\nApenas administradores podem aprovar alterações.');
+    // Verificar se o usuário é admin ou aprovador
+    if (!isApprover) {
+      alert('⚠️ Acesso negado!\n\nApenas administradores e aprovadores podem aprovar alterações.');
       return;
     }
 
@@ -494,9 +494,9 @@ const App: React.FC = () => {
   };
 
   const handleRejectChange = async (changeId: string) => {
-    // Verificar se o usuário é admin
-    if (user?.role !== 'admin') {
-      alert('⚠️ Acesso negado!\n\nApenas administradores podem reprovar alterações.');
+    // Verificar se o usuário é admin ou aprovador
+    if (!isApprover) {
+      alert('⚠️ Acesso negado!\n\nApenas administradores e aprovadores podem reprovar alterações.');
       return;
     }
 

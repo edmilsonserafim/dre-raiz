@@ -8,7 +8,7 @@ interface User {
   email: string;
   name: string;
   photoURL: string;
-  role: 'admin' | 'manager' | 'viewer' | 'pending';
+  role: 'admin' | 'manager' | 'viewer' | 'approver' | 'pending';
 }
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isManager: boolean;
+  isApprover: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,7 +56,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email: dbUser.email,
           name: dbUser.name,
           photoURL: firebaseUser.photoURL || '',
-          role: dbUser.role as 'admin' | 'manager' | 'viewer' | 'pending'
+          role: dbUser.role as 'admin' | 'manager' | 'viewer' | 'approver' | 'pending'
         };
       } else {
         // Criar novo usuário no Supabase (primeiro login) - aguardando aprovação
@@ -151,7 +152,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signInWithGoogle,
     signOut,
     isAdmin: user?.role === 'admin',
-    isManager: user?.role === 'manager' || user?.role === 'admin'
+    isManager: user?.role === 'manager' || user?.role === 'admin',
+    isApprover: user?.role === 'approver' || user?.role === 'admin'
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -18,11 +18,11 @@ interface DetailModalProps {
   onClose: () => void;
   approveChange: (id: string) => void;
   rejectChange: (id: string) => void;
-  isAdmin: boolean;
+  canApprove: boolean;
   formatDateToMMAAAA: (dateStr: string) => string;
 }
 
-const DetailModal: React.FC<DetailModalProps> = ({ change, onClose, approveChange, rejectChange, isAdmin, formatDateToMMAAAA }) => {
+const DetailModal: React.FC<DetailModalProps> = ({ change, onClose, approveChange, rejectChange, canApprove, formatDateToMMAAAA }) => {
   const orig = change.originalTransaction;
   const isRateio = change.type === 'RATEIO';
 
@@ -189,7 +189,7 @@ const DetailModal: React.FC<DetailModalProps> = ({ change, onClose, approveChang
         </div>
 
         {/* Footer com ações */}
-        {change.status === 'Pendente' && isAdmin && (
+        {change.status === 'Pendente' && canApprove && (
           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end gap-3">
             <button
               onClick={() => { rejectChange(change.id); onClose(); }}
@@ -324,7 +324,8 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
 
 const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveChange, rejectChange }) => {
   const [selectedChange, setSelectedChange] = useState<ManualChange | null>(null);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isApprover } = useAuth();
+  const canApprove = isAdmin || isApprover;
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
@@ -354,12 +355,12 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
     )).sort();
   }, [changes]);
 
-  // Filtrar mudanças: Admin vê tudo, outros usuários veem apenas as suas + aplicar filtros
+  // Filtrar mudanças: Admin e Aprovador veem tudo, outros usuários veem apenas as suas + aplicar filtros
   const filteredChanges = useMemo(() => {
     let result = changes;
 
     // Role-based filter (existing logic)
-    if (!isAdmin) {
+    if (!canApprove) {
       result = result.filter(c => c.requestedBy === user?.email);
     }
 
@@ -404,7 +405,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
     }
 
     return result;
-  }, [changes, isAdmin, user, filterStatus, filterType, filterRequester, filterApprover, filterDateFrom, filterDateTo]);
+  }, [changes, canApprove, user, filterStatus, filterType, filterRequester, filterApprover, filterDateFrom, filterDateTo]);
 
   const formatDateToMMAAAA = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -483,7 +484,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
           <div>
             <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight leading-none">Aprovações</h2>
             <p className="text-gray-500 text-[10px] font-medium mt-1">
-              {isAdmin ? 'Gestão de reclassificações financeiras.' : 'Minhas solicitações de aprovação.'}
+              {canApprove ? 'Gestão de reclassificações financeiras.' : 'Minhas solicitações de aprovação.'}
             </p>
           </div>
         </div>
@@ -498,11 +499,16 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
             <span className="text-xs font-black">Exportar Excel</span>
           </button>
 
-          {/* Admin Badge */}
+          {/* Role Badge */}
           {isAdmin ? (
             <div className="bg-purple-50 border-2 border-purple-200 px-4 py-2 rounded-xl flex items-center gap-2">
               <Shield className="text-purple-600" size={16} />
               <span className="text-xs font-black text-purple-900">ADMINISTRADOR</span>
+            </div>
+          ) : isApprover ? (
+            <div className="bg-indigo-50 border-2 border-indigo-200 px-4 py-2 rounded-xl flex items-center gap-2">
+              <ShieldCheck className="text-indigo-600" size={16} />
+              <span className="text-xs font-black text-indigo-900">APROVADOR</span>
             </div>
           ) : (
             <div className="bg-blue-50 border-2 border-blue-200 px-4 py-2 rounded-xl flex items-center gap-2">
@@ -513,13 +519,13 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
         </div>
       </header>
 
-      {!isAdmin && (
+      {!canApprove && (
         <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="text-yellow-600 shrink-0" size={20} />
           <div>
             <p className="text-sm font-black text-yellow-900">ℹ️ Visualização Limitada</p>
             <p className="text-xs text-yellow-700 mt-1">
-              Você está vendo apenas as solicitações que você criou. Apenas administradores podem aprovar ou reprovar alterações.
+              Você está vendo apenas as solicitações que você criou. Apenas administradores e aprovadores podem aprovar ou reprovar alterações.
             </p>
           </div>
         </div>
@@ -641,7 +647,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <AlertCircle size={28} />
                       <p className="font-black text-gray-400 uppercase tracking-widest text-[10px]">
-                        {isAdmin ? 'Fila Vazia' : 'Nenhuma Solicitação'}
+                        {canApprove ? 'Fila Vazia' : 'Nenhuma Solicitação'}
                       </p>
                     </div>
                   </td>
@@ -693,7 +699,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
                       </span>
                     </td>
                     <td className="px-3 text-center">
-                      {change.status === 'Pendente' && isAdmin ? (
+                      {change.status === 'Pendente' && canApprove ? (
                         <div className="flex justify-center gap-1">
                           <button
                             onClick={(e) => { e.stopPropagation(); approveChange(change.id); }}
@@ -737,7 +743,7 @@ const ManualChangesView: React.FC<ManualChangesViewProps> = ({ changes, approveC
           onClose={() => setSelectedChange(null)}
           approveChange={approveChange}
           rejectChange={rejectChange}
-          isAdmin={isAdmin}
+          canApprove={canApprove}
           formatDateToMMAAAA={formatDateToMMAAAA}
         />
       )}

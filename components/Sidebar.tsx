@@ -32,11 +32,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'kpis', label: 'Indicadores e KPIs', icon: BarChart3 },
-    { id: 'analysis', label: 'Análise Financeira', icon: FileText },
     { id: 'dre', label: 'DRE Gerencial', icon: TableProperties },
     { id: 'movements', label: 'Lançamentos', icon: ReceiptText },
     { id: 'manual_changes', label: 'Aprovações', icon: History, badge: pendingCount },
+    { id: 'kpis', label: 'Indicadores e KPIs', icon: BarChart3 },
+    { id: 'analysis', label: 'Análise Financeira', icon: FileText },
     { id: 'forecasting', label: 'Forecasting', icon: LineChart },
     ...(isAdmin ? [
       { id: 'admin', label: 'Admin', icon: Shield }
@@ -111,10 +111,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, selected
             <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
               user?.role === 'admin' ? 'bg-purple-100 text-purple-700' :
               user?.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+              user?.role === 'approver' ? 'bg-indigo-100 text-indigo-700' :
               'bg-gray-100 text-gray-700'
             }`}>
               {user?.role === 'admin' ? 'Administrador' :
                user?.role === 'manager' ? 'Gestor' :
+               user?.role === 'approver' ? 'Aprovador' :
                'Visualizador'}
             </span>
           </div>
