@@ -43,8 +43,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   onFilialChange
 }) => {
   const [activeMetric, setActiveMetric] = useState<'revenue' | 'ebitda' | 'margin'>('ebitda');
-  const [selectedMonthStart, setSelectedMonthStart] = useState<number>(0);
-  const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(11);
+  // ⚡ OTIMIZAÇÃO: Iniciar com mês atual (sincronizado com App.tsx)
+  const currentMonthIndex = new Date().getMonth(); // 0-11 (fev = 1)
+  const [selectedMonthStart, setSelectedMonthStart] = useState<number>(currentMonthIndex);
+  const [selectedMonthEnd, setSelectedMonthEnd] = useState<number>(currentMonthIndex);
   const [comparisonMode, setComparisonMode] = useState<'budget' | 'prevYear'>('budget');
   const [sortBranchesAZ, setSortBranchesAZ] = useState(false);
   const [showVariationDetail, setShowVariationDetail] = useState(false);
