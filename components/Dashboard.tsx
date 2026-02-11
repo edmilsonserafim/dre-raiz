@@ -50,6 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [showVariationDetail, setShowVariationDetail] = useState(false);
   const [showAlertsDetail, setShowAlertsDetail] = useState(false);
   const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false); // Lazy render do Heatmap
 
   // Receita Líquida calculada usando a mesma lógica da DRE (tag0 "01.")
   const [receitaLiquidaReal, setReceitaLiquidaReal] = useState<number>(0);
@@ -1274,8 +1275,29 @@ const Dashboard: React.FC<DashboardProps> = ({
               </h3>
               <p className="text-xs text-gray-500 font-medium mt-1">Visualização de tendências mensais por métrica (dados agregados da DRE)</p>
             </div>
+
+            {/* Botão Toggle */}
+            <button
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1B75BB] to-[#4AC8F4] text-white text-sm font-bold rounded-lg hover:shadow-lg transition-all hover:scale-105"
+            >
+              {showHeatmap ? (
+                <>
+                  <ChevronRight size={16} className="rotate-90" />
+                  Ocultar Heatmap
+                </>
+              ) : (
+                <>
+                  <ChevronRight size={16} />
+                  Mostrar Heatmap
+                </>
+              )}
+            </button>
           </div>
 
+          {/* Conteúdo do Heatmap (renderizado apenas quando showHeatmap = true) */}
+          {showHeatmap && (
+            <>
           {/* Loading State */}
           {isLoadingDRE && (
             <div className="flex items-center justify-center py-12">
@@ -1371,6 +1393,17 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
           </div>
+          )}
+          </>
+          )}
+
+          {/* Mensagem quando Heatmap está oculto */}
+          {!showHeatmap && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <CalendarDays size={48} className="text-gray-300 mb-3" />
+              <p className="text-sm text-gray-500 font-medium">Clique em "Mostrar Heatmap" para visualizar a performance mensal</p>
+              <p className="text-xs text-gray-400 mt-2">💡 O Heatmap processa dados pesados. Carregue apenas quando necessário.</p>
+            </div>
           )}
         </div>
       </div>
