@@ -41,7 +41,14 @@
       "Bash(set NODE_OPTIONS=--max-old-space-size=8192)",
       "Bash(where:*)",
       "Bash(ping:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(vercel --version:*)",
+      "Bash(vercel --prod --yes:*)",
+      "Bash(vercel env add:*)",
+      "Bash(vercel env:*)",
+      "Bash(Get-Content \"CORRIGIR_FUNCAO_RLS.sql\")",
+      "Bash(Set-Clipboard)",
+      "Bash(git reset:*)"
     ]
   }
 }
