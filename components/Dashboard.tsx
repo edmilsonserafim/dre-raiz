@@ -50,7 +50,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [showVariationDetail, setShowVariationDetail] = useState(false);
   const [showAlertsDetail, setShowAlertsDetail] = useState(false);
   const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(false);
-  const [showHeatmap, setShowHeatmap] = useState(false); // Lazy render do Heatmap
 
   // Receita Líquida calculada usando a mesma lógica da DRE (tag0 "01.")
   const [receitaLiquidaReal, setReceitaLiquidaReal] = useState<number>(0);
@@ -79,19 +78,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Estado para ordenação
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
-  // Estado para dados da DRE (para Heatmap)
-  const [dreSummaryData, setDreSummaryData] = useState<Array<{
-    scenario: string;
-    conta_contabil: string;
-    year_month: string;
-    tag0: string;
-    tag01: string;
-    tipo: string;
-    total_amount: number;
-    tx_count: number;
-  }>>([]);
-  const [isLoadingDRE, setIsLoadingDRE] = useState(false);
-
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
   // Expor o range de meses e modo de comparação via eventos para o DashboardEnhanced
@@ -116,40 +102,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     window.dispatchEvent(event);
   }, [comparisonMode]);
 
-  // Buscar dados da DRE para o Heatmap
-  useEffect(() => {
-    const fetchDREData = async () => {
-      setIsLoadingDRE(true);
-      try {
-        const year = new Date().getFullYear();
-        const monthFrom = `${year}-01`;
-        const monthTo = `${year}-12`;
-
-        const summary = await getDRESummary({
-          monthFrom,
-          monthTo,
-          marcas: selectedMarca.length > 0 ? selectedMarca : undefined,
-          nomeFiliais: selectedFilial.length > 0 ? selectedFilial : undefined,
-        });
-
-        setDreSummaryData(summary);
-        console.log(`✅ Dashboard Heatmap: ${summary.length} linhas DRE carregadas`);
-
-        // Debug: Mostrar tag0s e tipos únicos
-        const uniqueTag0s = Array.from(new Set(summary.map(row => row.tag0))).sort();
-        const uniqueTipos = Array.from(new Set(summary.map(row => row.tipo))).sort();
-        console.log('🔍 Tag0s únicos:', uniqueTag0s);
-        console.log('🔍 Tipos únicos:', uniqueTipos);
-      } catch (error) {
-        console.error('❌ Erro ao carregar dados DRE para Heatmap:', error);
-        setDreSummaryData([]);
-      } finally {
-        setIsLoadingDRE(false);
-      }
-    };
-
-    fetchDREData();
-  }, [selectedMarca, selectedFilial]);
 
   // Buscar Receita Líquida usando a mesma lógica da DRE (tag0 "01.")
   useEffect(() => {
@@ -581,156 +533,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   // Heatmap de Performance Mensal - Usando dados da DRE Gerencial
-  const heatmapData = useMemo(() => {
-    // Métricas fixas que queremos exibir
-    const metrics = ['Receita', 'Custos Variáveis', 'Custos Fixos', 'SG&A', 'Rateio CSC', 'EBITDA'];
-
-    // Se não temos dados da DRE ainda, retornar estrutura vazia
-    if (dreSummaryData.length === 0) {
-      return { metrics, monthsData: [] };
-    }
-
-    // Filtrar apenas dados do cenário Real
-    const realData = dreSummaryData.filter(row => row.scenario === 'Real');
-
-    // Manter todos os meses visíveis, mas zerar dados fora do filtro
-    const monthsData = months.map((month, idx) => {
-      // Verificar se o mês está dentro do intervalo selecionado
-      const isInRange = idx >= selectedMonthStart && idx <= selectedMonthEnd;
-
-      // Construir year_month no formato 'YYYY-MM'
-      const year = new Date().getFullYear();
-      const yearMonth = `${year}-${String(idx + 1).padStart(2, '0')}`;
-
-      // Objeto para armazenar valores e scores
-      const monthData: any = {
-        month,
-        monthIndex: idx,
-        scores: {}
-      };
-
-      // Se não está no intervalo, retornar dados zerados com "-"
-      if (!isInRange) {
-        metrics.forEach(metric => {
-          monthData[metric] = '-';
-          monthData.scores[metric] = 0;
-        });
-        return monthData;
-      }
-
-      // Filtrar dados do mês atual
-      const monthRows = realData.filter(row => row.year_month === yearMonth);
-
-      // Calcular valores baseado em tag0 e tipo (mapeamento robusto)
-      const revenue = monthRows
-        .filter(row =>
-          (row.tag0 && row.tag0.match(/^01\./i)) ||
-          (row.tag0 && row.tag0.toLowerCase().includes('receita')) ||
-          row.tipo === 'REVENUE'
-        )
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
-      const variableCosts = monthRows
-        .filter(row =>
-          (row.tag0 && (row.tag0.match(/^02\./i) || row.tag0.toLowerCase().includes('variá'))) ||
-          row.tipo === 'VARIABLE_COST'
-        )
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
-      const fixedCosts = monthRows
-        .filter(row =>
-          (row.tag0 && (row.tag0.match(/^03\./i) || row.tag0.toLowerCase().includes('fixo'))) ||
-          row.tipo === 'FIXED_COST'
-        )
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
-      const sgaCosts = monthRows
-        .filter(row =>
-          (row.tag0 && (row.tag0.match(/^04\./i) || row.tag0.toLowerCase().includes('sg&a') || row.tag0.toLowerCase().includes('administrativa'))) ||
-          row.tipo === 'SGA'
-        )
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
-      const rateioCosts = monthRows
-        .filter(row =>
-          (row.tag0 && (row.tag0.match(/^05\./i) || row.tag0.toLowerCase().includes('rateio') || row.tag0.toLowerCase().includes('csc'))) ||
-          row.tipo === 'RATEIO'
-        )
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
-      const ebitda = revenue - variableCosts - fixedCosts - sgaCosts - rateioCosts;
-
-      // Debug para o primeiro mês no range
-      if (idx === selectedMonthStart && monthRows.length > 0) {
-        console.log(`\n🔍 Debug Heatmap - ${month}/${year}:`);
-        console.log(`   Total de linhas do mês: ${monthRows.length}`);
-        console.log(`   Receita: R$ ${revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-        console.log(`   Custos Variáveis (tipo='VARIABLE_COST'): R$ ${variableCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-        console.log(`   Custos Fixos (tipo='FIXED_COST'): R$ ${fixedCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-        console.log(`   SG&A (tipo='SGA'): R$ ${sgaCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-        console.log(`   Rateio (tipo='RATEIO'): R$ ${rateioCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-        console.log(`   EBITDA: R$ ${ebitda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-
-        // Mostrar amostra dos tipos que existem
-        const tiposNoMes = Array.from(new Set(monthRows.map(r => r.tipo)));
-        console.log(`   Tipos encontrados no mês:`, tiposNoMes);
-
-        // Mostrar tag0s que não são receita
-        const tag0sNaoReceita = Array.from(new Set(
-          monthRows.filter(r => !r.tag0?.match(/^01\./i)).map(r => r.tag0)
-        ));
-        console.log(`   Tag0s (não-receita) no mês:`, tag0sNaoReceita);
-      }
-
-      // Preencher valores formatados
-      monthData['Receita'] = formatHeatmapValue(revenue);
-      monthData['Custos Variáveis'] = formatHeatmapValue(variableCosts);
-      monthData['Custos Fixos'] = formatHeatmapValue(fixedCosts);
-      monthData['SG&A'] = formatHeatmapValue(sgaCosts);
-      monthData['Rateio CSC'] = formatHeatmapValue(rateioCosts);
-      monthData['EBITDA'] = formatHeatmapValue(ebitda);
-
-      // Calcular scores para coloração (0-100)
-      monthData.scores['Receita'] = revenue > 0 ? Math.min(100, (revenue / 150000) * 100) : 0;
-      monthData.scores['Custos Variáveis'] = variableCosts > 0 ? Math.min(100, 100 - (variableCosts / 80000) * 100) : 100;
-      monthData.scores['Custos Fixos'] = fixedCosts > 0 ? Math.min(100, 100 - (fixedCosts / 60000) * 100) : 100;
-      monthData.scores['SG&A'] = sgaCosts > 0 ? Math.min(100, 100 - (sgaCosts / 30000) * 100) : 100;
-      monthData.scores['Rateio CSC'] = rateioCosts > 0 ? Math.min(100, 100 - (rateioCosts / 20000) * 100) : 100;
-      monthData.scores['EBITDA'] = ebitda > 0 ? Math.min(100, (ebitda / 40000) * 100) : 0;
-
-      return monthData;
-    });
-
-    // Função auxiliar para somar valores formatados
-    const sumFormattedValues = (key: string): string => {
-      const sum = monthsData.reduce((acc, m) => {
-        const val = m[key] === '-' ? 0 : parseFloat(m[key].replace(/\./g, ''));
-        return acc + val;
-      }, 0);
-      return sum === 0 ? '-' : sum.toLocaleString('pt-BR', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      });
-    };
-
-    // Calcular totais dinamicamente para cada métrica
-    const totals: any = {
-      month: 'TOTAL',
-      monthIndex: 12,
-      scores: {}
-    };
-
-    metrics.forEach(metric => {
-      totals[metric] = sumFormattedValues(metric);
-      totals.scores[metric] = 85; // Score neutro para totais
-    });
-
-    // Adicionar totais ao final
-    const monthsDataWithTotal = [...monthsData, totals];
-
-    console.log('🔥 Heatmap Data (DRE Nível 1):', { metrics, monthsData: monthsDataWithTotal });
-    return { metrics, monthsData: monthsDataWithTotal };
-  }, [dreSummaryData, months, selectedMonthStart, selectedMonthEnd]);
 
   return (
     <>
