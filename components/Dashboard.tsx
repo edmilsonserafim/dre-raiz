@@ -1902,19 +1902,38 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <tr className="border-t-2 border-gray-300 bg-blue-50">
                     <td className="p-3 text-sm font-black text-gray-800 uppercase">TOTAL</td>
                     <td className="p-3 text-right text-base font-black text-blue-600">
-                      {receitaLiquidaReal === 0 ? '—' : `R$ ${receitaLiquidaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      {(() => {
+                        const totalReal = receitaBreakdown.reduce((sum, item) => sum + item.real, 0);
+                        return totalReal === 0 ? '—' : `R$ ${totalReal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                      })()}
                     </td>
                     <td className="p-3 text-right text-base font-semibold text-gray-600">
-                      {receitaLiquidaComparison === 0 ? '—' : `R$ ${receitaLiquidaComparison.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      {(() => {
+                        const totalOrcado = receitaBreakdown.reduce((sum, item) => sum + item.orcado, 0);
+                        return totalOrcado === 0 ? '—' : `R$ ${totalOrcado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                      })()}
                     </td>
                     <td className="p-3 text-right text-base font-semibold text-gray-600">
-                      {receitaBreakdown.reduce((sum, item) => sum + item.a1, 0) === 0 ? '—' : `R$ ${receitaBreakdown.reduce((sum, item) => sum + item.a1, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      {(() => {
+                        const totalA1 = receitaBreakdown.reduce((sum, item) => sum + item.a1, 0);
+                        return totalA1 === 0 ? '—' : `R$ ${totalA1.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                      })()}
                     </td>
                     <td className="p-3 text-right text-sm font-bold text-gray-700">
-                      {receitaLiquidaComparison === 0 ? '—' : `R$ ${(receitaLiquidaReal - receitaLiquidaComparison).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                      {(() => {
+                        const totalReal = receitaBreakdown.reduce((sum, item) => sum + item.real, 0);
+                        const totalOrcado = receitaBreakdown.reduce((sum, item) => sum + item.orcado, 0);
+                        const diff = totalReal - totalOrcado;
+                        return totalOrcado === 0 ? '—' : `R$ ${diff.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
+                      })()}
                     </td>
                     <td className="p-3 text-right text-sm font-bold text-gray-700">
-                      {receitaLiquidaComparison === 0 ? '—' : `${((receitaLiquidaReal / receitaLiquidaComparison - 1) * 100).toFixed(1)}%`}
+                      {(() => {
+                        const totalReal = receitaBreakdown.reduce((sum, item) => sum + item.real, 0);
+                        const totalOrcado = receitaBreakdown.reduce((sum, item) => sum + item.orcado, 0);
+                        const percChange = totalOrcado === 0 ? 0 : ((totalReal / totalOrcado - 1) * 100);
+                        return totalOrcado === 0 ? '—' : `${percChange.toFixed(1)}%`;
+                      })()}
                     </td>
                     <td className="p-3 text-right text-sm text-gray-300">—</td>
                     <td className="p-3 text-right text-sm text-gray-300">—</td>
