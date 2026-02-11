@@ -1,16 +1,19 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
 import { DashboardEnhanced } from './components/DashboardEnhanced';
-import KPIsView from './components/KPIsView';
-import AnalysisView from './components/AnalysisView';
-import DREView from './components/DREView';
-import ManualChangesView from './components/ManualChangesView';
-import TransactionsView from './components/TransactionsView';
-import ForecastingView from './components/ForecastingView';
 import LoginScreen from './components/LoginScreen';
-import AdminPanel from './components/AdminPanel';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
+import LoadingSpinner from './components/LoadingSpinner';
+
+// Lazy loading de views pesadas (carregam sob demanda)
+const KPIsView = React.lazy(() => import('./components/KPIsView'));
+const AnalysisView = React.lazy(() => import('./components/AnalysisView'));
+const DREView = React.lazy(() => import('./components/DREView'));
+const ManualChangesView = React.lazy(() => import('./components/ManualChangesView'));
+const TransactionsView = React.lazy(() => import('./components/TransactionsView'));
+const ForecastingView = React.lazy(() => import('./components/ForecastingView'));
+const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
 import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X } from 'lucide-react';
@@ -705,36 +708,60 @@ const App: React.FC = () => {
               onFilialChange={setSelectedFilial}
             />
           )}
-          {currentView === 'kpis' && <KPIsView kpis={kpis} transactions={filteredTransactions} />}
-          {currentView === 'movements' && (
-            <TransactionsView
-              transactions={filteredTransactions}
-              searchedTransactions={searchedTransactions}
-              setSearchedTransactions={setSearchedTransactions}
-              hasSearchedTransactions={hasSearchedTransactions}
-              setHasSearchedTransactions={setHasSearchedTransactions}
-              addTransaction={handleAddTransaction}
-              requestChange={handleRequestChange}
-              deleteTransaction={handleDeleteTransaction}
-              fetchFromCSV={handleImportData}
-              isSyncing={isSyncing}
-              externalFilters={drillDownFilters}
-              externalActiveTab={drillDownActiveTab}
-              clearGlobalFilters={clearGlobalFilters}
-              onBackToDRE={handleBackToDRE}
-            />
+          {currentView === 'kpis' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando KPIs..." />}>
+              <KPIsView kpis={kpis} transactions={filteredTransactions} />
+            </Suspense>
           )}
-          {currentView === 'manual_changes' && <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />}
+          {currentView === 'movements' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando lançamentos..." />}>
+              <TransactionsView
+                transactions={filteredTransactions}
+                searchedTransactions={searchedTransactions}
+                setSearchedTransactions={setSearchedTransactions}
+                hasSearchedTransactions={hasSearchedTransactions}
+                setHasSearchedTransactions={setHasSearchedTransactions}
+                addTransaction={handleAddTransaction}
+                requestChange={handleRequestChange}
+                deleteTransaction={handleDeleteTransaction}
+                fetchFromCSV={handleImportData}
+                isSyncing={isSyncing}
+                externalFilters={drillDownFilters}
+                externalActiveTab={drillDownActiveTab}
+                clearGlobalFilters={clearGlobalFilters}
+                onBackToDRE={handleBackToDRE}
+              />
+            </Suspense>
+          )}
+          {currentView === 'manual_changes' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando alterações..." />}>
+              <ManualChangesView changes={manualChanges} approveChange={handleApproveChange} rejectChange={handleRejectChange} />
+            </Suspense>
+          )}
           {hasMountedDRE && (
             <div style={{ display: currentView === 'dre' ? undefined : 'none' }}>
-              <DREView
-                onDrillDown={handleDrillDown}
-              />
+              <Suspense fallback={<LoadingSpinner message="Carregando DRE..." />}>
+                <DREView
+                  onDrillDown={handleDrillDown}
+                />
+              </Suspense>
             </div>
           )}
-          {currentView === 'forecasting' && <ForecastingView transactions={filteredTransactions} />}
-          {currentView === 'analysis' && <AnalysisView transactions={filteredTransactions} kpis={kpis} />}
-          {currentView === 'admin' && <AdminPanel />}
+          {currentView === 'forecasting' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando previsões..." />}>
+              <ForecastingView transactions={filteredTransactions} />
+            </Suspense>
+          )}
+          {currentView === 'analysis' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando análises..." />}>
+              <AnalysisView transactions={filteredTransactions} kpis={kpis} />
+            </Suspense>
+          )}
+          {currentView === 'admin' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando painel admin..." />}>
+              <AdminPanel />
+            </Suspense>
+          )}
         </div>
       </main>
     </div>

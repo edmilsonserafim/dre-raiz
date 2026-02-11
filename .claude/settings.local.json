@@ -48,7 +48,8 @@
       "Bash(vercel env:*)",
       "Bash(Get-Content \"CORRIGIR_FUNCAO_RLS.sql\")",
       "Bash(Set-Clipboard)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }
