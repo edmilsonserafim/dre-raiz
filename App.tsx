@@ -86,11 +86,17 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentFilters && !initialLoadRef.current) {
       initialLoadRef.current = true;
-      // Carregar ano atual completo (jan-dez) para DRE
-      const year = new Date().getFullYear();
+      // ⚡ OTIMIZAÇÃO: Carregar apenas MÊS ATUAL (muito mais rápido)
+      // Antes: carregava 12 meses (jan-dez) = 100k+ transações = 30s
+      // Depois: carrega 1 mês = ~10k transações = 2-3s
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const currentMonth = `${year}-${month}`;
+
       applyFilters({
-        monthFrom: `${year}-01`,
-        monthTo: `${year}-12`
+        monthFrom: currentMonth,
+        monthTo: currentMonth
       });
     }
   }, [applyFilters, currentFilters]);
