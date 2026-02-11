@@ -905,7 +905,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
             <ReceiptText className="text-[#F44C00]" size={16} /> Lançamentos
           </h2>
-          <p className="text-gray-500 text-[7px] font-bold uppercase tracking-widest leading-none">Gestão de Dados SAP • Raiz Educação</p>
+          <p className="text-gray-500 text-[7px] font-bold uppercase tracking-widest leading-none">Gestão de Dados • Raiz Educação</p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
            {/* Botão Voltar para DRE - só aparece quando há filtros de drill-down */}

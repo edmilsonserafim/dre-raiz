@@ -19,6 +19,17 @@ import { exportDashboardToPDF } from '../services/pdfExportService';
 import { exportDashboardToDOCX } from '../services/docxExportService';
 import { generatePresentation, createDRESlides } from '../services/slidePptxService';
 
+// Tags01 que compõem a Receita Líquida conforme DRE
+const RECEITA_LIQUIDA_TAGS = [
+  'Tributos',
+  'Devoluções & Cancelamentos',
+  'Integral',
+  'Material Didático',
+  'Receita De Mensalidade',
+  'Receitas Não Operacionais',
+  'Receitas Extras'
+];
+
 interface DashboardEnhancedProps {
   kpis: SchoolKPIs;
   transactions: Transaction[];
@@ -32,6 +43,34 @@ interface DashboardEnhancedProps {
 
 export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const { transactions, kpis, selectedMarca, selectedFilial } = props;
+
+  // 🔍 DEBUG: Verificar dados recebidos
+  React.useEffect(() => {
+    console.log('📊 DashboardEnhanced - Debug de Dados:');
+    console.log('  Total transactions:', transactions.length);
+    console.log('  Transactions Real:', transactions.filter(t => t.scenario === 'Real').length);
+    console.log('  Transactions Orçado:', transactions.filter(t => t.scenario === 'Orçado').length);
+    console.log('  KPIs:', {
+      totalRevenue: kpis.totalRevenue,
+      ebitda: kpis.ebitda,
+      activeStudents: kpis.activeStudents,
+      netMargin: kpis.netMargin
+    });
+    console.log('  Filtros:', {
+      selectedMarca,
+      selectedFilial
+    });
+
+    if (transactions.length === 0) {
+      console.warn('⚠️ NENHUMA TRANSACTION CARREGADA! Verifique:');
+      console.warn('  1. Se o banco de dados tem dados');
+      console.warn('  2. Se os filtros de período não estão muito restritivos');
+      console.warn('  3. Se há erro no console de rede (F12 → Network)');
+    } else if (transactions.filter(t => t.scenario === 'Real').length === 0) {
+      console.warn('⚠️ NÃO HÁ TRANSACTIONS COM SCENARIO="Real"!');
+      console.warn('  Verifique se os dados no banco têm o campo scenario preenchido corretamente');
+    }
+  }, [transactions, kpis, selectedMarca, selectedFilial]);
 
   // State para capturar os filtros de mês do Dashboard filho
   const [monthRange, setMonthRange] = React.useState({ start: 0, end: 11 });
@@ -86,8 +125,13 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
       }
 
       const monthTrans = filteredTrans.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === index);
-      const revenue = monthTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
-      const costs = monthTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+      const revenue = monthTrans.filter(t =>
+        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+      ).reduce((acc, t) => acc + t.amount, 0);
+      const costs = monthTrans.filter(t =>
+        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
+      ).reduce((acc, t) => acc + t.amount, 0);
       const ebitda = revenue - costs;
 
       return { name: month, revenue, ebitda, costs };
@@ -208,15 +252,25 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     return branchesToShow.map(branch => {
       // Dados reais
       const branchTrans = filteredTrans.filter(t => t.filial === branch);
-      const revenue = branchTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
-      const costs = branchTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+      const revenue = branchTrans.filter(t =>
+        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+      ).reduce((acc, t) => acc + t.amount, 0);
+      const costs = branchTrans.filter(t =>
+        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
+      ).reduce((acc, t) => acc + t.amount, 0);
       const ebitda = revenue - costs;
       const margin = revenue > 0 ? (ebitda / revenue) * 100 : 0;
 
       // Dados de comparação
       const compBranchTrans = comparisonTrans.filter(t => t.filial === branch);
-      const compRevenue = compBranchTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
-      const compCosts = compBranchTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+      const compRevenue = compBranchTrans.filter(t =>
+        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+      ).reduce((acc, t) => acc + t.amount, 0);
+      const compCosts = compBranchTrans.filter(t =>
+        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
+      ).reduce((acc, t) => acc + t.amount, 0);
       const compEbitda = compRevenue - compCosts;
       const compMargin = compRevenue > 0 ? (compEbitda / compRevenue) * 100 : 0;
 
@@ -226,7 +280,10 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
       const marginVariation = margin - compMargin;
 
       // Calcular número de alunos estimado (proporcionalmente)
-      const totalRevenue = filteredTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+      const totalRevenue = filteredTrans.filter(t =>
+        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+      ).reduce((acc, t) => acc + t.amount, 0);
       const branchStudents = totalRevenue > 0 ? Math.round(kpis.activeStudents * (revenue / totalRevenue)) : 0;
 
       return {

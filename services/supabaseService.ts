@@ -272,6 +272,8 @@ export interface DRESummaryRow {
   year_month: string;  // 'YYYY-MM'
   tag0: string;
   tag01: string;
+  tag02: string;
+  tag03: string;
   tipo: string;        // type (REVENUE, FIXED_COST, etc.)
   total_amount: number;
   tx_count: number;
@@ -317,6 +319,42 @@ export const getDRESummary = async (params: {
 
   console.log(`✅ getDRESummary: ${data?.length || 0} linhas agregadas retornadas`);
   return (data || []) as DRESummaryRow[];
+};
+
+/**
+ * Calcular Receita Líquida usando a mesma lógica da DRE
+ * Soma todos os valores onde tag0 começa com "01." (Receita)
+ */
+export const getReceitaLiquidaDRE = async (params: {
+  monthFrom?: string;
+  monthTo?: string;
+  marcas?: string[];
+  nomeFiliais?: string[];
+  scenario?: string;
+}): Promise<number> => {
+  console.log('💰 getReceitaLiquidaDRE: Calculando receita líquida...', params);
+
+  // Buscar dados agregados usando getDRESummary
+  const summaryRows = await getDRESummary({
+    monthFrom: params.monthFrom,
+    monthTo: params.monthTo,
+    marcas: params.marcas,
+    nomeFiliais: params.nomeFiliais,
+    // Não filtramos por tags01 aqui - queremos TODAS as tags que estão no tag0 de receita
+  });
+
+  // Filtrar pelo cenário (se especificado)
+  const filteredRows = params.scenario
+    ? summaryRows.filter(row => row.scenario === params.scenario)
+    : summaryRows;
+
+  // Somar todos os valores onde tag0 começa com "01." (Receita)
+  const totalReceita = filteredRows
+    .filter(row => row.tag0 && row.tag0.match(/^01\./i))
+    .reduce((sum, row) => sum + Number(row.total_amount), 0);
+
+  console.log(`✅ Receita Líquida calculada: R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+  return totalReceita;
 };
 
 /**

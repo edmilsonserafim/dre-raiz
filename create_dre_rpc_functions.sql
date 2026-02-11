@@ -21,6 +21,8 @@ RETURNS TABLE(
   year_month text,
   tag0 text,
   tag01 text,
+  tag02 text,
+  tag03 text,
   tipo text,
   total_amount numeric,
   tx_count bigint
@@ -33,6 +35,8 @@ AS $$
     substring(t.date, 1, 7) as year_month,
     COALESCE(tm.tag0, 'Sem Classificação') as tag0,
     COALESCE(t.tag01, 'Sem Subclassificação') as tag01,
+    COALESCE(t.tag02, 'Sem tag02') as tag02,
+    COALESCE(t.tag03, 'Sem tag03') as tag03,
     t.type as tipo,
     SUM(t.amount) as total_amount,
     COUNT(*) as tx_count
@@ -51,6 +55,8 @@ AS $$
     substring(t.date, 1, 7),
     COALESCE(tm.tag0, 'Sem Classificação'),
     COALESCE(t.tag01, 'Sem Subclassificação'),
+    COALESCE(t.tag02, 'Sem tag02'),
+    COALESCE(t.tag03, 'Sem tag03'),
     t.type
 $$;
 

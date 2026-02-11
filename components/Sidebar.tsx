@@ -12,7 +12,8 @@ import {
   LogOut,
   User as UserIcon,
   Shield,
-  FileText
+  FileText,
+  TrendingUp
 } from 'lucide-react';
 import { ViewType } from '../types';
 import { useAuth } from '../contexts/AuthContext';

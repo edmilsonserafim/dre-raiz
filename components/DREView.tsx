@@ -180,6 +180,57 @@ const DREView: React.FC<DREViewProps> = ({
       setFilterOptions(options);
       setFilialTable(filiais);
       console.log(`✅ DRE: ${summary.length} linhas agregadas carregadas`);
+
+      // 🔍 ANÁLISE: Mapear tag0 → tag01 e calcular totais de receita
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔍 ANÁLISE DRE - Mapeamento tag0 → tag01');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      const tag0Map = new Map<string, { tag01s: Set<string>, total: number }>();
+
+      summary.forEach(row => {
+        const tag0 = row.tag0 || 'Sem Classificação';
+        const tag01 = row.tag01 || 'Sem Subclassificação';
+        const amount = Number(row.total_amount);
+
+        if (!tag0Map.has(tag0)) {
+          tag0Map.set(tag0, { tag01s: new Set(), total: 0 });
+        }
+
+        const entry = tag0Map.get(tag0)!;
+        entry.tag01s.add(tag01);
+        entry.total += amount;
+      });
+
+      // Ordenar tag0s
+      const sortedTag0s = Array.from(tag0Map.keys()).sort();
+
+      sortedTag0s.forEach(tag0 => {
+        const entry = tag0Map.get(tag0)!;
+        const tag01List = Array.from(entry.tag01s).sort();
+        console.log(`\n📦 ${tag0}`);
+        console.log(`   Total: R$ ${entry.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   Tags01 (${tag01List.length}):`, tag01List);
+      });
+
+      // Calcular total de RECEITA (tags que começam com "01." ou contém "Receita" no nome)
+      let totalReceita = 0;
+      const receitaTags: string[] = [];
+
+      sortedTag0s.forEach(tag0 => {
+        if (tag0.match(/^01\./i) || tag0.toLowerCase().includes('receita')) {
+          const entry = tag0Map.get(tag0)!;
+          totalReceita += entry.total;
+          receitaTags.push(tag0);
+        }
+      });
+
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('💰 RECEITA LÍQUIDA TOTAL (DRE)');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log(`   📊 Total: R$ ${totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      console.log(`   📦 Tag0s de Receita (${receitaTags.length}):`, receitaTags);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error) {
       console.error('❌ Erro ao carregar dados DRE:', error);
     } finally {

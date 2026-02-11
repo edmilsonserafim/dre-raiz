@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { EChartsOption } from 'echarts';
 import { Transaction, SchoolKPIs } from '../types';
+import { buildWaterfallData } from '../utils/chartDataTransformer';
 
 interface ExecutiveDashboardProps {
   transactions: Transaction[];
@@ -33,6 +34,15 @@ interface ExecutiveDashboardProps {
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transactions, kpis }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+
+  // Debug: Verificar dados recebidos
+  React.useEffect(() => {
+    console.log('📊 ExecutiveDashboard - Debug:');
+    console.log('  Total transactions:', transactions.length);
+    console.log('  Transactions Real:', transactions.filter(t => t.scenario === 'Real').length);
+    console.log('  KPIs activeStudents:', kpis.activeStudents);
+    console.log('  KPIs totalRevenue:', kpis.totalRevenue);
+  }, [transactions, kpis]);
 
   // ============================================
   // CÁLCULOS DINÂMICOS BASEADOS NOS DADOS REAIS
@@ -232,16 +242,20 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
   }, [transactions]);
 
   // ============================================
-  // GRÁFICO WATERFALL (DRE)
+  // GRÁFICO WATERFALL (DRE) - DADOS REAIS
   // ============================================
-  const waterfallData = [
-    { name: 'Receita', value: 1547850 },
-    { name: 'Custos Variáveis', value: -465000 },
-    { name: 'Custos Fixos', value: -542000 },
-    { name: 'SG&A', value: -123888 },
-    { name: 'Rateio', value: -30000 },
-    { name: 'EBITDA', value: 386962 }
-  ];
+  const waterfallDataRaw = useMemo(() => {
+    return buildWaterfallData(transactions, 'Real');
+  }, [transactions]);
+
+  // Transformar para formato compatível com o gráfico atual
+  const waterfallData = useMemo(() => {
+    return waterfallDataRaw.map(item => ({
+      name: item.name,
+      value: item.name === 'EBITDA' ? item.displayValue :
+             (item.name === 'Receita' ? item.displayValue : -item.displayValue)
+    }));
+  }, [waterfallDataRaw]);
 
   const waterfallOptions: EChartsOption = {
     tooltip: {
@@ -282,8 +296,35 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
   };
 
   // ============================================
-  // GRÁFICO DE PIZZA (Custos por Categoria)
+  // GRÁFICO DE PIZZA (Custos por Categoria) - DADOS REAIS
   // ============================================
+  const costBreakdownData = useMemo(() => {
+    const real = transactions.filter(t => t.scenario === 'Real');
+
+    return [
+      {
+        value: real.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0),
+        name: 'Custos Variáveis',
+        itemStyle: { color: '#F97316' }
+      },
+      {
+        value: real.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0),
+        name: 'Custos Fixos',
+        itemStyle: { color: '#F44C00' }
+      },
+      {
+        value: real.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0),
+        name: 'SG&A',
+        itemStyle: { color: '#FB923C' }
+      },
+      {
+        value: real.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0),
+        name: 'Rateio',
+        itemStyle: { color: '#FDBA74' }
+      }
+    ].filter(item => item.value > 0); // Remover zeros
+  }, [transactions]);
+
   const costBreakdownOptions: EChartsOption = {
     tooltip: {
       trigger: 'item',
@@ -310,12 +351,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
           fontSize: 11,
           fontWeight: 'bold'
         },
-        data: [
-          { value: 465000, name: 'Custos Variáveis', itemStyle: { color: '#F97316' } },
-          { value: 542000, name: 'Custos Fixos', itemStyle: { color: '#F44C00' } },
-          { value: 123888, name: 'SG&A', itemStyle: { color: '#FB923C' } },
-          { value: 30000, name: 'Rateio', itemStyle: { color: '#FDBA74' } }
-        ]
+        data: costBreakdownData
       }
     ]
   };
@@ -379,13 +415,46 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
     }
   ];
 
-  const tableData = [
-    { filial: 'Unidade A - Centro', revenue: 420000, costs: 315000, ebitda: 105000, margin: 25.0, students: 150 },
-    { filial: 'Unidade B - Norte', revenue: 385000, costs: 288750, ebitda: 96250, margin: 25.0, students: 130 },
-    { filial: 'Unidade C - Sul', revenue: 312000, costs: 234000, ebitda: 78000, margin: 25.0, students: 105 },
-    { filial: 'Unidade D - Leste', revenue: 280000, costs: 210000, ebitda: 70000, margin: 25.0, students: 95 },
-    { filial: 'Unidade E - Oeste', revenue: 150850, costs: 113138, ebitda: 37712, margin: 25.0, students: 43 }
-  ];
+  // ============================================
+  // TABELA DE FILIAIS - DADOS REAIS
+  // ============================================
+  const tableData = useMemo(() => {
+    const real = transactions.filter(t => t.scenario === 'Real');
+    const filiais = [...new Set(real.map(t => t.filial).filter(Boolean))];
+
+    const rows = filiais.map(filial => {
+      const filialTrans = real.filter(t => t.filial === filial);
+
+      const revenue = filialTrans
+        .filter(t => t.type === 'REVENUE')
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      const costs = filialTrans
+        .filter(t => t.type !== 'REVENUE')
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      const ebitda = revenue - costs;
+      const margin = revenue > 0 ? (ebitda / revenue) * 100 : 0;
+
+      // Estimar alunos proporcionalmente à receita
+      const totalRevenue = real.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      const students = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * kpis.activeStudents) : 0;
+
+      return { filial, revenue, costs, ebitda, margin, students };
+    });
+
+    return rows.sort((a, b) => b.revenue - a.revenue); // TOP filiais por receita
+  }, [transactions, kpis.activeStudents]);
+
+  // Calcular totais da tabela
+  const tableTotals = useMemo(() => {
+    const totalRevenue = tableData.reduce((acc, row) => acc + row.revenue, 0);
+    const totalCosts = tableData.reduce((acc, row) => acc + row.costs, 0);
+    const totalEbitda = tableData.reduce((acc, row) => acc + row.ebitda, 0);
+    const totalMargin = totalRevenue > 0 ? (totalEbitda / totalRevenue) * 100 : 0;
+
+    return { totalRevenue, totalCosts, totalEbitda, totalMargin };
+  }, [tableData]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -439,11 +508,31 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
           variant="detailed"
         />
 
-        {/* Alerta de Performance */}
+        {/* Alerta de Performance - DINÂMICO */}
         <AlertBlock
-          type="success"
-          title="Meta Atingida! 🎉"
-          message="Parabéns! A margem EBITDA de 25% foi atingida este mês, superando as expectativas em 2.1 pontos percentuais."
+          {...useMemo(() => {
+            const { margin } = calculatedData;
+
+            if (margin >= 25) {
+              return {
+                type: 'success' as const,
+                title: 'Meta Atingida! 🎉',
+                message: `Parabéns! A margem EBITDA de ${margin.toFixed(1)}% superou a meta de 25%.`
+              };
+            } else if (margin >= 15) {
+              return {
+                type: 'warning' as const,
+                title: 'Atenção: Margem Abaixo da Meta ⚠️',
+                message: `A margem EBITDA atual é ${margin.toFixed(1)}%. Faltam ${(25 - margin).toFixed(1)} pontos para a meta.`
+              };
+            } else {
+              return {
+                type: 'error' as const,
+                title: 'Alerta Crítico: Margem Baixa 🚨',
+                message: `A margem EBITDA está em ${margin.toFixed(1)}%, muito abaixo da meta de 25%. Ação imediata necessária.`
+              };
+            }
+          }, [calculatedData])}
         />
 
         {/* Unit Economics */}
@@ -507,21 +596,27 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
           </div>
         </div>
 
-        {/* Texto Analítico */}
+        {/* Texto Analítico - DINÂMICO */}
         <TextBlock
           id="executive-summary"
           type="text"
           title="Resumo Executivo"
           variant="highlight"
-          content={`
+          content={useMemo(() => {
+            const topBranch = tableData[0];
+            const { revenue, margin } = calculatedData;
+            const studentCount = kpis.activeStudents;
+
+            return `
 **Destaques do Período:**
 
-- A **Unidade A** mantém liderança com R$ 420 mil em receita e 150 alunos ativos
-- Crescimento de **12.5%** na receita consolidada vs. mês anterior
-- Margem EBITDA de **25.0%** atingida em todas as unidades
-- Custo por aluno reduzido em **1.5%**, otimizando a estrutura operacional
-- *Recomendação*: Expandir modelo da Unidade A para outras filiais
-          `}
+- A **${topBranch?.filial || 'unidade líder'}** mantém liderança com R$ ${((topBranch?.revenue || 0) / 1000).toFixed(0)} mil em receita e ${topBranch?.students || 0} alunos ativos
+- Receita consolidada: **R$ ${(revenue / 1000).toFixed(0)} mil** no período
+- Margem EBITDA de **${margin.toFixed(1)}%** ${margin >= 25 ? '✅ META ATINGIDA' : '⚠️ abaixo da meta'}
+- Total de **${studentCount} alunos** ativos em todas as unidades
+- ${margin >= 20 ? '*Recomendação*: Manter estratégia atual e replicar modelo da unidade líder' : '*Recomendação*: Revisar estrutura de custos e otimizar operações'}
+            `.trim();
+          }, [tableData, calculatedData, kpis])}
           markdown={true}
         />
 
@@ -540,10 +635,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ transact
             <div className="flex justify-between items-center text-sm">
               <span className="font-bold text-gray-700">Total Consolidado:</span>
               <div className="flex gap-8">
-                <span>Receita: <strong className="text-[#1B75BB]">R$ 1.547.850</strong></span>
-                <span>Custos: <strong className="text-[#F44C00]">R$ 1.160.888</strong></span>
-                <span>EBITDA: <strong className="text-[#7AC5BF]">R$ 386.962</strong></span>
-                <span>Margem: <strong className="text-emerald-600">25.0%</strong></span>
+                <span>Receita: <strong className="text-[#1B75BB]">R$ {tableTotals.totalRevenue.toLocaleString('pt-BR')}</strong></span>
+                <span>Custos: <strong className="text-[#F44C00]">R$ {tableTotals.totalCosts.toLocaleString('pt-BR')}</strong></span>
+                <span>EBITDA: <strong className="text-[#7AC5BF]">R$ {tableTotals.totalEbitda.toLocaleString('pt-BR')}</strong></span>
+                <span>Margem: <strong className={tableTotals.totalMargin >= 25 ? 'text-emerald-600' : 'text-amber-600'}>{tableTotals.totalMargin.toFixed(1)}%</strong></span>
               </div>
             </div>
           }

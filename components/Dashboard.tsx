@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ComposedChart, Line, Legend, ReferenceLine } from 'recharts';
-import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2, ChevronDown, Check } from 'lucide-react';
+import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { SchoolKPIs, Transaction } from '../types';
 import { BRANCHES, CATEGORIES } from '../constants';
+import { getReceitaLiquidaDRE, getDRESummary } from '../services/supabaseService';
 
 interface DashboardProps {
   kpis: SchoolKPIs;
@@ -19,6 +20,17 @@ export interface MonthRange {
   start: number;
   end: number;
 }
+
+// Tags01 que compõem a Receita Líquida conforme DRE
+const RECEITA_LIQUIDA_TAGS = [
+  'Tributos',
+  'Devoluções & Cancelamentos',
+  'Integral',
+  'Material Didático',
+  'Receita De Mensalidade',
+  'Receitas Não Operacionais',
+  'Receitas Extras'
+];
 
 const Dashboard: React.FC<DashboardProps> = ({
   kpis,
@@ -37,6 +49,48 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [sortBranchesAZ, setSortBranchesAZ] = useState(false);
   const [showVariationDetail, setShowVariationDetail] = useState(false);
   const [showAlertsDetail, setShowAlertsDetail] = useState(false);
+  const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(false);
+
+  // Receita Líquida calculada usando a mesma lógica da DRE (tag0 "01.")
+  const [receitaLiquidaReal, setReceitaLiquidaReal] = useState<number>(0);
+  const [receitaLiquidaComparison, setReceitaLiquidaComparison] = useState<number>(0);
+  const [isLoadingReceita, setIsLoadingReceita] = useState(false);
+
+  // Breakdown detalhado por tag01 para o modal (vem da DRE)
+  const [receitaBreakdown, setReceitaBreakdown] = useState<Array<{
+    tag01: string;
+    real: number;
+    orcado: number;
+    a1: number;
+    txCount: number;
+    tag02s: Array<{
+      tag02: string;
+      real: number;
+      orcado: number;
+      a1: number;
+      txCount: number;
+    }>;
+  }>>([]);
+
+  // Estado para controlar quais tag01s estão expandidas
+  const [expandedTag01s, setExpandedTag01s] = useState<Set<string>>(new Set());
+
+  // Estado para ordenação
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // Estado para dados da DRE (para Heatmap)
+  const [dreSummaryData, setDreSummaryData] = useState<Array<{
+    scenario: string;
+    conta_contabil: string;
+    year_month: string;
+    tag0: string;
+    tag01: string;
+    tipo: string;
+    total_amount: number;
+    tx_count: number;
+  }>>([]);
+  const [isLoadingDRE, setIsLoadingDRE] = useState(false);
+
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
   // Expor o range de meses e modo de comparação via eventos para o DashboardEnhanced
@@ -61,6 +115,171 @@ const Dashboard: React.FC<DashboardProps> = ({
     window.dispatchEvent(event);
   }, [comparisonMode]);
 
+  // Buscar dados da DRE para o Heatmap
+  useEffect(() => {
+    const fetchDREData = async () => {
+      setIsLoadingDRE(true);
+      try {
+        const year = new Date().getFullYear();
+        const monthFrom = `${year}-01`;
+        const monthTo = `${year}-12`;
+
+        const summary = await getDRESummary({
+          monthFrom,
+          monthTo,
+          marcas: selectedMarca.length > 0 ? selectedMarca : undefined,
+          nomeFiliais: selectedFilial.length > 0 ? selectedFilial : undefined,
+        });
+
+        setDreSummaryData(summary);
+        console.log(`✅ Dashboard Heatmap: ${summary.length} linhas DRE carregadas`);
+
+        // Debug: Mostrar tag0s e tipos únicos
+        const uniqueTag0s = Array.from(new Set(summary.map(row => row.tag0))).sort();
+        const uniqueTipos = Array.from(new Set(summary.map(row => row.tipo))).sort();
+        console.log('🔍 Tag0s únicos:', uniqueTag0s);
+        console.log('🔍 Tipos únicos:', uniqueTipos);
+      } catch (error) {
+        console.error('❌ Erro ao carregar dados DRE para Heatmap:', error);
+        setDreSummaryData([]);
+      } finally {
+        setIsLoadingDRE(false);
+      }
+    };
+
+    fetchDREData();
+  }, [selectedMarca, selectedFilial]);
+
+  // Buscar Receita Líquida usando a mesma lógica da DRE (tag0 "01.")
+  useEffect(() => {
+    const fetchReceitaLiquida = async () => {
+      setIsLoadingReceita(true);
+      try {
+        // Construir monthFrom e monthTo baseado no range selecionado
+        const year = new Date().getFullYear();
+        const monthFrom = `${year}-${String(selectedMonthStart + 1).padStart(2, '0')}`;
+        const monthTo = `${year}-${String(selectedMonthEnd + 1).padStart(2, '0')}`;
+
+        // Buscar Receita Real
+        const receitaReal = await getReceitaLiquidaDRE({
+          monthFrom,
+          monthTo,
+          marcas: selectedMarca.length > 0 ? selectedMarca : undefined,
+          nomeFiliais: selectedFilial.length > 0 ? selectedFilial : undefined,
+          scenario: 'Real'
+        });
+
+        // Buscar Receita de Comparação (Orçado ou A-1)
+        const scenarioComparacao = comparisonMode === 'budget' ? 'Orçado' : 'A-1';
+        const receitaComp = await getReceitaLiquidaDRE({
+          monthFrom,
+          monthTo,
+          marcas: selectedMarca.length > 0 ? selectedMarca : undefined,
+          nomeFiliais: selectedFilial.length > 0 ? selectedFilial : undefined,
+          scenario: scenarioComparacao
+        });
+
+        setReceitaLiquidaReal(receitaReal);
+        setReceitaLiquidaComparison(receitaComp);
+
+        // Buscar breakdown detalhado por tag01 para o modal
+        const summaryRows = await getDRESummary({
+          monthFrom,
+          monthTo,
+          marcas: selectedMarca.length > 0 ? selectedMarca : undefined,
+          nomeFiliais: selectedFilial.length > 0 ? selectedFilial : undefined,
+        });
+
+        // Filtrar apenas linhas onde tag0 começa com "01." (Receita)
+        const receitaRows = summaryRows.filter(row => row.tag0 && row.tag0.match(/^01\./i));
+
+        // Agrupar por tag01 → tag02 → cenário
+        const breakdownMap = new Map<string, {
+          real: number;
+          orcado: number;
+          a1: number;
+          txCount: number;
+          tag02s: Map<string, { real: number; orcado: number; a1: number; txCount: number }>;
+        }>();
+
+        receitaRows.forEach(row => {
+          const tag01 = row.tag01 || 'Sem Subclassificação';
+          const tag02 = row.tag02 || 'Sem tag02';
+
+          // Inicializar tag01 se não existir
+          if (!breakdownMap.has(tag01)) {
+            breakdownMap.set(tag01, {
+              real: 0,
+              orcado: 0,
+              a1: 0,
+              txCount: 0,
+              tag02s: new Map()
+            });
+          }
+
+          const tag01Entry = breakdownMap.get(tag01)!;
+          const amount = Number(row.total_amount);
+          const count = Number(row.tx_count);
+
+          // Agregar no nível tag01
+          if (row.scenario === 'Real') {
+            tag01Entry.real += amount;
+            tag01Entry.txCount += count;
+          } else if (row.scenario === 'Orçado') {
+            tag01Entry.orcado += amount;
+          } else if (row.scenario === 'A-1') {
+            tag01Entry.a1 += amount;
+          }
+
+          // Agregar no nível tag02
+          if (!tag01Entry.tag02s.has(tag02)) {
+            tag01Entry.tag02s.set(tag02, { real: 0, orcado: 0, a1: 0, txCount: 0 });
+          }
+
+          const tag02Entry = tag01Entry.tag02s.get(tag02)!;
+          if (row.scenario === 'Real') {
+            tag02Entry.real += amount;
+            tag02Entry.txCount += count;
+          } else if (row.scenario === 'Orçado') {
+            tag02Entry.orcado += amount;
+          } else if (row.scenario === 'A-1') {
+            tag02Entry.a1 += amount;
+          }
+        });
+
+        // Converter para array e ordenar por valor Real (maior para menor)
+        const breakdown = Array.from(breakdownMap.entries())
+          .map(([tag01, values]) => ({
+            tag01,
+            real: values.real,
+            orcado: values.orcado,
+            a1: values.a1,
+            txCount: values.txCount,
+            tag02s: Array.from(values.tag02s.entries())
+              .map(([tag02, tag02Values]) => ({
+                tag02,
+                ...tag02Values
+              }))
+              .sort((a, b) => Math.abs(b.real) - Math.abs(a.real))
+          }))
+          .sort((a, b) => Math.abs(b.real) - Math.abs(a.real));
+
+        setReceitaBreakdown(breakdown);
+
+        console.log('💰 Receita Líquida atualizada (lógica DRE):');
+        console.log(`   Real: R$ ${receitaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   ${scenarioComparacao}: R$ ${receitaComp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   Breakdown: ${breakdown.length} tags01 encontradas`);
+      } catch (error) {
+        console.error('❌ Erro ao buscar Receita Líquida:', error);
+      } finally {
+        setIsLoadingReceita(false);
+      }
+    };
+
+    fetchReceitaLiquida();
+  }, [selectedMonthStart, selectedMonthEnd, selectedMarca, selectedFilial, comparisonMode]);
+
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
     return transactions.filter(t => {
@@ -72,8 +291,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const branchData = useMemo(() => {
     const data = BRANCHES.map(branch => {
       const bTrans = filteredByMonth.filter(t => t.filial === branch);
-      const rev = bTrans.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
-      const exp = bTrans.filter(t => t.type !== 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+      const rev = bTrans.filter(t =>
+        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+      ).reduce((acc, t) => acc + t.amount, 0);
+      const exp = bTrans.filter(t =>
+        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
+      ).reduce((acc, t) => acc + t.amount, 0);
       const ebitda = rev - exp;
       return { name: branch, revenue: rev, ebitda, margin: rev > 0 ? (ebitda / rev) * 100 : 0 };
     });
@@ -108,7 +332,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       .reduce((acc, t) => acc + t.amount, 0);
 
     // Calculate revenue and costs
-    const totalRevenue = real.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    // RECEITA LÍQUIDA: Usar valor calculado pela mesma lógica da DRE (tag0 "01.")
+    const totalRevenue = receitaLiquidaReal;
+
     const totalFixedCosts = real.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
     const totalVariableCosts = real.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
     const sgaCosts = real.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
@@ -156,7 +382,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       studentMealCost,
       maintenanceCost
     };
-  }, [filteredByMonth, kpis]);
+  }, [filteredByMonth, kpis, receitaLiquidaReal]);
 
   // Calculate trends based on comparison mode
   const trends = useMemo(() => {
@@ -166,7 +392,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     const real = filteredByMonth.filter(t => t.scenario === 'Real');
 
     // Calculate comparison KPIs
-    const compRevenue = comparison.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    // RECEITA LÍQUIDA: Usar valor calculado pela mesma lógica da DRE (tag0 "01.")
+    const compRevenue = receitaLiquidaComparison;
     const compFixedCosts = comparison.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
     const compVariableCosts = comparison.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
     const compSgaCosts = comparison.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
@@ -202,7 +429,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       compSgaCosts,
       compRateioCosts
     };
-  }, [filteredByMonth, enhancedKpis, comparisonMode]);
+  }, [filteredByMonth, enhancedKpis, comparisonMode, receitaLiquidaComparison]);
 
   // Variation detail data
   const variationDetail = useMemo(() => {
@@ -248,7 +475,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
 
     // Real values
-    const revenue = real.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+    const revenue = real.filter(t =>
+      t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+    ).reduce((acc, t) => acc + t.amount, 0);
     const fixedCosts = real.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
     const variableCosts = real.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
     const sgaCosts = real.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
@@ -256,7 +486,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     const ebitda = revenue - fixedCosts - variableCosts - sgaCosts - rateioCosts;
 
     // Comparison values
-    const compRevenue = comparison.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
+    // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
+    const compRevenue = comparison.filter(t =>
+      t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+    ).reduce((acc, t) => acc + t.amount, 0);
     const compFixedCosts = comparison.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
     const compVariableCosts = comparison.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
     const compSgaCosts = comparison.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
@@ -346,65 +579,125 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   };
 
-  // Heatmap de Performance Mensal
+  // Heatmap de Performance Mensal - Usando dados da DRE Gerencial
   const heatmapData = useMemo(() => {
-    const metrics = ['Receita', 'Custos Variáveis', 'Custos Fixos', 'SG&A', 'Rateio', 'EBITDA'];
+    // Métricas fixas que queremos exibir
+    const metrics = ['Receita', 'Custos Variáveis', 'Custos Fixos', 'SG&A', 'Rateio CSC', 'EBITDA'];
+
+    // Se não temos dados da DRE ainda, retornar estrutura vazia
+    if (dreSummaryData.length === 0) {
+      return { metrics, monthsData: [] };
+    }
+
+    // Filtrar apenas dados do cenário Real
+    const realData = dreSummaryData.filter(row => row.scenario === 'Real');
 
     // Manter todos os meses visíveis, mas zerar dados fora do filtro
     const monthsData = months.map((month, idx) => {
       // Verificar se o mês está dentro do intervalo selecionado
       const isInRange = idx >= selectedMonthStart && idx <= selectedMonthEnd;
 
-      // Se não está no intervalo, retornar dados zerados com "-"
-      if (!isInRange) {
-        return {
-          month,
-          monthIndex: idx,
-          Receita: '-',
-          'Custos Variáveis': '-',
-          'Custos Fixos': '-',
-          'SG&A': '-',
-          'Rateio': '-',
-          'EBITDA': '-',
-          scores: {
-            Receita: 0,
-            'Custos Variáveis': 0,
-            'Custos Fixos': 0,
-            'SG&A': 0,
-            'Rateio': 0,
-            'EBITDA': 0
-          }
-        };
-      }
+      // Construir year_month no formato 'YYYY-MM'
+      const year = new Date().getFullYear();
+      const yearMonth = `${year}-${String(idx + 1).padStart(2, '0')}`;
 
-      // Usar filteredByMonth que já aplica os filtros de data, marca e unidade
-      let monthTransactions = filteredByMonth.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === idx && t.scenario === 'Real');
-      const revenue = monthTransactions.filter(t => t.type === 'REVENUE').reduce((acc, t) => acc + t.amount, 0);
-      const variableCosts = monthTransactions.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
-      const fixedCosts = monthTransactions.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
-      const sgaCosts = monthTransactions.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
-      const rateioCosts = monthTransactions.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0);
-      const ebitda = revenue - variableCosts - fixedCosts - sgaCosts - rateioCosts;
-
-      return {
+      // Objeto para armazenar valores e scores
+      const monthData: any = {
         month,
         monthIndex: idx,
-        Receita: formatHeatmapValue(revenue),
-        'Custos Variáveis': formatHeatmapValue(variableCosts),
-        'Custos Fixos': formatHeatmapValue(fixedCosts),
-        'SG&A': formatHeatmapValue(sgaCosts),
-        'Rateio': formatHeatmapValue(rateioCosts),
-        'EBITDA': formatHeatmapValue(ebitda),
-        // Scores para coloração (0-100)
-        scores: {
-          Receita: revenue > 0 ? Math.min(100, (revenue / 150000) * 100) : 0,
-          'Custos Variáveis': variableCosts > 0 ? Math.min(100, 100 - (variableCosts / 80000) * 100) : 100,
-          'Custos Fixos': fixedCosts > 0 ? Math.min(100, 100 - (fixedCosts / 60000) * 100) : 100,
-          'SG&A': sgaCosts > 0 ? Math.min(100, 100 - (sgaCosts / 30000) * 100) : 100,
-          'Rateio': rateioCosts > 0 ? Math.min(100, 100 - (rateioCosts / 20000) * 100) : 100,
-          'EBITDA': ebitda > 0 ? Math.min(100, (ebitda / 40000) * 100) : 0
-        }
+        scores: {}
       };
+
+      // Se não está no intervalo, retornar dados zerados com "-"
+      if (!isInRange) {
+        metrics.forEach(metric => {
+          monthData[metric] = '-';
+          monthData.scores[metric] = 0;
+        });
+        return monthData;
+      }
+
+      // Filtrar dados do mês atual
+      const monthRows = realData.filter(row => row.year_month === yearMonth);
+
+      // Calcular valores baseado em tag0 e tipo (mapeamento robusto)
+      const revenue = monthRows
+        .filter(row =>
+          (row.tag0 && row.tag0.match(/^01\./i)) ||
+          (row.tag0 && row.tag0.toLowerCase().includes('receita')) ||
+          row.tipo === 'REVENUE'
+        )
+        .reduce((sum, row) => sum + row.total_amount, 0);
+
+      const variableCosts = monthRows
+        .filter(row =>
+          (row.tag0 && (row.tag0.match(/^02\./i) || row.tag0.toLowerCase().includes('variá'))) ||
+          row.tipo === 'VARIABLE_COST'
+        )
+        .reduce((sum, row) => sum + row.total_amount, 0);
+
+      const fixedCosts = monthRows
+        .filter(row =>
+          (row.tag0 && (row.tag0.match(/^03\./i) || row.tag0.toLowerCase().includes('fixo'))) ||
+          row.tipo === 'FIXED_COST'
+        )
+        .reduce((sum, row) => sum + row.total_amount, 0);
+
+      const sgaCosts = monthRows
+        .filter(row =>
+          (row.tag0 && (row.tag0.match(/^04\./i) || row.tag0.toLowerCase().includes('sg&a') || row.tag0.toLowerCase().includes('administrativa'))) ||
+          row.tipo === 'SGA'
+        )
+        .reduce((sum, row) => sum + row.total_amount, 0);
+
+      const rateioCosts = monthRows
+        .filter(row =>
+          (row.tag0 && (row.tag0.match(/^05\./i) || row.tag0.toLowerCase().includes('rateio') || row.tag0.toLowerCase().includes('csc'))) ||
+          row.tipo === 'RATEIO'
+        )
+        .reduce((sum, row) => sum + row.total_amount, 0);
+
+      const ebitda = revenue - variableCosts - fixedCosts - sgaCosts - rateioCosts;
+
+      // Debug para o primeiro mês no range
+      if (idx === selectedMonthStart && monthRows.length > 0) {
+        console.log(`\n🔍 Debug Heatmap - ${month}/${year}:`);
+        console.log(`   Total de linhas do mês: ${monthRows.length}`);
+        console.log(`   Receita: R$ ${revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   Custos Variáveis (tipo='VARIABLE_COST'): R$ ${variableCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   Custos Fixos (tipo='FIXED_COST'): R$ ${fixedCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   SG&A (tipo='SGA'): R$ ${sgaCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   Rateio (tipo='RATEIO'): R$ ${rateioCosts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+        console.log(`   EBITDA: R$ ${ebitda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+
+        // Mostrar amostra dos tipos que existem
+        const tiposNoMes = Array.from(new Set(monthRows.map(r => r.tipo)));
+        console.log(`   Tipos encontrados no mês:`, tiposNoMes);
+
+        // Mostrar tag0s que não são receita
+        const tag0sNaoReceita = Array.from(new Set(
+          monthRows.filter(r => !r.tag0?.match(/^01\./i)).map(r => r.tag0)
+        ));
+        console.log(`   Tag0s (não-receita) no mês:`, tag0sNaoReceita);
+      }
+
+      // Preencher valores formatados
+      monthData['Receita'] = formatHeatmapValue(revenue);
+      monthData['Custos Variáveis'] = formatHeatmapValue(variableCosts);
+      monthData['Custos Fixos'] = formatHeatmapValue(fixedCosts);
+      monthData['SG&A'] = formatHeatmapValue(sgaCosts);
+      monthData['Rateio CSC'] = formatHeatmapValue(rateioCosts);
+      monthData['EBITDA'] = formatHeatmapValue(ebitda);
+
+      // Calcular scores para coloração (0-100)
+      monthData.scores['Receita'] = revenue > 0 ? Math.min(100, (revenue / 150000) * 100) : 0;
+      monthData.scores['Custos Variáveis'] = variableCosts > 0 ? Math.min(100, 100 - (variableCosts / 80000) * 100) : 100;
+      monthData.scores['Custos Fixos'] = fixedCosts > 0 ? Math.min(100, 100 - (fixedCosts / 60000) * 100) : 100;
+      monthData.scores['SG&A'] = sgaCosts > 0 ? Math.min(100, 100 - (sgaCosts / 30000) * 100) : 100;
+      monthData.scores['Rateio CSC'] = rateioCosts > 0 ? Math.min(100, 100 - (rateioCosts / 20000) * 100) : 100;
+      monthData.scores['EBITDA'] = ebitda > 0 ? Math.min(100, (ebitda / 40000) * 100) : 0;
+
+      return monthData;
     });
 
     // Função auxiliar para somar valores formatados
@@ -419,32 +712,24 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
     };
 
-    // Calcular totais
-    const totals = {
+    // Calcular totais dinamicamente para cada métrica
+    const totals: any = {
       month: 'TOTAL',
       monthIndex: 12,
-      Receita: sumFormattedValues('Receita'),
-      'Custos Variáveis': sumFormattedValues('Custos Variáveis'),
-      'Custos Fixos': sumFormattedValues('Custos Fixos'),
-      'SG&A': sumFormattedValues('SG&A'),
-      'Rateio': sumFormattedValues('Rateio'),
-      'EBITDA': sumFormattedValues('EBITDA'),
-      scores: {
-        Receita: 85,
-        'Custos Variáveis': 85,
-        'Custos Fixos': 85,
-        'SG&A': 85,
-        'Rateio': 85,
-        'EBITDA': 85
-      }
+      scores: {}
     };
+
+    metrics.forEach(metric => {
+      totals[metric] = sumFormattedValues(metric);
+      totals.scores[metric] = 85; // Score neutro para totais
+    });
 
     // Adicionar totais ao final
     const monthsDataWithTotal = [...monthsData, totals];
 
-    console.log('🔥 Heatmap Data:', { metrics, monthsData: monthsDataWithTotal });
+    console.log('🔥 Heatmap Data (DRE Nível 1):', { metrics, monthsData: monthsDataWithTotal });
     return { metrics, monthsData: monthsDataWithTotal };
-  }, [filteredByMonth, months, selectedMarca, selectedFilial, selectedMonthStart, selectedMonthEnd]);
+  }, [dreSummaryData, months, selectedMonthStart, selectedMonthEnd]);
 
   return (
     <>
@@ -635,7 +920,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           <p className="text-xs text-gray-500 mt-1 ml-4">KPIs principais e tendências de performance</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard label="Receita Líquida" value={enhancedKpis.totalRevenue} trend={trends.revenue} trendAbsolute={trends.revenueAbsolute} color="blue" icon={<Target size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
+          <KPICard
+            label="Receita Líquida"
+            value={enhancedKpis.totalRevenue}
+            trend={trends.revenue}
+            trendAbsolute={trends.revenueAbsolute}
+            color="blue"
+            icon={<Target size={16} />}
+            variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'}
+            onClick={() => setShowRevenueBreakdown(true)}
+          />
           <KPICard label="EBITDA" value={enhancedKpis.ebitda} trend={trends.ebitda} trendAbsolute={trends.ebitdaAbsolute} color="orange" icon={<Target size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
           <KPICard label="Receita / Aluno" value={enhancedKpis.revenuePerStudent} trend={3.2} trendAbsolute={trends.revenuePerStudentAbsolute} color="blue" icon={<Users size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
           <KPICard label="Alunos Ativos" value={enhancedKpis.activeStudents} isNumber trend={trends.students} trendAbsolute={trends.studentsAbsolute} color="teal" icon={<Users size={16} />} variationType={comparisonMode === 'budget' ? 'vs Orçado' : 'vs A-1'} />
@@ -978,20 +1272,37 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <CalendarDays size={20} className="text-[#7AC5BF]" />
                 Performance Mensal - Heatmap
               </h3>
-              <p className="text-xs text-gray-500 font-medium mt-1">Visualização de tendências mensais por métrica</p>
+              <p className="text-xs text-gray-500 font-medium mt-1">Visualização de tendências mensais por métrica (dados agregados da DRE)</p>
             </div>
           </div>
 
+          {/* Loading State */}
+          {isLoadingDRE && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F44C00]"></div>
+              <span className="ml-3 text-sm text-gray-500 font-medium">Carregando dados da DRE...</span>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoadingDRE && heatmapData.metrics.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <AlertCircle size={32} className="text-gray-400 mb-2" />
+              <p className="text-sm text-gray-500 font-medium">Nenhum dado disponível</p>
+            </div>
+          )}
+
           {/* Heatmap Grid */}
+          {!isLoadingDRE && heatmapData.metrics.length > 0 && (
           <div className="w-full">
             <div className="flex">
               {/* Labels das métricas */}
-              <div className="flex flex-col w-32 shrink-0 gap-2">
-                  <div className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-400 uppercase">
+              <div className="flex flex-col w-40 shrink-0 gap-2">
+                  <div className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-400 uppercase whitespace-nowrap">
                     Métrica
                   </div>
                   {heatmapData.metrics.map((metric) => (
-                    <div key={metric} className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-700">
+                    <div key={metric} className="h-10 flex items-center justify-end pr-3 text-sm font-black text-gray-700 whitespace-nowrap">
                       {metric}
                     </div>
                   ))}
@@ -1028,7 +1339,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                               title={`${metric}: ${value}${isTotal ? ' (Total do Período)' : ` (Score: ${score.toFixed(0)})`}`}
                             >
                               <span className={`text-sm font-black whitespace-nowrap ${isTotal ? 'text-gray-900' : 'text-gray-900'}`}>
-                                {value}{metric === 'Margem %' && '%'}{metric === 'Alunos' && '%'}
+                                {value}
                               </span>
                             </div>
                           );
@@ -1060,6 +1371,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -1421,13 +1733,235 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
     )}
+
+    {/* Modal: Breakdown Receita Líquida */}
+    {showRevenueBreakdown && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#1B75BB] to-[#1557BB] p-6 rounded-t-2xl flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <Target size={24} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-white">Breakdown Receita Líquida</h2>
+                  <p className="text-sm text-white/80 mt-1">Composição detalhada por tag01</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRevenueBreakdown(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-all text-white"
+              >
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 overflow-auto flex-1">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left p-3 text-xs font-black text-gray-600 uppercase">Tag01</th>
+                    <th
+                      className="text-right p-3 text-xs font-black text-gray-600 uppercase cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => {
+                        setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                        setReceitaBreakdown(prev => [...prev].sort((a, b) =>
+                          sortOrder === 'desc' ? Math.abs(a.real) - Math.abs(b.real) : Math.abs(b.real) - Math.abs(a.real)
+                        ));
+                      }}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>Real</span>
+                        {sortOrder === 'desc' ? <ArrowDownRight size={14} /> : <ArrowUpRight size={14} />}
+                      </div>
+                    </th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">Orçado</th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">A-1</th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">Δ R$ Orç.</th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">Δ % Orç.</th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">Δ R$ A-1</th>
+                    <th className="text-right p-3 text-xs font-black text-gray-400 uppercase">Δ % A-1</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receitaBreakdown.map((item, idx) => {
+                    const deltaOrcado = item.real - item.orcado;
+                    const deltaPercOrcado = item.orcado !== 0 ? (deltaOrcado / Math.abs(item.orcado)) * 100 : 0;
+                    const deltaA1 = item.real - item.a1;
+                    const deltaPercA1 = item.a1 !== 0 ? (deltaA1 / Math.abs(item.a1)) * 100 : 0;
+                    const isExpanded = expandedTag01s.has(item.tag01);
+
+                    return (
+                      <React.Fragment key={idx}>
+                        {/* Linha principal - tag01 */}
+                        <tr
+                          className={`border-b border-gray-100 hover:bg-blue-50 transition-colors cursor-pointer ${item.real === 0 ? 'opacity-40' : ''}`}
+                          onClick={() => {
+                            setExpandedTag01s(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(item.tag01)) {
+                                newSet.delete(item.tag01);
+                              } else {
+                                newSet.add(item.tag01);
+                              }
+                              return newSet;
+                            });
+                          }}
+                        >
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight
+                                size={16}
+                                className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              />
+                              <span className="text-sm font-bold text-gray-700">{item.tag01}</span>
+                              {item.real === 0 && (
+                                <span className="text-xs text-orange-600 font-bold">⚠️ SEM DADOS</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5 ml-6">
+                              {item.txCount.toLocaleString('pt-BR')} transações • {item.tag02s.length} subcategorias
+                            </div>
+                          </td>
+                          <td className={`p-3 text-right text-sm font-black ${item.real >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            {item.real === 0 ? '—' : `R$ ${item.real.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          </td>
+                          <td className={`p-3 text-right text-sm ${item.orcado === 0 ? 'text-gray-300' : 'font-semibold text-gray-600'}`}>
+                            {item.orcado === 0 ? '—' : `R$ ${item.orcado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          </td>
+                          <td className={`p-3 text-right text-sm ${item.a1 === 0 ? 'text-gray-300' : 'font-semibold text-gray-600'}`}>
+                            {item.a1 === 0 ? '—' : `R$ ${item.a1.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          </td>
+                          <td className={`p-3 text-right text-xs ${item.orcado === 0 ? 'text-gray-300' : deltaOrcado >= 0 ? 'text-teal-600 font-bold' : 'text-orange-600 font-bold'}`}>
+                            {item.orcado === 0 ? '—' : `R$ ${deltaOrcado.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                          </td>
+                          <td className={`p-3 text-right text-xs ${item.orcado === 0 ? 'text-gray-300' : deltaOrcado >= 0 ? 'text-teal-600 font-bold' : 'text-orange-600 font-bold'}`}>
+                            {item.orcado === 0 ? '—' : `${deltaPercOrcado >= 0 ? '+' : ''}${deltaPercOrcado.toFixed(1)}%`}
+                          </td>
+                          <td className={`p-3 text-right text-xs ${item.a1 === 0 ? 'text-gray-300' : deltaA1 >= 0 ? 'text-teal-600 font-bold' : 'text-orange-600 font-bold'}`}>
+                            {item.a1 === 0 ? '—' : `R$ ${deltaA1.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                          </td>
+                          <td className={`p-3 text-right text-xs ${item.a1 === 0 ? 'text-gray-300' : deltaA1 >= 0 ? 'text-teal-600 font-bold' : 'text-orange-600 font-bold'}`}>
+                            {item.a1 === 0 ? '—' : `${deltaPercA1 >= 0 ? '+' : ''}${deltaPercA1.toFixed(1)}%`}
+                          </td>
+                        </tr>
+
+                        {/* Linhas expandidas - tag02 */}
+                        {isExpanded && item.tag02s.map((tag02Item, tag02Idx) => {
+                          const tag02DeltaOrc = tag02Item.real - tag02Item.orcado;
+                          const tag02DeltaPercOrc = tag02Item.orcado !== 0 ? (tag02DeltaOrc / Math.abs(tag02Item.orcado)) * 100 : 0;
+                          const tag02DeltaA1 = tag02Item.real - tag02Item.a1;
+                          const tag02DeltaPercA1 = tag02Item.a1 !== 0 ? (tag02DeltaA1 / Math.abs(tag02Item.a1)) * 100 : 0;
+
+                          return (
+                            <tr
+                              key={`${idx}-${tag02Idx}`}
+                              className="border-b border-gray-50 bg-gray-50 hover:bg-blue-50/50 transition-colors"
+                            >
+                              <td className="p-3 pl-12">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-gray-600">{tag02Item.tag02}</span>
+                                </div>
+                                <div className="text-xs text-gray-400 mt-0.5">
+                                  {tag02Item.txCount.toLocaleString('pt-BR')} tx
+                                </div>
+                              </td>
+                              <td className={`p-3 text-right text-xs font-semibold ${tag02Item.real >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                                {tag02Item.real === 0 ? '—' : `R$ ${tag02Item.real.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.orcado === 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                                {tag02Item.orcado === 0 ? '—' : `R$ ${tag02Item.orcado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.a1 === 0 ? 'text-gray-300' : 'text-gray-500'}`}>
+                                {tag02Item.a1 === 0 ? '—' : `R$ ${tag02Item.a1.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.orcado === 0 ? 'text-gray-300' : tag02DeltaOrc >= 0 ? 'text-teal-500' : 'text-orange-500'}`}>
+                                {tag02Item.orcado === 0 ? '—' : `R$ ${tag02DeltaOrc.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.orcado === 0 ? 'text-gray-300' : tag02DeltaOrc >= 0 ? 'text-teal-500' : 'text-orange-500'}`}>
+                                {tag02Item.orcado === 0 ? '—' : `${tag02DeltaPercOrc >= 0 ? '+' : ''}${tag02DeltaPercOrc.toFixed(1)}%`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.a1 === 0 ? 'text-gray-300' : tag02DeltaA1 >= 0 ? 'text-teal-500' : 'text-orange-500'}`}>
+                                {tag02Item.a1 === 0 ? '—' : `R$ ${tag02DeltaA1.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                              </td>
+                              <td className={`p-3 text-right text-xs ${tag02Item.a1 === 0 ? 'text-gray-300' : tag02DeltaA1 >= 0 ? 'text-teal-500' : 'text-orange-500'}`}>
+                                {tag02Item.a1 === 0 ? '—' : `${tag02DeltaPercA1 >= 0 ? '+' : ''}${tag02DeltaPercA1.toFixed(1)}%`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                  {/* Linha de Total */}
+                  <tr className="border-t-2 border-gray-300 bg-blue-50">
+                    <td className="p-3 text-sm font-black text-gray-800 uppercase">TOTAL</td>
+                    <td className="p-3 text-right text-base font-black text-blue-600">
+                      {receitaLiquidaReal === 0 ? '—' : `R$ ${receitaLiquidaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                    </td>
+                    <td className="p-3 text-right text-base font-semibold text-gray-600">
+                      {receitaLiquidaComparison === 0 ? '—' : `R$ ${receitaLiquidaComparison.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                    </td>
+                    <td className="p-3 text-right text-base font-semibold text-gray-600">
+                      {receitaBreakdown.reduce((sum, item) => sum + item.a1, 0) === 0 ? '—' : `R$ ${receitaBreakdown.reduce((sum, item) => sum + item.a1, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                    </td>
+                    <td className="p-3 text-right text-sm font-bold text-gray-700">
+                      {receitaLiquidaComparison === 0 ? '—' : `R$ ${(receitaLiquidaReal - receitaLiquidaComparison).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`}
+                    </td>
+                    <td className="p-3 text-right text-sm font-bold text-gray-700">
+                      {receitaLiquidaComparison === 0 ? '—' : `${((receitaLiquidaReal / receitaLiquidaComparison - 1) * 100).toFixed(1)}%`}
+                    </td>
+                    <td className="p-3 text-right text-sm text-gray-300">—</td>
+                    <td className="p-3 text-right text-sm text-gray-300">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Legenda */}
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+              <div className="flex items-start gap-2">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Target size={16} className="text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-700">Observações</p>
+                  <ul className="text-xs text-gray-600 mt-2 space-y-1 list-disc list-inside">
+                    <li>✅ Dados buscados da DRE usando tag0 "01." (mesma lógica do card)</li>
+                    <li>📊 Todas as tag01 que compõem a receita líquida estão listadas</li>
+                    <li>💰 Total do breakdown = Total do card (valores idênticos)</li>
+                    <li>🔢 Valores negativos (vermelho) = deduções da receita (tributos, devoluções)</li>
+                    <li>📈 Deltas calculados vs Orçado quando disponível</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="bg-gray-50 p-4 rounded-b-2xl border-t border-gray-200 flex justify-end flex-shrink-0">
+            <button
+              onClick={() => setShowRevenueBreakdown(false)}
+              className="px-6 py-3 bg-[#1B75BB] text-white rounded-lg font-black text-xs uppercase tracking-wider hover:bg-[#1557BB] transition-all shadow-lg"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
     </div>
     </>
   );
 };
 
-const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon, variationType = 'vs Orçado' }: any) => {
+const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, color, icon, variationType = 'vs Orçado', onClick }: any) => {
   const colorMaps: any = {
     blue: 'text-[#1B75BB] bg-blue-50',
     orange: 'text-[#F44C00] bg-orange-50',
@@ -1457,7 +1991,10 @@ const KPICard = ({ label, value, trend, trendAbsolute, isPercent, isNumber, colo
   }, [trendAbsolute, isNumber]);
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-all group">
+    <div
+      className={`bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-all group ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-1.5">
           {icon && <div className={`p-1.5 rounded-lg ${colorMaps[color]}`}>{icon}</div>}
