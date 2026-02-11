@@ -49,7 +49,10 @@
       "Bash(Get-Content \"CORRIGIR_FUNCAO_RLS.sql\")",
       "Bash(Set-Clipboard)",
       "Bash(git reset:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(tee:*)",
+      "Bash(ls:*)",
+      "Bash(sort:*)"
     ]
   }
 }
