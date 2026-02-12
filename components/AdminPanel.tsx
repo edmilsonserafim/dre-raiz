@@ -76,7 +76,7 @@ const AdminPanel: React.FC = () => {
       const transactions = await supabaseService.getAllTransactions();
 
       const marcas = [...new Set(transactions.map(t => t.marca).filter(Boolean))].sort();
-      const filiais = [...new Set(transactions.map(t => t.filial).filter(Boolean))].sort();
+      const filiais = [...new Set(transactions.map(t => t.nome_filial).filter(Boolean))].sort();
       const categories = [...new Set(transactions.map(t => t.category).filter(Boolean))].sort();
       const tag01Values = [...new Set(transactions.map(t => t.tag01).filter(Boolean))].sort() as string[];
       const tags = [...new Set([

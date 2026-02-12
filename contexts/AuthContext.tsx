@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User as FirebaseUser } from 'firebase/auth';
 import { auth, googleProvider, signInWithPopup, signOut as firebaseSignOut } from '../firebase';
 import * as supabaseService from '../services/supabaseService';
+import { setUserPermissions, clearUserPermissions } from '../services/permissionsService';
 
 interface User {
   uid: string;
@@ -51,6 +52,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Atualizar último login
         await supabaseService.updateUserLastLogin(dbUser.id);
 
+        // 🔐 CARREGAR PERMISSÕES DO USUÁRIO
+        console.log('🔐 Carregando permissões para:', dbUser.email);
+        const userPermissions = await supabaseService.getUserPermissions(dbUser.id);
+
+        // Organizar permissões por tipo
+        const allowedMarcas = userPermissions
+          .filter(p => p.permission_type === 'cia')
+          .map(p => p.permission_value);
+
+        const allowedFiliais = userPermissions
+          .filter(p => p.permission_type === 'filial')
+          .map(p => p.permission_value);
+
+        const allowedCategories = userPermissions
+          .filter(p => p.permission_type === 'centro_custo')
+          .map(p => p.permission_value);
+
+        const allowedTag01 = userPermissions
+          .filter(p => p.permission_type === 'tag01')
+          .map(p => p.permission_value);
+
+        const allowedTag02 = userPermissions
+          .filter(p => p.permission_type === 'tag02')
+          .map(p => p.permission_value);
+
+        const allowedTag03 = userPermissions
+          .filter(p => p.permission_type === 'tag03')
+          .map(p => p.permission_value);
+
+        // 🔐 CONFIGURAR PERMISSÕES GLOBALMENTE
+        setUserPermissions({
+          isAdmin: dbUser.role === 'admin',
+          hasPermissions: userPermissions.length > 0,
+          allowedMarcas,
+          allowedFiliais,
+          allowedCategories,
+          allowedTag01,
+          allowedTag02,
+          allowedTag03
+        });
+
+        console.log('✅ Permissões configuradas:', {
+          isAdmin: dbUser.role === 'admin',
+          totalPermissions: userPermissions.length,
+          allowedMarcas,
+          allowedFiliais,
+          allowedTag01
+        });
+
         return {
           uid: firebaseUser.uid,
           email: dbUser.email,
@@ -65,6 +115,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           photoURL: firebaseUser.photoURL || '',
           role: 'pending' // Novo usuário aguarda aprovação do admin
+        });
+
+        // Usuário novo não tem permissões ainda
+        setUserPermissions({
+          isAdmin: false,
+          hasPermissions: false,
+          allowedMarcas: [],
+          allowedFiliais: [],
+          allowedCategories: [],
+          allowedTag01: [],
+          allowedTag02: [],
+          allowedTag03: []
         });
 
         return {
@@ -130,6 +192,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await firebaseSignOut(auth);
       setUser(null);
+
+      // 🔐 LIMPAR PERMISSÕES
+      clearUserPermissions();
+      console.log('🔓 Permissões limpas após logout');
+
       // Limpar todos os filtros salvos ao fazer logout
       sessionStorage.removeItem('drillDownFilters');
       sessionStorage.removeItem('drillDownActiveTab');

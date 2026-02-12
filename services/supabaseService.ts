@@ -1,5 +1,6 @@
 import { supabase, DatabaseTransaction, DatabaseManualChange } from '../supabase';
 import { Transaction, ManualChange, PaginationParams, PaginatedResponse, ContaContabilOption } from '../types';
+import { addPermissionFiltersToObject, applyPermissionFilters } from './permissionsService';
 
 // Converter Transaction do app para formato do banco
 // Remove campos que não existem na tabela: ticket, vendor, recurring, justification
@@ -510,10 +511,19 @@ export interface TransactionFilters {
 
 // Helper para aplicar filtros em uma query (reutilizado em paginação)
 const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
+  console.log('🔧 applyTransactionFilters chamado com:', JSON.stringify(filters, null, 2));
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🔐 APLICAR PERMISSÕES AUTOMATICAMENTE
+  // ═══════════════════════════════════════════════════════════════
+  filters = addPermissionFiltersToObject(filters);
+  console.log('🔐 Filtros após aplicar permissões:', JSON.stringify(filters, null, 2));
+
   // Filtros de data (período)
   if (filters.monthFrom) {
     const startDate = `${filters.monthFrom}-01`;
     query = query.gte('date', startDate);
+    console.log('  ✅ Filtro monthFrom aplicado:', startDate);
   }
 
   if (filters.monthTo) {
@@ -521,10 +531,16 @@ const applyTransactionFilters = (query: any, filters: TransactionFilters) => {
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${filters.monthTo}-${lastDay}`;
     query = query.lte('date', endDate);
+    console.log('  ✅ Filtro monthTo aplicado:', endDate);
   }
 
   // Filtros de array (marca, filial, tags, category, etc)
-  if (filters.marca && filters.marca.length > 0) query = query.in('marca', filters.marca);
+  if (filters.marca && filters.marca.length > 0) {
+    query = query.in('marca', filters.marca);
+    console.log('  🔒 Filtro MARCA aplicado:', filters.marca);
+  } else {
+    console.log('  ⚠️ Filtro marca NÃO aplicado (vazio ou undefined)');
+  }
   if (filters.filial && filters.filial.length > 0) query = query.in('filial', filters.filial);
   if (filters.nome_filial && filters.nome_filial.length > 0) query = query.in('nome_filial', filters.nome_filial);
   // tag0 NÃO existe na tabela (resolvido via tag0_map) — filtro aplicado client-side após fetch

@@ -17,10 +17,15 @@ import { ExecutiveSummary, ActionsList, SlideDeck, useChartRegistry, buildPpt, f
 import AIFinancialView from './AIFinancialView';
 import type { Transaction, SchoolKPIs } from '../types';
 import type { AnalysisPack, AnalysisContext } from '../analysisPack/types/schema';
+import { filterTransactionsByPermissions } from '../services/permissionsService';
 
 interface AnalysisViewProps {
   transactions: Transaction[];
   kpis: SchoolKPIs;
+  // ✅ RLS: Permissões do usuário
+  allowedMarcas?: string[];
+  allowedFiliais?: string[];
+  allowedCategories?: string[];
 }
 
 type TabType = 'summary' | 'actions' | 'slides' | 'ai';
@@ -47,21 +52,29 @@ export default function AnalysisView({ transactions, kpis }: AnalysisViewProps) 
 
   const chartRegistry = useChartRegistry();
 
+  // 🔒 RLS: Filtrar transações por permissões do usuário
+  const permissionFilteredTransactions = useMemo(() => {
+    console.log('🔒 AnalysisView: Aplicando permissões RLS nas transações...');
+    const filtered = filterTransactionsByPermissions(transactions);
+    console.log(`🔒 AnalysisView: ${transactions.length} → ${filtered.length} transações após RLS`);
+    return filtered;
+  }, [transactions]);
+
   // Marcas únicas
   const uniqueBrands = useMemo(() => {
-    const brands = new Set(transactions.map(t => t.marca).filter(Boolean));
+    const brands = new Set(permissionFilteredTransactions.map(t => t.marca).filter(Boolean));
     return Array.from(brands).sort();
-  }, [transactions]);
+  }, [permissionFilteredTransactions]);
 
   // Filiais disponíveis (filtradas por marca)
   const availableBranches = useMemo(() => {
-    let filtered = transactions;
+    let filtered = permissionFilteredTransactions;
     if (selectedMarcas.length > 0) {
-      filtered = transactions.filter(t => selectedMarcas.includes(t.marca || ''));
+      filtered = permissionFilteredTransactions.filter(t => selectedMarcas.includes(t.marca || ''));
     }
     const branches = new Set(filtered.map(t => t.filial).filter(Boolean));
     return Array.from(branches).sort();
-  }, [transactions, selectedMarcas]);
+  }, [permissionFilteredTransactions, selectedMarcas]);
 
   // Salvar aba ativa
   useEffect(() => {
@@ -495,7 +508,7 @@ export default function AnalysisView({ transactions, kpis }: AnalysisViewProps) 
           {/* ==================== ABA IA ==================== */}
           {activeTab === 'ai' && (
             <AIFinancialView
-              transactions={transactions}
+              transactions={permissionFilteredTransactions}
               kpis={kpis}
             />
           )}

@@ -2,9 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { Transaction } from '../types';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Area, AreaChart, ComposedChart } from 'recharts';
 import { TrendingUp, Calendar, Target, Brain, AlertCircle, CheckCircle2, BarChart3, Activity, Zap, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { filterTransactionsByPermissions } from '../services/permissionsService';
 
 interface ForecastingViewProps {
   transactions: Transaction[];
+  // ✅ RLS: Permissões do usuário
+  allowedMarcas?: string[];
+  allowedFiliais?: string[];
+  allowedCategories?: string[];
 }
 
 type ForecastMethod = 'movingAverage' | 'linearTrend' | 'seasonal' | 'hybrid';
@@ -23,6 +28,14 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
 
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
+  // 🔒 RLS: Filtrar transações por permissões do usuário
+  const permissionFilteredTransactions = useMemo(() => {
+    console.log('🔒 ForecastingView: Aplicando permissões RLS nas transações...');
+    const filtered = filterTransactionsByPermissions(transactions);
+    console.log(`🔒 ForecastingView: ${transactions.length} → ${filtered.length} transações após RLS`);
+    return filtered;
+  }, [transactions]);
+
   // Processar dados históricos reais
   const historicalData = useMemo(() => {
     const monthlyData = new Array(12).fill(0).map(() => ({
@@ -33,7 +46,7 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
     }));
 
     // Agregar transações do cenário "Real"
-    transactions
+    permissionFilteredTransactions
       .filter(t => t.scenario === 'Real')
       .forEach(t => {
         const monthIdx = parseInt(t.date.substring(5, 7), 10) - 1;
@@ -59,7 +72,7 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
         hasData: data.count > 0
       };
     });
-  }, [transactions]);
+  }, [permissionFilteredTransactions]);
 
   // Identificar último mês com dados
   const lastDataMonth = useMemo(() => {
@@ -266,7 +279,7 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
   // Calcular totais de EBITDA
   const ebitdaTotals = useMemo(() => {
     // EBITDA Orçado (do cenário "Orçado")
-    const budgetTransactions = transactions.filter(t => t.scenario === 'Orçado');
+    const budgetTransactions = permissionFilteredTransactions.filter(t => t.scenario === 'Orçado');
     const budgetRevenue = budgetTransactions
       .filter(t => t.type === 'REVENUE')
       .reduce((sum, t) => sum + t.amount, 0);
@@ -294,7 +307,7 @@ const ForecastingView: React.FC<ForecastingViewProps> = ({ transactions }) => {
       variance: totalProjected - budgetEbitda,
       variancePercent: budgetEbitda !== 0 ? ((totalProjected - budgetEbitda) / budgetEbitda) * 100 : 0
     };
-  }, [transactions, forecastData, historicalData, lastDataMonth]);
+  }, [permissionFilteredTransactions, forecastData, historicalData, lastDataMonth]);
 
   // Calcular insights e recomendações
   const insights = useMemo(() => {

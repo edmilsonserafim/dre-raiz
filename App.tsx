@@ -26,7 +26,7 @@ import { useTransactions } from './src/hooks/useTransactions';
 
 const App: React.FC = () => {
   const { user, loading: authLoading, isApprover } = useAuth();
-  const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, loading: permissionsLoading } = usePermissions();
+  const { filterTransactions, hasPermissions, allowedMarcas, allowedFiliais, allowedCategories, allowedTag01, allowedTag02, allowedTag03, loading: permissionsLoading } = usePermissions();
   const { isMobile, isTablet, isDesktop } = useIsMobile();
 
   // Hook do TransactionsContext (COM Realtime!)
@@ -80,26 +80,77 @@ const App: React.FC = () => {
   // Loading combinado
   const isLoading = isLoadingTransactions || permissionsLoading;
 
-  // Carregar transações iniciais ao montar (via Context)
-  // useRef evita execução duplicada do React StrictMode
+  // ✅ ÚNICO useEffect: Carregar dados com permissões aplicadas
   const initialLoadRef = React.useRef(false);
   useEffect(() => {
-    if (!currentFilters && !initialLoadRef.current) {
-      initialLoadRef.current = true;
-      // ⚡ OTIMIZAÇÃO: Carregar apenas MÊS ATUAL (muito mais rápido)
-      // Antes: carregava 12 meses (jan-dez) = 100k+ transações = 30s
-      // Depois: carrega 1 mês = ~10k transações = 2-3s
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const currentMonth = `${year}-${month}`;
-
-      applyFilters({
-        monthFrom: currentMonth,
-        monthTo: currentMonth
-      });
+    // Aguardar permissões carregarem antes de buscar dados
+    if (permissionsLoading || initialLoadRef.current) {
+      return;
     }
-  }, [applyFilters, currentFilters]);
+
+    initialLoadRef.current = true;
+
+    console.log('🔍 Carregamento inicial com permissões:', {
+      hasPermissions,
+      allowedMarcas,
+      allowedFiliais,
+      allowedCategories
+    });
+
+    // ⚡ OTIMIZAÇÃO: Carregar apenas JANEIRO 2026
+    const year = 2026;
+    const month = 1; // Janeiro
+
+    const filters: any = {
+      monthFrom: `${year}-${String(month).padStart(2, '0')}`,
+      monthTo: `${year}-${String(month).padStart(2, '0')}`
+    };
+
+    // ✅ Aplicar filtros de permissão IMEDIATAMENTE (se existirem)
+    if (allowedMarcas.length > 0) {
+      filters.marca = allowedMarcas;
+      console.log('🔒 Filtro de marca aplicado:', allowedMarcas);
+    }
+
+    if (allowedFiliais.length > 0) {
+      filters.filial = allowedFiliais;
+      console.log('🔒 Filtro de filial aplicado:', allowedFiliais);
+    }
+
+    if (allowedCategories.length > 0) {
+      filters.category = allowedCategories;
+      console.log('🔒 Filtro de categoria aplicado:', allowedCategories);
+    }
+
+    // 🔥 ADICIONAR TAG01/TAG02/TAG03 (CORREÇÃO RLS)
+    if (allowedTag01.length > 0) {
+      filters.tag01 = allowedTag01;
+      console.log('🔒 Filtro de tag01 aplicado:', allowedTag01);
+    }
+
+    if (allowedTag02.length > 0) {
+      filters.tag02 = allowedTag02;
+      console.log('🔒 Filtro de tag02 aplicado:', allowedTag02);
+    }
+
+    if (allowedTag03.length > 0) {
+      filters.tag03 = allowedTag03;
+      console.log('🔒 Filtro de tag03 aplicado:', allowedTag03);
+    }
+
+    console.log('📤 Buscando transações com filtros:', filters);
+    applyFilters(filters);
+  }, [
+    permissionsLoading,
+    hasPermissions,
+    allowedMarcas,
+    allowedFiliais,
+    allowedCategories,
+    allowedTag01,
+    allowedTag02,
+    allowedTag03,
+    applyFilters
+  ]);
 
   // Carregar manual changes ao iniciar
   useEffect(() => {
@@ -150,20 +201,37 @@ const App: React.FC = () => {
   , [manualChanges]);
 
   // Marcas únicas presentes nos dados
+  // ✅ Filtrar apenas marcas permitidas (RLS)
   const uniqueBrands = useMemo(() => {
     const marcas = new Set(transactions.map(t => t.marca).filter(Boolean));
-    return Array.from(marcas).sort();
-  }, [transactions]);
+    let brandsArray = Array.from(marcas).sort();
 
-  // Unidades dinâmicas
+    // Se usuário tem permissões restritas, filtrar apenas marcas permitidas
+    if (allowedMarcas.length > 0) {
+      brandsArray = brandsArray.filter(marca => allowedMarcas.includes(marca));
+      console.log('🔒 uniqueBrands filtrado por permissão:', brandsArray);
+    }
+
+    return brandsArray;
+  }, [transactions, allowedMarcas]);
+
+  // ✅ Filtrar apenas filiais permitidas (RLS)
   const availableBranches = useMemo(() => {
     let filtered = transactions;
     if (selectedMarca.length > 0) {
       filtered = transactions.filter(t => selectedMarca.includes(t.marca || ''));
     }
     const filiais = new Set(filtered.map(t => t.filial).filter(Boolean));
-    return Array.from(filiais).sort();
-  }, [transactions, selectedMarca]);
+    let branchesArray = Array.from(filiais).sort();
+
+    // Se usuário tem permissões restritas, filtrar apenas filiais permitidas
+    if (allowedFiliais.length > 0) {
+      branchesArray = branchesArray.filter(filial => allowedFiliais.includes(filial));
+      console.log('🔒 availableBranches filtrado por permissão:', branchesArray);
+    }
+
+    return branchesArray;
+  }, [transactions, selectedMarca, allowedFiliais]);
 
   useEffect(() => {
     setDrillDownFilters((prev: any) => ({
@@ -712,11 +780,20 @@ const App: React.FC = () => {
               availableBranches={availableBranches}
               onMarcaChange={setSelectedMarca}
               onFilialChange={setSelectedFilial}
+              allowedMarcas={allowedMarcas}
+              allowedFiliais={allowedFiliais}
+              allowedCategories={allowedCategories}
             />
           )}
           {currentView === 'kpis' && (
             <Suspense fallback={<LoadingSpinner message="Carregando KPIs..." />}>
-              <KPIsView kpis={kpis} transactions={filteredTransactions} />
+              <KPIsView
+                kpis={kpis}
+                transactions={filteredTransactions}
+                allowedMarcas={allowedMarcas}
+                allowedFiliais={allowedFiliais}
+                allowedCategories={allowedCategories}
+              />
             </Suspense>
           )}
           {currentView === 'movements' && (
@@ -736,6 +813,12 @@ const App: React.FC = () => {
                 externalActiveTab={drillDownActiveTab}
                 clearGlobalFilters={clearGlobalFilters}
                 onBackToDRE={handleBackToDRE}
+                allowedMarcas={allowedMarcas}
+                allowedFiliais={allowedFiliais}
+                allowedCategories={allowedCategories}
+                allowedTag01={allowedTag01}
+                allowedTag02={allowedTag02}
+                allowedTag03={allowedTag03}
               />
             </Suspense>
           )}
@@ -749,18 +832,35 @@ const App: React.FC = () => {
               <Suspense fallback={<LoadingSpinner message="Carregando DRE..." />}>
                 <DREView
                   onDrillDown={handleDrillDown}
+                  allowedMarcas={allowedMarcas}
+                  allowedFiliais={allowedFiliais}
+                  allowedCategories={allowedCategories}
+                  allowedTag01={allowedTag01}
+                  allowedTag02={allowedTag02}
+                  allowedTag03={allowedTag03}
                 />
               </Suspense>
             </div>
           )}
           {currentView === 'forecasting' && (
             <Suspense fallback={<LoadingSpinner message="Carregando previsões..." />}>
-              <ForecastingView transactions={filteredTransactions} />
+              <ForecastingView
+                transactions={filteredTransactions}
+                allowedMarcas={allowedMarcas}
+                allowedFiliais={allowedFiliais}
+                allowedCategories={allowedCategories}
+              />
             </Suspense>
           )}
           {currentView === 'analysis' && (
             <Suspense fallback={<LoadingSpinner message="Carregando análises..." />}>
-              <AnalysisView transactions={filteredTransactions} kpis={kpis} />
+              <AnalysisView
+                transactions={filteredTransactions}
+                kpis={kpis}
+                allowedMarcas={allowedMarcas}
+                allowedFiliais={allowedFiliais}
+                allowedCategories={allowedCategories}
+              />
             </Suspense>
           )}
           {currentView === 'admin' && (

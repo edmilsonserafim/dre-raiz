@@ -1,10 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { Target, Users, ArrowUpRight, ArrowDownRight, GraduationCap, Droplets, Zap, Box, PartyPopper, TrendingUp, TrendingDown } from 'lucide-react';
 import { SchoolKPIs, Transaction } from '../types';
+import { filterTransactionsByPermissions } from '../services/permissionsService';
 
 interface KPIsViewProps {
   kpis: SchoolKPIs;
   transactions: Transaction[];
+  // ✅ RLS: Permissões do usuário
+  allowedMarcas?: string[];
+  allowedFiliais?: string[];
+  allowedCategories?: string[];
 }
 
 // Helper function to format monetary values
@@ -23,13 +28,21 @@ const KPIsView: React.FC<KPIsViewProps> = ({ kpis, transactions }) => {
   const [comparisonMode, setComparisonMode] = useState<'budget' | 'prevYear'>('budget');
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
+  // 🔒 RLS: Filtrar transações por permissões do usuário
+  const permissionFilteredTransactions = useMemo(() => {
+    console.log('🔒 KPIsView: Aplicando permissões RLS nas transações...');
+    const filtered = filterTransactionsByPermissions(transactions);
+    console.log(`🔒 KPIsView: ${transactions.length} → ${filtered.length} transações após RLS`);
+    return filtered;
+  }, [transactions]);
+
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
-    return transactions.filter(t => {
+    return permissionFilteredTransactions.filter(t => {
       const month = parseInt(t.date.substring(5, 7), 10) - 1;
       return month >= selectedMonthStart && month <= selectedMonthEnd;
     });
-  }, [transactions, selectedMonthStart, selectedMonthEnd]);
+  }, [permissionFilteredTransactions, selectedMonthStart, selectedMonthEnd]);
 
   // Enhanced KPIs with consumption metrics and additional calculations
   const enhancedKpis = useMemo(() => {

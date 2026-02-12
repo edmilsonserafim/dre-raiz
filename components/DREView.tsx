@@ -49,6 +49,13 @@ interface DREViewProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   dreYear?: number;  // Ano para buscar dados (default: ano atual)
+  // ✅ PERMISSÕES: Sempre aplicadas nas queries RPC
+  allowedMarcas?: string[];
+  allowedFiliais?: string[];
+  allowedCategories?: string[];
+  allowedTag01?: string[];
+  allowedTag02?: string[];
+  allowedTag03?: string[];
 }
 
 const DRE_DIMENSIONS = [
@@ -64,7 +71,13 @@ const DREView: React.FC<DREViewProps> = ({
   onDrillDown,
   onRefresh,
   isRefreshing = false,
-  dreYear
+  dreYear,
+  allowedMarcas,
+  allowedFiliais,
+  allowedCategories,
+  allowedTag01,
+  allowedTag02,
+  allowedTag03
 }) => {
   // Estado para dados agregados do servidor
   const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
@@ -161,13 +174,52 @@ const DREView: React.FC<DREViewProps> = ({
     const monthTo = `${currentYear}-12`;
 
     try {
+      // ✅ APLICAR PERMISSÕES: Mesclar filtros do usuário com permissões
+      let finalMarcas = selectedMarcas.length > 0 ? selectedMarcas : undefined;
+      let finalFiliais = selectedFiliais.length > 0 ? selectedFiliais : undefined;
+
+      // Se há permissões de marca, aplicar
+      if (allowedMarcas && allowedMarcas.length > 0) {
+        if (finalMarcas && finalMarcas.length > 0) {
+          // Intersecção: usuário selecionou marcas + tem permissões
+          finalMarcas = finalMarcas.filter(m => allowedMarcas.includes(m));
+        } else {
+          // Usuário não selecionou, usar apenas as permitidas
+          finalMarcas = allowedMarcas;
+        }
+        console.log('🔒 DRE: Filtro de permissão MARCA aplicado:', finalMarcas);
+      }
+
+      // Se há permissões de filial, aplicar
+      if (allowedFiliais && allowedFiliais.length > 0) {
+        if (finalFiliais && finalFiliais.length > 0) {
+          finalFiliais = finalFiliais.filter(f => allowedFiliais.includes(f));
+        } else {
+          finalFiliais = allowedFiliais;
+        }
+        console.log('🔒 DRE: Filtro de permissão FILIAL aplicado:', finalFiliais);
+      }
+
+      // Se há permissões de TAG01, aplicar
+      let finalTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
+      if (allowedTag01 && allowedTag01.length > 0) {
+        if (finalTags01 && finalTags01.length > 0) {
+          // Intersecção: usuário selecionou tags + tem permissões
+          finalTags01 = finalTags01.filter(t => allowedTag01.includes(t));
+        } else {
+          // Usuário não selecionou, usar apenas as permitidas
+          finalTags01 = allowedTag01;
+        }
+        console.log('🔒 DRE: Filtro de permissão TAG01 aplicado:', finalTags01);
+      }
+
       const [summary, options, filiais] = await Promise.all([
         getDRESummary({
           monthFrom,
           monthTo,
-          marcas: selectedMarcas.length > 0 ? selectedMarcas : undefined,
-          nomeFiliais: selectedFiliais.length > 0 ? selectedFiliais : undefined,
-          tags01: selectedTags01.length > 0 ? selectedTags01 : undefined,
+          marcas: finalMarcas,
+          nomeFiliais: finalFiliais,
+          tags01: finalTags01,
         }),
         getDREFilterOptions({ monthFrom, monthTo }),
         getFiliais(),
@@ -238,7 +290,7 @@ const DREView: React.FC<DREViewProps> = ({
         setIsLoadingDRE(false);
       }
     }
-  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, allowedMarcas, allowedFiliais]);
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
@@ -478,12 +530,42 @@ const DREView: React.FC<DREViewProps> = ({
     const monthTo = `${currentYear}-12`;
 
     // Merge filtros do dropdown + filtros acumulados do drill-down
-    const mergedMarcas = accFilters.marca
+    let mergedMarcas = accFilters.marca
       ? [accFilters.marca]
       : (selectedMarcas.length > 0 ? selectedMarcas : undefined);
-    const mergedFiliais = accFilters.nome_filial
+    let mergedFiliais = accFilters.nome_filial
       ? [accFilters.nome_filial]
       : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
+
+    // ✅ APLICAR PERMISSÕES: Sempre injetar filtros de permissão
+    if (allowedMarcas && allowedMarcas.length > 0) {
+      if (mergedMarcas && mergedMarcas.length > 0) {
+        mergedMarcas = mergedMarcas.filter(m => allowedMarcas.includes(m));
+      } else {
+        mergedMarcas = allowedMarcas;
+      }
+      console.log('🔒 DRE Dimension: Filtro de permissão MARCA aplicado:', mergedMarcas);
+    }
+
+    if (allowedFiliais && allowedFiliais.length > 0) {
+      if (mergedFiliais && mergedFiliais.length > 0) {
+        mergedFiliais = mergedFiliais.filter(f => allowedFiliais.includes(f));
+      } else {
+        mergedFiliais = allowedFiliais;
+      }
+      console.log('🔒 DRE Dimension: Filtro de permissão FILIAL aplicado:', mergedFiliais);
+    }
+
+    // Se há permissões de TAG01, aplicar
+    let mergedTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
+    if (allowedTag01 && allowedTag01.length > 0) {
+      if (mergedTags01 && mergedTags01.length > 0) {
+        mergedTags01 = mergedTags01.filter(t => allowedTag01.includes(t));
+      } else {
+        mergedTags01 = allowedTag01;
+      }
+      console.log('🔒 DRE Dimension: Filtro de permissão TAG01 aplicado:', mergedTags01);
+    }
 
     const rows = await getDREDimension({
       monthFrom,
@@ -493,11 +575,11 @@ const DREView: React.FC<DREViewProps> = ({
       dimension: dimensionKey,
       marcas: mergedMarcas,
       nomeFiliais: mergedFiliais,
-      tags01: selectedTags01.length > 0 ? selectedTags01 : undefined,
+      tags01: mergedTags01,
     });
 
     setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));
-  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, dimensionCache]);
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, allowedMarcas, allowedFiliais, allowedTag01]);
 
   const renderRow = (
     id: string,

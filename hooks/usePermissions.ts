@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import * as supabaseService from '../services/supabaseService';
 import { Transaction } from '../types';
@@ -6,7 +6,7 @@ import { Transaction } from '../types';
 interface Permission {
   id: string;
   user_id: string;
-  permission_type: 'centro_custo' | 'cia' | 'filial';
+  permission_type: 'centro_custo' | 'cia' | 'filial' | 'tag01' | 'tag02' | 'tag03';
   permission_value: string;
 }
 
@@ -19,6 +19,9 @@ interface UsePermissionsReturn {
   allowedMarcas: string[];
   allowedFiliais: string[];
   allowedCategories: string[];
+  allowedTag01: string[];
+  allowedTag02: string[];
+  allowedTag03: string[];
 }
 
 export const usePermissions = (): UsePermissionsReturn => {
@@ -29,19 +32,25 @@ export const usePermissions = (): UsePermissionsReturn => {
   useEffect(() => {
     const loadPermissions = async () => {
       if (!user) {
+        console.log('🔒 usePermissions: Nenhum usuário logado');
         setPermissions([]);
         setLoading(false);
         return;
       }
 
+      console.log('🔒 usePermissions: Carregando permissões para', user.email);
       setLoading(true);
 
       // Buscar o usuário no Supabase para pegar o ID
       const dbUser = await supabaseService.getUserByEmail(user.email);
 
       if (dbUser) {
+        console.log('🔒 usePermissions: Usuário encontrado no banco', { id: dbUser.id, role: dbUser.role });
         const userPermissions = await supabaseService.getUserPermissions(dbUser.id);
+        console.log('🔒 usePermissions: Permissões carregadas', userPermissions);
         setPermissions(userPermissions);
+      } else {
+        console.warn('⚠️ usePermissions: Usuário não encontrado no banco Supabase');
       }
 
       setLoading(false);
@@ -50,49 +59,94 @@ export const usePermissions = (): UsePermissionsReturn => {
     loadPermissions();
   }, [user]);
 
+  // Extrair valores permitidos (memoizados para evitar loops infinitos)
+  // ⚠️ IMPORTANTE: useMemo ANTES de qualquer return (Rules of Hooks)
+  const allowedMarcas = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'cia')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
+  const allowedFiliais = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'filial')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
+  const allowedCentroCusto = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'centro_custo')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
+  const allowedTag01 = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'tag01')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
+  const allowedTag02 = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'tag02')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
+  const allowedTag03 = useMemo(() =>
+    permissions
+      .filter(p => p.permission_type === 'tag03')
+      .map(p => p.permission_value),
+    [permissions]
+  );
+
   // Verifica se o usuário tem permissões específicas configuradas
   const hasPermissions = permissions.length > 0;
 
   // Admin sempre tem acesso total
   if (isAdmin) {
+    console.log('🔒 usePermissions: Usuário é ADMIN - Acesso Total (sem restrições)');
     return {
       permissions,
       loading,
       canAccess: () => true,
-      filterTransactions: (transactions) => transactions,
+      filterTransactions: (transactions) => {
+        console.log('🔒 usePermissions: ADMIN vendo todas transações', transactions.length);
+        return transactions;
+      },
       hasPermissions: false, // Admin não tem restrições
       allowedMarcas: [],
       allowedFiliais: [],
-      allowedCategories: []
+      allowedCategories: [],
+      allowedTag01: [],
+      allowedTag02: [],
+      allowedTag03: []
     };
   }
 
   // Se não tem permissões configuradas, tem acesso total
   if (!hasPermissions) {
+    console.log('🔒 usePermissions: SEM permissões configuradas - Acesso Total');
     return {
       permissions,
       loading,
       canAccess: () => true,
-      filterTransactions: (transactions) => transactions,
+      filterTransactions: (transactions) => {
+        console.log('🔒 usePermissions: SEM PERMISSÕES - vendo todas transações', transactions.length);
+        return transactions;
+      },
       hasPermissions: false,
       allowedMarcas: [],
       allowedFiliais: [],
-      allowedCategories: []
+      allowedCategories: [],
+      allowedTag01: [],
+      allowedTag02: [],
+      allowedTag03: []
     };
   }
-
-  // Extrair valores permitidos
-  const allowedMarcas = permissions
-    .filter(p => p.permission_type === 'cia')
-    .map(p => p.permission_value);
-
-  const allowedFiliais = permissions
-    .filter(p => p.permission_type === 'filial')
-    .map(p => p.permission_value);
-
-  const allowedCentroCusto = permissions
-    .filter(p => p.permission_type === 'centro_custo')
-    .map(p => p.permission_value);
 
   // Função para verificar se o usuário pode acessar uma transação
   const canAccess = (transaction: Transaction): boolean => {
@@ -118,13 +172,75 @@ export const usePermissions = (): UsePermissionsReturn => {
       }
     }
 
+    // Se tem permissão de tag01 configurada, verificar
+    if (allowedTag01.length > 0) {
+      if (!transaction.tag01 || !allowedTag01.includes(transaction.tag01)) {
+        return false;
+      }
+    }
+
+    // Se tem permissão de tag02 configurada, verificar
+    if (allowedTag02.length > 0) {
+      if (!transaction.tag02 || !allowedTag02.includes(transaction.tag02)) {
+        return false;
+      }
+    }
+
+    // Se tem permissão de tag03 configurada, verificar
+    if (allowedTag03.length > 0) {
+      if (!transaction.tag03 || !allowedTag03.includes(transaction.tag03)) {
+        return false;
+      }
+    }
+
     return true;
   };
 
   // Função para filtrar lista de transações
   const filterTransactions = (transactions: Transaction[]): Transaction[] => {
-    return transactions.filter(canAccess);
+    console.log('🔒 usePermissions: Filtrando transações...', {
+      total: transactions.length,
+      allowedMarcas,
+      allowedFiliais,
+      allowedCategories: allowedCentroCusto,
+      allowedTag01,
+      allowedTag02,
+      allowedTag03
+    });
+
+    const filtered = transactions.filter(canAccess);
+
+    console.log('🔒 usePermissions: Filtragem concluída', {
+      totalOriginal: transactions.length,
+      totalFiltrado: filtered.length,
+      bloqueados: transactions.length - filtered.length
+    });
+
+    // Log de amostra das primeiras 3 transações filtradas
+    if (filtered.length > 0) {
+      console.log('🔒 usePermissions: Amostra de transações permitidas:',
+        filtered.slice(0, 3).map(t => ({
+          id: t.id,
+          description: t.description,
+          marca: t.marca,
+          filial: t.filial,
+          tag01: t.tag01,
+          tag02: t.tag02,
+          tag03: t.tag03
+        }))
+      );
+    }
+
+    return filtered;
   };
+
+  console.log('🔒 usePermissions: Retornando com permissões ATIVAS', {
+    hasPermissions: true,
+    totalPermissions: permissions.length,
+    allowedMarcas,
+    allowedFiliais,
+    allowedTag01
+  });
 
   return {
     permissions,
@@ -134,6 +250,9 @@ export const usePermissions = (): UsePermissionsReturn => {
     hasPermissions: true,
     allowedMarcas,
     allowedFiliais,
-    allowedCategories: allowedCentroCusto
+    allowedCategories: allowedCentroCusto,
+    allowedTag01,
+    allowedTag02,
+    allowedTag03
   };
 };
