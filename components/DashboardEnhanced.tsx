@@ -548,8 +548,8 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
               >
                 {drillLevel === 'cia' ? '⬇ Abrir Filial' : '⬆ Voltar CIA'}
               </button>
-              <span className="px-2 py-1 bg-amber-100 text-amber-800 text-[9px] font-bold rounded">
-                DEBUG: Range={monthRange.start}-{monthRange.end}
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-[9px] font-bold rounded">
+                📅 {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][monthRange.start]} - {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][monthRange.end]}
               </span>
             </h3>
             <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">
