@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ChevronDown,
   Activity,
+  Brain,
   Calendar,
   CalendarDays,
   Table as TableIcon,
@@ -126,7 +127,22 @@ const DREView: React.FC<DREViewProps> = ({
 
   // Modo de visualização: 'scenario' (por cenário) ou 'month' (por mês)
   const [viewMode, setViewMode] = useState<'scenario' | 'month'>('scenario');
-  
+
+  // 🎯 SISTEMA DE DESTAQUES ANALÍTICOS
+  type AnalysisMode = 'none' | 'visual-alerts' | 'insights-dashboard' | 'ai-analysis' | 'guided-mode';
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('none');
+  const [topDeviations, setTopDeviations] = useState<Array<{
+    label: string;
+    category: string;
+    variation: number;
+    type: 'budget' | 'lastYear';
+    level: number;
+    real: number;
+    compare: number;
+  }>>([]);
+  const [guidedModeIndex, setGuidedModeIndex] = useState(0);
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(false);
+
   // Estados de UI (Dropdowns abertos)
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
   const [isBrandFilterOpen, setIsBrandFilterOpen] = useState(false);
@@ -297,6 +313,79 @@ const DREView: React.FC<DREViewProps> = ({
     fetchDREData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+
+  // 🎯 ANÁLISE AUTOMÁTICA: Calcular top desvios sempre que dados mudam
+  useEffect(() => {
+    if (!summaryRows || summaryRows.length === 0 || analysisMode === 'none') {
+      setTopDeviations([]);
+      return;
+    }
+
+    const deviations: typeof topDeviations = [];
+
+    // Analisar cada linha do summary
+    summaryRows.forEach(row => {
+      const label = row.tag01 || row.tag0 || 'Sem classificação';
+      const category = row.tag0 || '';
+      const real = Number(row.total_amount) || 0;
+
+      // Buscar dados de Orçado e A-1 para a mesma linha
+      const budgetRow = summaryRows.find(r =>
+        r.tag0 === row.tag0 &&
+        r.tag01 === row.tag01 &&
+        r.scenario === 'Orçado'
+      );
+      const a1Row = summaryRows.find(r =>
+        r.tag0 === row.tag0 &&
+        r.tag01 === row.tag01 &&
+        r.scenario === 'A-1'
+      );
+
+      const budget = Number(budgetRow?.total_amount) || 0;
+      const a1 = Number(a1Row?.total_amount) || 0;
+
+      // Calcular variações (apenas se cenário Real)
+      if (row.scenario === 'Real') {
+        // Variação vs Orçado
+        if (budget !== 0) {
+          const varBudget = ((real - budget) / Math.abs(budget)) * 100;
+          if (Math.abs(varBudget) >= 10) { // Apenas desvios >= 10%
+            deviations.push({
+              label,
+              category,
+              variation: varBudget,
+              type: 'budget',
+              level: row.tag01 ? 2 : 1,
+              real,
+              compare: budget
+            });
+          }
+        }
+
+        // Variação vs A-1
+        if (a1 !== 0) {
+          const varA1 = ((real - a1) / Math.abs(a1)) * 100;
+          if (Math.abs(varA1) >= 10) { // Apenas desvios >= 10%
+            deviations.push({
+              label,
+              category,
+              variation: varA1,
+              type: 'lastYear',
+              level: row.tag01 ? 2 : 1,
+              real,
+              compare: a1
+            });
+          }
+        }
+      }
+    });
+
+    // Ordenar por variação absoluta (maior desvio primeiro)
+    deviations.sort((a, b) => Math.abs(b.variation) - Math.abs(a.variation));
+
+    // Pegar top 10
+    setTopDeviations(deviations.slice(0, 10));
+  }, [summaryRows, analysisMode]);
 
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
@@ -2070,16 +2159,228 @@ const DREView: React.FC<DREViewProps> = ({
             </p>
           </div>
         </div>
-        <div className="bg-emerald-50 border border-emerald-100 p-2 rounded-xl flex items-start gap-2 shadow-sm md:col-span-2 lg:col-span-1">
-          <div className="bg-white p-1.5 rounded-lg shadow-sm text-emerald-600">
-            <CheckSquare size={14} />
+        {/* 🎯 CARD DESTAQUES ANALÍTICOS - Expandível com múltiplos modos */}
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl shadow-sm md:col-span-2 lg:col-span-1 overflow-hidden">
+          {/* Header do card */}
+          <div className="p-2 flex items-start gap-2">
+            <div className="bg-white p-1.5 rounded-lg shadow-sm text-emerald-600 shrink-0">
+              <CheckSquare size={14} />
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-[9px] font-black text-emerald-900 uppercase tracking-wider">Destaques Analíticos</h4>
+                <button
+                  onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
+                  className="text-emerald-600 hover:bg-emerald-100 p-0.5 rounded transition-colors"
+                  title={isAnalysisExpanded ? "Recolher" : "Expandir opções"}
+                >
+                  {isAnalysisExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              </div>
+              <p className="text-[8px] font-medium text-emerald-800 leading-snug">
+                {analysisMode === 'none' && 'Explore os dados com o mouse para destacar células'}
+                {analysisMode === 'visual-alerts' && `🚨 ${topDeviations.length} alertas de desvios significativos`}
+                {analysisMode === 'insights-dashboard' && `📊 Top ${Math.min(5, topDeviations.length)} maiores desvios identificados`}
+                {analysisMode === 'ai-analysis' && '🤖 Análise inteligente com IA ativada'}
+                {analysisMode === 'guided-mode' && `🧭 Navegação guiada (${guidedModeIndex + 1}/${topDeviations.length})`}
+              </p>
+            </div>
           </div>
-          <div className="space-y-0.5">
-            <h4 className="text-[9px] font-black text-emerald-900 uppercase tracking-wider">Destaques Analíticos</h4>
-            <p className="text-[8px] font-medium text-emerald-800 leading-snug">
-              Explore os dados com o mouse para destacar células e identificar desvios rapidamente.
-            </p>
-          </div>
+
+          {/* Opções de análise (expandível) */}
+          {isAnalysisExpanded && (
+            <div className="border-t border-emerald-200 bg-white/50 p-2 space-y-1.5">
+              <p className="text-[7px] font-black text-emerald-900 uppercase tracking-wider mb-1">Escolha o modo de análise:</p>
+
+              {/* Modo: Nenhum (padrão) */}
+              <button
+                onClick={() => setAnalysisMode('none')}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-left transition-all ${
+                  analysisMode === 'none'
+                    ? 'bg-emerald-100 border border-emerald-300 shadow-sm'
+                    : 'bg-white border border-emerald-100 hover:bg-emerald-50'
+                }`}
+              >
+                {analysisMode === 'none' ? <CheckSquare size={10} className="text-emerald-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[8px] font-bold text-gray-900">🔍 Padrão (Apenas Hover)</div>
+                  <div className="text-[7px] text-gray-600 truncate">Destaque ao passar o mouse</div>
+                </div>
+              </button>
+
+              {/* Modo: Alertas Visuais */}
+              <button
+                onClick={() => setAnalysisMode('visual-alerts')}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-left transition-all ${
+                  analysisMode === 'visual-alerts'
+                    ? 'bg-orange-100 border border-orange-300 shadow-sm'
+                    : 'bg-white border border-emerald-100 hover:bg-emerald-50'
+                }`}
+              >
+                {analysisMode === 'visual-alerts' ? <CheckSquare size={10} className="text-orange-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[8px] font-bold text-gray-900">🚨 Alertas Visuais</div>
+                  <div className="text-[7px] text-gray-600 truncate">Ícones em células com desvios ≥ 10%</div>
+                </div>
+              </button>
+
+              {/* Modo: Dashboard de Insights */}
+              <button
+                onClick={() => setAnalysisMode('insights-dashboard')}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-left transition-all ${
+                  analysisMode === 'insights-dashboard'
+                    ? 'bg-blue-100 border border-blue-300 shadow-sm'
+                    : 'bg-white border border-emerald-100 hover:bg-emerald-50'
+                }`}
+              >
+                {analysisMode === 'insights-dashboard' ? <CheckSquare size={10} className="text-blue-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[8px] font-bold text-gray-900">📊 Dashboard de Insights</div>
+                  <div className="text-[7px] text-gray-600 truncate">Lista top 5 maiores desvios</div>
+                </div>
+              </button>
+
+              {/* Modo: Análise com IA */}
+              <button
+                onClick={() => setAnalysisMode('ai-analysis')}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-left transition-all ${
+                  analysisMode === 'ai-analysis'
+                    ? 'bg-purple-100 border border-purple-300 shadow-sm'
+                    : 'bg-white border border-emerald-100 hover:bg-emerald-50'
+                }`}
+              >
+                {analysisMode === 'ai-analysis' ? <CheckSquare size={10} className="text-purple-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[8px] font-bold text-gray-900">🤖 Análise com IA</div>
+                  <div className="text-[7px] text-gray-600 truncate">Explicação inteligente dos desvios</div>
+                </div>
+              </button>
+
+              {/* Modo: Navegação Guiada */}
+              <button
+                onClick={() => {
+                  setAnalysisMode('guided-mode');
+                  setGuidedModeIndex(0);
+                }}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-left transition-all ${
+                  analysisMode === 'guided-mode'
+                    ? 'bg-indigo-100 border border-indigo-300 shadow-sm'
+                    : 'bg-white border border-emerald-100 hover:bg-emerald-50'
+                }`}
+              >
+                {analysisMode === 'guided-mode' ? <CheckSquare size={10} className="text-indigo-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[8px] font-bold text-gray-900">🧭 Modo Guiado</div>
+                  <div className="text-[7px] text-gray-600 truncate">Navegação passo a passo pelos desvios</div>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Dashboard de Insights (quando modo ativo) */}
+          {analysisMode === 'insights-dashboard' && topDeviations.length > 0 && (
+            <div className="border-t border-emerald-200 bg-gradient-to-br from-blue-50 to-emerald-50 p-2 space-y-1">
+              <p className="text-[7px] font-black text-blue-900 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <TrendingUpDown size={10} />
+                Top {Math.min(5, topDeviations.length)} Maiores Desvios
+              </p>
+              {topDeviations.slice(0, 5).map((dev, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white/80 border border-blue-100 rounded-lg p-1.5 hover:bg-white hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[8px] font-bold text-gray-900 truncate">{dev.label}</div>
+                      <div className="text-[7px] text-gray-600 truncate">{dev.category}</div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className={`text-[8px] font-black ${dev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {dev.variation > 0 ? '+' : ''}{dev.variation.toFixed(1)}%
+                      </div>
+                      <div className="text-[6px] text-gray-500">
+                        vs {dev.type === 'budget' ? 'Orç' : 'A-1'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Navegação Guiada (quando modo ativo) */}
+          {analysisMode === 'guided-mode' && topDeviations.length > 0 && (
+            <div className="border-t border-emerald-200 bg-gradient-to-br from-indigo-50 to-emerald-50 p-2">
+              {(() => {
+                const currentDev = topDeviations[guidedModeIndex];
+                return (
+                  <div className="space-y-2">
+                    <div className="bg-white/90 border border-indigo-200 rounded-lg p-2 shadow-sm">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[7px] font-black text-indigo-900 uppercase tracking-wider">
+                          Desvio {guidedModeIndex + 1} de {topDeviations.length}
+                        </span>
+                        <span className={`text-[9px] font-black ${currentDev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {currentDev.variation > 0 ? '+' : ''}{currentDev.variation.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-[8px] font-bold text-gray-900 mb-0.5">{currentDev.label}</div>
+                      <div className="text-[7px] text-gray-600 mb-1">{currentDev.category}</div>
+                      <div className="text-[7px] text-gray-700 bg-indigo-50 rounded px-1.5 py-0.5">
+                        <span className="font-semibold">Real:</span> R$ {currentDev.real.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} |
+                        <span className="font-semibold ml-1">{currentDev.type === 'budget' ? 'Orç' : 'A-1'}:</span> R$ {currentDev.compare.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setGuidedModeIndex(Math.max(0, guidedModeIndex - 1))}
+                        disabled={guidedModeIndex === 0}
+                        className="flex-1 bg-white border border-indigo-200 text-indigo-600 px-2 py-1 rounded-lg text-[7px] font-bold hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        ← Anterior
+                      </button>
+                      <button
+                        onClick={() => setGuidedModeIndex(Math.min(topDeviations.length - 1, guidedModeIndex + 1))}
+                        disabled={guidedModeIndex === topDeviations.length - 1}
+                        className="flex-1 bg-indigo-600 text-white px-2 py-1 rounded-lg text-[7px] font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        Próximo →
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Análise com IA (quando modo ativo) */}
+          {analysisMode === 'ai-analysis' && topDeviations.length > 0 && (
+            <div className="border-t border-emerald-200 bg-gradient-to-br from-purple-50 to-emerald-50 p-2 space-y-1.5">
+              <p className="text-[7px] font-black text-purple-900 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Brain size={10} />
+                Análise Inteligente
+              </p>
+              <div className="bg-white/80 border border-purple-100 rounded-lg p-2 space-y-1">
+                <p className="text-[8px] font-bold text-gray-900">
+                  📊 Identificados {topDeviations.length} desvios significativos (≥ 10%)
+                </p>
+                <p className="text-[7px] text-gray-700 leading-relaxed">
+                  {topDeviations[0].variation > 0 ? '🔴' : '🟢'} <span className="font-semibold">{topDeviations[0].label}</span> apresenta a maior variação:
+                  <span className={`font-black ml-0.5 ${topDeviations[0].variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {topDeviations[0].variation > 0 ? '+' : ''}{topDeviations[0].variation.toFixed(1)}%
+                  </span> vs {topDeviations[0].type === 'budget' ? 'Orçado' : 'A-1'}.
+                  {topDeviations[0].variation > 0
+                    ? ' Sugere-se investigar causas do aumento.'
+                    : ' Resultado positivo, mantendo abaixo do esperado.'}
+                </p>
+                {topDeviations.length > 1 && (
+                  <p className="text-[7px] text-gray-600">
+                    Outros desvios relevantes: {topDeviations.slice(1, 3).map(d => d.label).join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
