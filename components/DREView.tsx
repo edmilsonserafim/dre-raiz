@@ -132,6 +132,7 @@ const DREView: React.FC<DREViewProps> = ({
   // 🎯 SISTEMA DE DESTAQUES ANALÍTICOS
   type AnalysisMode = 'none' | 'visual-alerts' | 'insights-dashboard' | 'ai-analysis' | 'guided-mode';
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('none');
+  const [deviationThreshold, setDeviationThreshold] = useState(5); // % mínimo de desvio (reduzido de 10% para 5%)
   const [topDeviations, setTopDeviations] = useState<Array<{
     label: string;
     category: string;
@@ -372,7 +373,7 @@ const DREView: React.FC<DREViewProps> = ({
         // Variação vs Orçado
         if (budget !== 0) {
           const varBudget = ((real - budget) / Math.abs(budget)) * 100;
-          if (Math.abs(varBudget) >= 10) { // Apenas desvios >= 10%
+          if (Math.abs(varBudget) >= deviationThreshold) {
             deviations.push({
               label,
               category,
@@ -388,7 +389,7 @@ const DREView: React.FC<DREViewProps> = ({
         // Variação vs A-1
         if (a1 !== 0) {
           const varA1 = ((real - a1) / Math.abs(a1)) * 100;
-          if (Math.abs(varA1) >= 10) { // Apenas desvios >= 10%
+          if (Math.abs(varA1) >= deviationThreshold) {
             deviations.push({
               label,
               category,
@@ -417,11 +418,11 @@ const DREView: React.FC<DREViewProps> = ({
     if (top10.length > 0) {
       console.log('🎯 Top 3 maiores desvios:', top10.slice(0, 3));
     } else {
-      console.warn('⚠️ Nenhum desvio ≥ 10% encontrado');
+      console.warn(`⚠️ Nenhum desvio ≥ ${deviationThreshold}% encontrado`);
     }
 
     setTopDeviations(top10);
-  }, [summaryRows, analysisMode]);
+  }, [summaryRows, analysisMode, deviationThreshold]);
 
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
@@ -2331,6 +2332,33 @@ const DREView: React.FC<DREViewProps> = ({
                   <div className="text-[7px] text-gray-600 truncate">Navegação passo a passo pelos desvios</div>
                 </div>
               </button>
+            </div>
+          )}
+
+          {/* Mensagem: Nenhum desvio encontrado (todos os modos que dependem de topDeviations) */}
+          {(analysisMode === 'visual-alerts' || analysisMode === 'insights-dashboard' || analysisMode === 'ai-analysis' || analysisMode === 'guided-mode') && topDeviations.length === 0 && (
+            <div className="border-t border-emerald-200 bg-gradient-to-br from-gray-50 to-emerald-50 p-2">
+              <div className="bg-white/80 border border-gray-200 rounded-lg p-2 text-center">
+                <p className="text-[8px] font-bold text-gray-700 mb-1">📊 Nenhum desvio significativo encontrado</p>
+                <p className="text-[7px] text-gray-600 mb-2">
+                  Não há variações ≥ {deviationThreshold}% vs Orçado ou A-1
+                </p>
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={() => setDeviationThreshold(Math.max(1, deviationThreshold - 1))}
+                    className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
+                  >
+                    - Reduzir para {Math.max(1, deviationThreshold - 1)}%
+                  </button>
+                  <span className="text-[7px] font-bold text-gray-700">{deviationThreshold}%</span>
+                  <button
+                    onClick={() => setDeviationThreshold(Math.min(20, deviationThreshold + 1))}
+                    className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
+                  >
+                    + Aumentar para {Math.min(20, deviationThreshold + 1)}%
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
