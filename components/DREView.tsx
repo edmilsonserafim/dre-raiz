@@ -889,8 +889,19 @@ const DREView: React.FC<DREViewProps> = ({
                     compareScenario = 'A-1';
                   }
 
+                  console.log(`🔍 YTD Delta (${label}):`, {
+                    element,
+                    compareScenario,
+                    baseScenario,
+                    hasBase: !!scenarioYTDs[baseScenario],
+                    hasCompare: !!scenarioYTDs[compareScenario],
+                    baseYTD: scenarioYTDs[baseScenario],
+                    compareYTD: scenarioYTDs[compareScenario]
+                  });
+
                   // Verificar se os dados existem
                   if (!compareScenario || !scenarioYTDs[baseScenario] || !scenarioYTDs[compareScenario]) {
+                    console.warn(`⚠️ YTD Delta IGNORADO (${label}, ${element}): compareScenario=${compareScenario}, base=${scenarioYTDs[baseScenario]}, compare=${scenarioYTDs[compareScenario]}`);
                     return null;
                   }
 
@@ -1242,8 +1253,19 @@ const DREView: React.FC<DREViewProps> = ({
                   compareScenario = 'A-1';
                 }
 
+                console.log(`🔍 YTD Delta CALCULADO (${label}):`, {
+                  element,
+                  compareScenario,
+                  baseScenario,
+                  hasBase: !!calcYTDs[baseScenario],
+                  hasCompare: !!calcYTDs[compareScenario],
+                  baseYTD: calcYTDs[baseScenario],
+                  compareYTD: calcYTDs[compareScenario]
+                });
+
                 // Verificar se os dados existem
                 if (!compareScenario || !calcYTDs[baseScenario] || !calcYTDs[compareScenario]) {
+                  console.warn(`⚠️ YTD Delta CALCULADO IGNORADO (${label}, ${element}): compareScenario=${compareScenario}, base=${calcYTDs[baseScenario]}, compare=${calcYTDs[compareScenario]}`);
                   return null;
                 }
 
