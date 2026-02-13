@@ -16,6 +16,7 @@ import { EChartsOption } from 'echarts';
 import { useBranchData } from '../hooks/useBranchData';
 import { generateExecutiveSummary, ExecutiveSummaryContext, ExecutiveSummaryResponse } from '../services/anthropicService';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DashboardEnhancedProps {
   kpis: SchoolKPIs;
@@ -251,8 +252,10 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
         const summary = await generateExecutiveSummary(context);
         setAiSummary(summary);
         console.log('✅ Resumo Executivo gerado com sucesso!');
+        toast.success('🤖 Análise de IA gerada com sucesso!');
       } catch (error) {
         console.error('❌ Erro ao gerar resumo executivo:', error);
+        toast.error('⚠️ Erro ao gerar análise de IA. Usando análise básica.');
         // Fallback
         setAiSummary({
           summary: '⚠️ Não foi possível gerar o resumo executivo com IA. Verifique sua conexão.',

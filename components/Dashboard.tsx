@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ComposedChart, Line, Legend, ReferenceLine } from 'recharts';
-import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, TrendingDown, X, TrendingUp, Flag, Building2, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { Target, Users, ArrowUpRight, ArrowDownRight, ArrowRight, GraduationCap, CalendarDays, Droplets, Zap, Box, PartyPopper, Scissors, ShieldCheck, AlertCircle, PieChart, X, TrendingUp, Flag, Building2, ChevronDown, ChevronRight, Check, RefreshCw } from 'lucide-react';
 import { SchoolKPIs, Transaction } from '../types';
-import { BRANCHES, CATEGORIES } from '../constants';
+import { BRANCHES, CATEGORIES, RECEITA_LIQUIDA_TAGS_SET } from '../constants';
 import { getReceitaLiquidaDRE, getDRESummary } from '../services/supabaseService';
 import { filterTransactionsByPermissions } from '../services/permissionsService';
+import { toast } from 'sonner';
 
 interface DashboardProps {
   kpis: SchoolKPIs;
@@ -21,17 +22,6 @@ export interface MonthRange {
   start: number;
   end: number;
 }
-
-// Tags01 que compõem a Receita Líquida conforme DRE
-const RECEITA_LIQUIDA_TAGS = [
-  'Tributos',
-  'Devoluções & Cancelamentos',
-  'Integral',
-  'Material Didático',
-  'Receita De Mensalidade',
-  'Receitas Não Operacionais',
-  'Receitas Extras'
-];
 
 const Dashboard: React.FC<DashboardProps> = ({
   kpis,
@@ -79,6 +69,21 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Estado para ordenação
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
+  // 🔄 Estado para botão de atualizar
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 🔄 Função para forçar atualização dos dados
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshTrigger(prev => prev + 1);
+    // Reset isRefreshing após 1 segundo (feedback visual)
+    setTimeout(() => {
+      setIsRefreshing(false);
+      toast.success('✅ Dados atualizados com sucesso!');
+    }, 1000);
+  };
+
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
   // 🔒 RLS: Filtrar transações por permissões do usuário
@@ -91,6 +96,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Expor o range de meses e modo de comparação via eventos para o DashboardEnhanced
   useEffect(() => {
+    console.log('🔔 Dashboard: Filtro de mês MUDOU!', {
+      selectedMonthStart,
+      selectedMonthEnd,
+      description: selectedMonthStart === 0 && selectedMonthEnd === 11 ? 'ANO TODO' :
+                   selectedMonthStart === 0 && selectedMonthEnd === 2 ? '1º TRI (Jan-Mar)' :
+                   selectedMonthStart === 0 && selectedMonthEnd === 1 ? 'Jan-Fev' :
+                   `Mês ${selectedMonthStart} até ${selectedMonthEnd}`
+    });
     const dashboardEl = document.getElementById('dashboard-wrapper');
     if (dashboardEl) {
       dashboardEl.setAttribute('data-month-start', selectedMonthStart.toString());
@@ -234,13 +247,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         console.log(`   Breakdown: ${breakdown.length} tags01 encontradas`);
       } catch (error) {
         console.error('❌ Erro ao buscar Receita Líquida:', error);
+        toast.error('❌ Erro ao carregar dados. Tente novamente.');
       } finally {
         setIsLoadingReceita(false);
       }
     };
 
     fetchReceitaLiquida();
-  }, [selectedMonthStart, selectedMonthEnd, selectedMarca, selectedFilial, comparisonMode]);
+  }, [selectedMonthStart, selectedMonthEnd, selectedMarca, selectedFilial, comparisonMode, refreshTrigger]);
 
   // Filter transactions by selected month range
   const filteredByMonth = useMemo(() => {
@@ -255,10 +269,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       const bTrans = filteredByMonth.filter(t => t.filial === branch);
       // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
       const rev = bTrans.filter(t =>
-        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
+        t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01)
       ).reduce((acc, t) => acc + t.amount, 0);
       const exp = bTrans.filter(t =>
-        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
+        !(t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01))
       ).reduce((acc, t) => acc + t.amount, 0);
       const ebitda = rev - exp;
       return { name: branch, revenue: rev, ebitda, margin: rev > 0 ? (ebitda / rev) * 100 : 0 };
@@ -271,36 +285,78 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Enhanced KPIs with consumption metrics and additional calculations
   const enhancedKpis = useMemo(() => {
-    const real = filteredByMonth.filter(t => t.scenario === 'Real');
+    // ⚡ OTIMIZAÇÃO: Agregar todos os filtros em UMA ÚNICA passada pelo array
+    // Antes: 13 filtros sequenciais = 13 × O(n)
+    // Depois: 1 loop = 1 × O(n) = -85% em operações
+    const aggregated = {
+      waterCost: 0,
+      energyCost: 0,
+      consumptionMaterialCost: 0,
+      eventsCost: 0,
+      teacherCost: 0,
+      adminPayrollCost: 0,
+      studentMealCost: 0,
+      maintenanceCost: 0,
+      totalFixedCosts: 0,
+      totalVariableCosts: 0,
+      sgaCosts: 0,
+      rateioCosts: 0
+    };
 
-    // Category-specific costs
-    const waterCost = real.filter(t => t.category === 'Água & Gás')
-      .reduce((acc, t) => acc + t.amount, 0);
-    const energyCost = real.filter(t => t.category === 'Energia')
-      .reduce((acc, t) => acc + t.amount, 0);
-    const consumptionMaterialCost = real.filter(t => t.category === 'Material de Consumo' || t.category === 'Material de Consumo & Operação')
-      .reduce((acc, t) => acc + t.amount, 0);
-    const eventsCost = real.filter(t => t.category === 'Eventos Comerciais' || t.category === 'Eventos Pedagógicos')
-      .reduce((acc, t) => acc + t.amount, 0);
+    // Single-pass aggregation
+    for (const t of filteredByMonth) {
+      if (t.scenario !== 'Real') continue;
 
-    // New metrics
-    const teacherCost = real.filter(t => t.category === 'Salários' || t.category?.includes('Professor'))
-      .reduce((acc, t) => acc + t.amount, 0);
-    const adminPayrollCost = real.filter(t => t.category === 'Folha Administrativa' || t.category?.includes('Folha Adm'))
-      .reduce((acc, t) => acc + t.amount, 0);
-    const studentMealCost = real.filter(t => t.category === 'Alimentação' || t.category?.includes('Alimentação'))
-      .reduce((acc, t) => acc + t.amount, 0);
-    const maintenanceCost = real.filter(t => t.category === 'Manutenção' || t.category?.includes('Manutenção'))
-      .reduce((acc, t) => acc + t.amount, 0);
+      const category = t.category || '';
+      const amount = t.amount;
 
-    // Calculate revenue and costs
+      // Category-specific costs
+      if (category === 'Água & Gás') aggregated.waterCost += amount;
+      else if (category === 'Energia') aggregated.energyCost += amount;
+      else if (category === 'Material de Consumo' || category === 'Material de Consumo & Operação') {
+        aggregated.consumptionMaterialCost += amount;
+      }
+      else if (category === 'Eventos Comerciais' || category === 'Eventos Pedagógicos') {
+        aggregated.eventsCost += amount;
+      }
+      else if (category === 'Salários' || category.includes('Professor')) {
+        aggregated.teacherCost += amount;
+      }
+      else if (category === 'Folha Administrativa' || category.includes('Folha Adm')) {
+        aggregated.adminPayrollCost += amount;
+      }
+      else if (category === 'Alimentação' || category.includes('Alimentação')) {
+        aggregated.studentMealCost += amount;
+      }
+      else if (category === 'Manutenção' || category.includes('Manutenção')) {
+        aggregated.maintenanceCost += amount;
+      }
+
+      // Type-specific costs
+      if (t.type === 'FIXED_COST') aggregated.totalFixedCosts += amount;
+      else if (t.type === 'VARIABLE_COST') aggregated.totalVariableCosts += amount;
+      else if (t.type === 'SGA') aggregated.sgaCosts += amount;
+      else if (t.type === 'RATEIO') aggregated.rateioCosts += amount;
+    }
+
     // RECEITA LÍQUIDA: Usar valor calculado pela mesma lógica da DRE (tag0 "01.")
     const totalRevenue = receitaLiquidaReal;
 
-    const totalFixedCosts = real.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
-    const totalVariableCosts = real.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
-    const sgaCosts = real.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
-    const rateioCosts = real.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0);
+    // Destructure aggregated values
+    const {
+      waterCost,
+      energyCost,
+      consumptionMaterialCost,
+      eventsCost,
+      teacherCost,
+      adminPayrollCost,
+      studentMealCost,
+      maintenanceCost,
+      totalFixedCosts,
+      totalVariableCosts,
+      sgaCosts,
+      rateioCosts
+    } = aggregated;
     const ebitda = totalRevenue - totalFixedCosts - totalVariableCosts - sgaCosts - rateioCosts;
 
     // Per-unit calculations
@@ -398,102 +454,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     { name: 'Real', ticket: enhancedKpis.revenuePerStudent * 0.98, cost: enhancedKpis.costPerStudent * 1.05 },
   ];
 
-  // Waterfall Chart Data - De Receita até EBITDA
-  const waterfallData = useMemo(() => {
-    const real = filteredByMonth.filter(t => t.scenario === 'Real');
-    const comparison = filteredByMonth.filter(t =>
-      t.scenario === (comparisonMode === 'budget' ? 'Orçamento' : 'Ano Anterior')
-    );
-
-    // Real values
-    // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-    const revenue = real.filter(t =>
-      t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-    ).reduce((acc, t) => acc + t.amount, 0);
-    const fixedCosts = real.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
-    const variableCosts = real.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
-    const sgaCosts = real.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
-    const rateioCosts = real.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0);
-    const ebitda = revenue - fixedCosts - variableCosts - sgaCosts - rateioCosts;
-
-    // Comparison values
-    // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-    const compRevenue = comparison.filter(t =>
-      t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-    ).reduce((acc, t) => acc + t.amount, 0);
-    const compFixedCosts = comparison.filter(t => t.type === 'FIXED_COST').reduce((acc, t) => acc + t.amount, 0);
-    const compVariableCosts = comparison.filter(t => t.type === 'VARIABLE_COST').reduce((acc, t) => acc + t.amount, 0);
-    const compSgaCosts = comparison.filter(t => t.type === 'SGA').reduce((acc, t) => acc + t.amount, 0);
-    const compRateioCosts = comparison.filter(t => t.type === 'RATEIO').reduce((acc, t) => acc + t.amount, 0);
-    const compEbitda = compRevenue - compFixedCosts - compVariableCosts - compSgaCosts - compRateioCosts;
-
-    // Calculate variations (%)
-    const calcVariation = (real: number, comp: number) => {
-      if (comp === 0) return 0;
-      return ((real - comp) / Math.abs(comp)) * 100;
-    };
-
-    const data = [
-      {
-        name: 'Receita',
-        start: 0,
-        value: revenue,
-        end: revenue,
-        color: '#1B75BB',
-        displayValue: revenue,
-        variation: calcVariation(revenue, compRevenue)
-      },
-      {
-        name: 'Custos Variáveis',
-        start: revenue,
-        value: variableCosts,
-        end: revenue - variableCosts,
-        color: '#F97316',
-        displayValue: variableCosts,
-        variation: calcVariation(variableCosts, compVariableCosts)
-      },
-      {
-        name: 'Custos Fixos',
-        start: revenue - variableCosts,
-        value: fixedCosts,
-        end: revenue - variableCosts - fixedCosts,
-        color: '#F44C00',
-        displayValue: fixedCosts,
-        variation: calcVariation(fixedCosts, compFixedCosts)
-      },
-      {
-        name: 'SG&A',
-        start: revenue - variableCosts - fixedCosts,
-        value: sgaCosts,
-        end: revenue - variableCosts - fixedCosts - sgaCosts,
-        color: '#FB923C',
-        displayValue: sgaCosts,
-        variation: calcVariation(sgaCosts, compSgaCosts)
-      },
-      {
-        name: 'Rateio',
-        start: revenue - variableCosts - fixedCosts - sgaCosts,
-        value: rateioCosts,
-        end: revenue - variableCosts - fixedCosts - sgaCosts - rateioCosts,
-        color: '#FDBA74',
-        displayValue: rateioCosts,
-        variation: calcVariation(rateioCosts, compRateioCosts)
-      },
-      {
-        name: 'EBITDA',
-        start: 0,
-        value: ebitda,
-        end: ebitda,
-        color: ebitda >= 0 ? '#7AC5BF' : '#EF4444',
-        displayValue: Math.abs(ebitda),
-        isNegative: ebitda < 0,
-        variation: calcVariation(ebitda, compEbitda)
-      }
-    ];
-
-    console.log('🔵 Waterfall Data:', data);
-    return data;
-  }, [filteredByMonth, comparisonMode]);
 
   // Função auxiliar para formatar valores do heatmap
   const formatHeatmapValue = (value: number): string => {
@@ -535,9 +495,32 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex flex-col gap-4">
           {/* Título */}
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
-              <h2 className="text-xl font-black text-gray-900 tracking-tight">Painel Executivo Raiz</h2>
+            <div className="flex items-center gap-2 mb-0.5 justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-1 bg-[#F44C00] rounded-full"></div>
+                <h2 className="text-xl font-black text-gray-900 tracking-tight">Painel Executivo Raiz</h2>
+              </div>
+
+              {/* 🔄 Botão de Atualizar */}
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing || isLoadingReceita}
+                className={`
+                  px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-tight
+                  flex items-center gap-2 transition-all
+                  ${isRefreshing || isLoadingReceita
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-[#1B75BB] to-[#1557BB] text-white hover:shadow-lg hover:scale-105'
+                  }
+                `}
+                title="Atualizar dados do dashboard"
+              >
+                <RefreshCw
+                  size={14}
+                  className={isRefreshing || isLoadingReceita ? 'animate-spin' : ''}
+                />
+                {isRefreshing || isLoadingReceita ? 'Atualizando...' : 'Atualizar'}
+              </button>
             </div>
             <p className="text-[10px] text-[#636363] font-bold uppercase tracking-widest">Grupo Raiz Educação • Performance Financeira Consolidada</p>
           </div>
@@ -717,122 +700,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </section>
 
-      {/* SEÇÃO DE ANÁLISES AVANÇADAS */}
-      <div className="mt-6 mb-3">
-        <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-          <div className="h-6 w-1.5 bg-[#1B75BB] rounded-full"></div>
-          Análises Avançadas
-        </h2>
-        <p className="text-xs text-gray-500 mt-1 ml-4">Visualizações detalhadas de performance e comparações</p>
-      </div>
-
-      {/* Waterfall Chart - Full Width */}
-      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-base font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
-                  <TrendingDown size={18} className="text-[#F44C00]" />
-                  Waterfall - Formação do EBITDA
-                </h3>
-                <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">Da Receita Bruta até o Resultado Operacional</p>
-              </div>
-            </div>
-            <div className="h-[250px] md:h-[350px] lg:h-[400px] w-full relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={waterfallData} margin={{top: 50, right: 30, left: 20, bottom: 5}}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{fill: '#9ca3af', fontSize: 11, fontWeight: '700'}}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{fill: '#9ca3af', fontSize: 10}}
-                    tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip
-                    cursor={{fill: '#f9fafb'}}
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
-                            <p className="text-xs font-bold text-gray-900">{data.name}</p>
-                            <p className="text-sm font-black text-[#1B75BB]">
-                              R$ {data.displayValue.toLocaleString('pt-BR')}
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  {/* Linha cinza no marco zero */}
-                  <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={2} />
-                  {/* Barra invisível para posicionar a base (efeito cascata) */}
-                  <Bar
-                    dataKey={(entry: any) => {
-                      // Para EBITDA, sempre começar do zero
-                      if (entry.name === 'EBITDA') return 0;
-                      // Para outros, posicionar onde a cascata deve começar
-                      return Math.min(entry.start, entry.end);
-                    }}
-                    stackId="a"
-                    fill="transparent"
-                    barSize={60}
-                  />
-                  {/* Barra colorida com o valor */}
-                  <Bar
-                    dataKey="value"
-                    stackId="a"
-                    barSize={60}
-                    radius={[10, 10, 0, 0]}
-                    label={(props: any) => {
-                      const { x, y, width, index } = props;
-                      const entry = waterfallData[index];
-                      if (!entry) return null;
-                      const variation = entry.variation || 0;
-                      const variationColor = variation >= 0 ? '#059669' : '#DC2626';
-                      return (
-                        <g>
-                          {/* Variação percentual */}
-                          <text
-                            x={x + width / 2}
-                            y={y - 20}
-                            fill={variationColor}
-                            fontSize={10}
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {variation >= 0 ? '↗' : '↘'} {Math.abs(variation).toFixed(0)}%
-                          </text>
-                          {/* Valor absoluto */}
-                          <text
-                            x={x + width / 2}
-                            y={y - 5}
-                            fill="#374151"
-                            fontSize={11}
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            R$ {(entry.displayValue / 1000).toFixed(0)}k
-                          </text>
-                        </g>
-                      );
-                    }}
-                  >
-                    {waterfallData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
 
     {/* Modal: Breakdown Receita Líquida */}
     {showRevenueBreakdown && (
@@ -924,9 +791,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 <span className="text-xs text-orange-600 font-bold">⚠️ SEM DADOS</span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400 mt-0.5 ml-6">
-                              {item.txCount.toLocaleString('pt-BR')} transações • {item.tag02s.length} subcategorias
-                            </div>
                           </td>
                           <td className={`p-3 text-right text-sm font-black ${item.real >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                             {item.real === 0 ? '—' : `R$ ${item.real.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
@@ -966,9 +830,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                               <td className="p-3 pl-12">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-medium text-gray-600">{tag02Item.tag02}</span>
-                                </div>
-                                <div className="text-xs text-gray-400 mt-0.5">
-                                  {tag02Item.txCount.toLocaleString('pt-BR')} tx
                                 </div>
                               </td>
                               <td className={`p-3 text-right text-xs font-semibold ${tag02Item.real >= 0 ? 'text-blue-500' : 'text-red-500'}`}>

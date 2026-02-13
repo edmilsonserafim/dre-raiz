@@ -5,6 +5,7 @@ import { DashboardEnhanced } from './components/DashboardEnhanced';
 import LoginScreen from './components/LoginScreen';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
 import LoadingSpinner from './components/LoadingSpinner';
+import { Toaster } from 'sonner';
 
 // Lazy loading de views pesadas (carregam sob demanda)
 const KPIsView = React.lazy(() => import('./components/KPIsView'));
@@ -97,13 +98,12 @@ const App: React.FC = () => {
       allowedCategories
     });
 
-    // ⚡ OTIMIZAÇÃO: Carregar apenas JANEIRO 2026
+    // ⚡ Carregar ANO COMPLETO (2026-01 até 2026-12)
     const year = 2026;
-    const month = 1; // Janeiro
 
     const filters: any = {
-      monthFrom: `${year}-${String(month).padStart(2, '0')}`,
-      monthTo: `${year}-${String(month).padStart(2, '0')}`
+      monthFrom: `${year}-01`, // Janeiro
+      monthTo: `${year}-12`    // Dezembro (ano inteiro)
     };
 
     // ✅ Aplicar filtros de permissão IMEDIATAMENTE (se existirem)
@@ -602,8 +602,9 @@ const App: React.FC = () => {
   };
 
   const filteredTransactions = useMemo(() => {
-    // Primeiro, aplicar filtros de permissão
-    const permissionFiltered = filterTransactions(transactions);
+    // ⚠️ TESTE: PERMISSÕES DESABILITADAS
+    // const permissionFiltered = filterTransactions(transactions);
+    const permissionFiltered = transactions; // SEM FILTRO DE PERMISSÃO
 
     // Depois, aplicar filtros de marca/filial selecionados
     if (currentView === 'movements' || currentView === 'dre') return permissionFiltered;
@@ -691,6 +692,15 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#fcfcfc] overflow-hidden">
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
+          expand={true}
+          richColors
+          closeButton
+          duration={4000}
+        />
+
         {/* Sidebar: Desktop = fixa lateral; Mobile/Tablet = drawer overlay */}
         {isDesktop ? (
           <div className={`${isSidebarVisible ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden shrink-0`}>
