@@ -26,7 +26,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams, ContaContabilOption } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
-import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions } from '../services/supabaseService';
+import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions, getTag0Map, resolveTag0 } from '../services/supabaseService';
 import ContaContabilSelector from './ContaContabilSelector';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
@@ -124,13 +124,14 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     filiais: FilialOption[];
     marcas: string[];
     tagRecords: TagRecord[];
-  }>({ filiais: [], marcas: [], tagRecords: [] });
+    tag0Map: Map<string, string>; // Mapeamento tag01 → tag0
+  }>({ filiais: [], marcas: [], tagRecords: [], tag0Map: new Map() });
 
   // Carregar opções de lookup ao montar
   useEffect(() => {
-    Promise.all([getFiliais(), getTagRecords()]).then(([filiais, tagRecords]) => {
+    Promise.all([getFiliais(), getTagRecords(), getTag0Map()]).then(([filiais, tagRecords, tag0Map]) => {
       const marcas = [...new Set(filiais.map(f => f.cia))].sort();
-      setFilterOptions({ filiais, marcas, tagRecords });
+      setFilterOptions({ filiais, marcas, tagRecords, tag0Map });
     });
   }, []);
 
@@ -231,10 +232,21 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     [...new Set(transactions.map(t => t.tag0).filter(Boolean))].sort() as string[]
   , [transactions]);
 
-  // Tag1 (todos os distintos do banco)
-  const tag1Options = useMemo(() =>
-    [...new Set(filterOptions.tagRecords.map(r => r.tag1).filter(Boolean))].sort()
-  , [filterOptions.tagRecords]);
+  // 🎯 Cascata: Tag0 → Tag1
+  // Filtrar tag1 baseado nos tag0 selecionados
+  const tag1Options = useMemo(() => {
+    let tag1s = [...new Set(filterOptions.tagRecords.map(r => r.tag1).filter(Boolean))];
+
+    // Se tem filtro de tag0 ativo, mostrar apenas tag01 que pertencem aos tag0 selecionados
+    if (colFilters.tag0?.length > 0 && filterOptions.tag0Map.size > 0) {
+      tag1s = tag1s.filter(tag1 => {
+        const tag0ForThisTag1 = resolveTag0(tag1, filterOptions.tag0Map);
+        return tag0ForThisTag1 && colFilters.tag0.includes(tag0ForThisTag1);
+      });
+    }
+
+    return tag1s.sort();
+  }, [filterOptions.tagRecords, filterOptions.tag0Map, colFilters.tag0]);
 
   // Cascata: Tag1 → Tag2
   const tag2Options = useMemo(() => {
@@ -253,6 +265,24 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       records = records.filter(r => colFilters.tag02.includes(r.tag2));
     return [...new Set(records.map(r => r.tag3).filter(Boolean))].sort();
   }, [filterOptions.tagRecords, colFilters.tag01, colFilters.tag02]);
+
+  // 🎯 EFEITO CASCATA: Limpar filtros downstream quando tag0 mudar
+  useEffect(() => {
+    // Limpar tag01 se algum valor não pertence mais aos tag0 selecionados
+    if (colFilters.tag0?.length > 0 && colFilters.tag01?.length > 0 && filterOptions.tag0Map.size > 0) {
+      const validTag01s = colFilters.tag01.filter(tag1 => {
+        const tag0ForThisTag1 = resolveTag0(tag1, filterOptions.tag0Map);
+        return tag0ForThisTag1 && colFilters.tag0.includes(tag0ForThisTag1);
+      });
+
+      if (validTag01s.length !== colFilters.tag01.length) {
+        console.log('🔄 Limpando tag01 inválidos após mudança de tag0');
+        setColFilters(prev => ({ ...prev, tag01: validTag01s }));
+      }
+    }
+
+    // Se tag0 foi limpo completamente, não precisa limpar tag01 (usuário pode ter removido tag0 intencionalmente)
+  }, [colFilters.tag0, filterOptions.tag0Map]);
 
   // Categories e recurrings mantêm comportamento atual (extraídos dos dados carregados)
   const dynamicOptions = useMemo(() => {
