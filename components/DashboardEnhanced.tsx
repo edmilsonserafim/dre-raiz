@@ -112,7 +112,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
 
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
   useEffect(() => {
-    // Debounce: aguardar 800ms antes de gerar
+    // Debounce: aguardar 500ms antes de gerar
     const timeoutId = setTimeout(() => {
       const generateSummary = async () => {
         // Proteção: não executar se não houver dados
@@ -121,13 +121,16 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
           return;
         }
 
-        // Proteção contra loop: se já está gerando, não inicia nova geração
+        // Proteção contra loop: se já está gerando, cancela a anterior e inicia nova
         if (isGeneratingRef.current) {
-          console.log('⏸️ Já está gerando resumo, aguardando...');
-          return;
+          console.log('⏸️ Cancelando geração anterior, iniciando nova com filtros atualizados...');
         }
 
         console.log('🤖 Iniciando geração de Resumo Executivo com IA...');
+        console.log('   📊 Métrica selecionada:', branchMetric);
+        console.log('   🏢 Marcas:', selectedMarca.length > 0 ? selectedMarca.join(', ') : 'Todas');
+        console.log('   📍 Filiais:', selectedFilial.length > 0 ? selectedFilial.join(', ') : 'Todas');
+
         isGeneratingRef.current = true;
         setIsLoadingSummary(true);
 
@@ -238,10 +241,13 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     };
 
       generateSummary();
-    }, 800); // Debounce de 800ms
+    }, 500); // Debounce de 500ms (mais rápido para responder a mudanças de aba)
 
     // Cleanup: cancela timeout se componente desmontar ou deps mudarem
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      // Não resetar isGeneratingRef aqui, pois pode cancelar geração em andamento
+    };
   }, [
     transactions,
     selectedMarca,
