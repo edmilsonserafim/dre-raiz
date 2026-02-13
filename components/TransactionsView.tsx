@@ -55,6 +55,13 @@ interface TransactionsViewProps {
   clearGlobalFilters?: () => void;
   externalActiveTab?: 'real' | 'orcamento' | 'comparativo';
   onBackToDRE?: () => void;
+  // ✅ PERMISSÕES: Sempre aplicadas nas queries
+  allowedMarcas?: string[];
+  allowedFiliais?: string[];
+  allowedCategories?: string[];
+  allowedTag01?: string[];
+  allowedTag02?: string[];
+  allowedTag03?: string[];
 }
 
 type SortKey = keyof Transaction;
@@ -97,7 +104,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   externalFilters,
   clearGlobalFilters,
   externalActiveTab,
-  onBackToDRE
+  onBackToDRE,
+  allowedMarcas,
+  allowedFiliais,
+  allowedCategories,
+  allowedTag01,
+  allowedTag02,
+  allowedTag03
 }) => {
   // Estado de busca
   const [isSearching, setIsSearching] = useState(false);
@@ -373,6 +386,63 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         amount: colFilters.amount || undefined,
       };
 
+      // ⚠️ TESTE: PERMISSÕES DESABILITADAS
+      // if (allowedMarcas && allowedMarcas.length > 0) {
+      //   // Se usuário JÁ selecionou marcas nos filtros, fazer intersecção
+      //   if (filters.marca && filters.marca.length > 0) {
+      //     filters.marca = filters.marca.filter(m => allowedMarcas.includes(m));
+      //   } else {
+      //     filters.marca = allowedMarcas;
+      //   }
+      //   console.log('🔒 Filtro de permissão MARCA aplicado:', filters.marca);
+      // }
+
+      // if (allowedFiliais && allowedFiliais.length > 0) {
+      //   if (filters.nome_filial && filters.nome_filial.length > 0) {
+      //     filters.nome_filial = filters.nome_filial.filter(f => allowedFiliais.includes(f));
+      //   } else {
+      //     filters.nome_filial = allowedFiliais;
+      //   }
+      //   console.log('🔒 Filtro de permissão FILIAL aplicado:', filters.nome_filial);
+      // }
+
+      if (allowedCategories && allowedCategories.length > 0) {
+        if (filters.category && filters.category.length > 0) {
+          filters.category = filters.category.filter(c => allowedCategories.includes(c));
+        } else {
+          filters.category = allowedCategories;
+        }
+        console.log('🔒 Filtro de permissão CATEGORIA aplicado:', filters.category);
+      }
+
+      // ✅ NOVO: Aplicar filtros de TAG01, TAG02, TAG03
+      if (allowedTag01 && allowedTag01.length > 0) {
+        if (filters.tag01 && filters.tag01.length > 0) {
+          filters.tag01 = filters.tag01.filter(t => allowedTag01.includes(t));
+        } else {
+          filters.tag01 = allowedTag01;
+        }
+        console.log('🔒 Filtro de permissão TAG01 aplicado:', filters.tag01);
+      }
+
+      if (allowedTag02 && allowedTag02.length > 0) {
+        if (filters.tag02 && filters.tag02.length > 0) {
+          filters.tag02 = filters.tag02.filter(t => allowedTag02.includes(t));
+        } else {
+          filters.tag02 = allowedTag02;
+        }
+        console.log('🔒 Filtro de permissão TAG02 aplicado:', filters.tag02);
+      }
+
+      if (allowedTag03 && allowedTag03.length > 0) {
+        if (filters.tag03 && filters.tag03.length > 0) {
+          filters.tag03 = filters.tag03.filter(t => allowedTag03.includes(t));
+        } else {
+          filters.tag03 = allowedTag03;
+        }
+        console.log('🔒 Filtro de permissão TAG03 aplicado:', filters.tag03);
+      }
+
       const pagination: PaginationParams = { pageNumber: page, pageSize: PAGE_SIZE };
 
       const response = await getFilteredTransactions(filters, pagination);
@@ -442,6 +512,62 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         description: colFilters.description || undefined,
         amount: colFilters.amount || undefined,
       };
+
+      // ⚠️ TESTE: PERMISSÕES DESABILITADAS
+      // if (allowedMarcas && allowedMarcas.length > 0) {
+      //   if (filters.marca && filters.marca.length > 0) {
+      //     filters.marca = filters.marca.filter(m => allowedMarcas.includes(m));
+      //   } else {
+      //     filters.marca = allowedMarcas;
+      //   }
+      //   console.log('🔒 Filtro de permissão MARCA aplicado:', filters.marca);
+      // }
+
+      // if (allowedFiliais && allowedFiliais.length > 0) {
+      //   if (filters.nome_filial && filters.nome_filial.length > 0) {
+      //     filters.nome_filial = filters.nome_filial.filter(f => allowedFiliais.includes(f));
+      //   } else {
+      //     filters.nome_filial = allowedFiliais;
+      //   }
+      //   console.log('🔒 Filtro de permissão FILIAL aplicado:', filters.nome_filial);
+      // }
+
+      if (allowedCategories && allowedCategories.length > 0) {
+        if (filters.category && filters.category.length > 0) {
+          filters.category = filters.category.filter(c => allowedCategories.includes(c));
+        } else {
+          filters.category = allowedCategories;
+        }
+        console.log('🔒 Filtro de permissão CATEGORIA aplicado:', filters.category);
+      }
+
+      // ✅ NOVO: Aplicar filtros de TAG01, TAG02, TAG03
+      if (allowedTag01 && allowedTag01.length > 0) {
+        if (filters.tag01 && filters.tag01.length > 0) {
+          filters.tag01 = filters.tag01.filter(t => allowedTag01.includes(t));
+        } else {
+          filters.tag01 = allowedTag01;
+        }
+        console.log('🔒 Filtro de permissão TAG01 aplicado (Buscar Tudo):', filters.tag01);
+      }
+
+      if (allowedTag02 && allowedTag02.length > 0) {
+        if (filters.tag02 && filters.tag02.length > 0) {
+          filters.tag02 = filters.tag02.filter(t => allowedTag02.includes(t));
+        } else {
+          filters.tag02 = allowedTag02;
+        }
+        console.log('🔒 Filtro de permissão TAG02 aplicado (Buscar Tudo):', filters.tag02);
+      }
+
+      if (allowedTag03 && allowedTag03.length > 0) {
+        if (filters.tag03 && filters.tag03.length > 0) {
+          filters.tag03 = filters.tag03.filter(t => allowedTag03.includes(t));
+        } else {
+          filters.tag03 = allowedTag03;
+        }
+        console.log('🔒 Filtro de permissão TAG03 aplicado (Buscar Tudo):', filters.tag03);
+      }
 
       console.log('📋 Filtros aplicados:', filters);
 

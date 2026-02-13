@@ -67,6 +67,18 @@ export const DRE_STRUCTURE = {
   }
 };
 
+// ⚡ OTIMIZAÇÃO: Set para busca O(1) em vez de Array.includes() O(n)
+// Tags01 que compõem a Receita Líquida conforme DRE
+export const RECEITA_LIQUIDA_TAGS_SET = new Set([
+  'Tributos',
+  'Devoluções & Cancelamentos',
+  'Integral',
+  'Material Didático',
+  'Receita De Mensalidade',
+  'Receitas Não Operacionais',
+  'Receitas Extras'
+]);
+
 const generateMockData = (): Transaction[] => {
   const transactions: Transaction[] = [];
   const scenarios = ['Real', 'Orçado', 'A-1'];

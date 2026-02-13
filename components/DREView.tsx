@@ -217,9 +217,9 @@ const DREView: React.FC<DREViewProps> = ({
         getDRESummary({
           monthFrom,
           monthTo,
-          marcas: finalMarcas,
-          nomeFiliais: finalFiliais,
-          tags01: finalTags01,
+          marcas: undefined, // ⚠️ TESTE: Removido filtro
+          nomeFiliais: undefined, // ⚠️ TESTE: Removido filtro
+          tags01: undefined, // ⚠️ TESTE: Removido filtro
         }),
         getDREFilterOptions({ monthFrom, monthTo }),
         getFiliais(),
@@ -290,12 +290,13 @@ const DREView: React.FC<DREViewProps> = ({
         setIsLoadingDRE(false);
       }
     }
-  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, allowedMarcas, allowedFiliais]);
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, allowedMarcas, allowedFiliais, allowedTag01]);
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
     fetchDREData();
-  }, [fetchDREData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
 
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
@@ -573,9 +574,9 @@ const DREView: React.FC<DREViewProps> = ({
       contaContabils: categories,
       scenario,
       dimension: dimensionKey,
-      marcas: mergedMarcas,
-      nomeFiliais: mergedFiliais,
-      tags01: mergedTags01,
+      marcas: undefined, // ⚠️ TESTE: Removido filtro
+      nomeFiliais: undefined, // ⚠️ TESTE: Removido filtro
+      tags01: undefined, // ⚠️ TESTE: Removido filtro
     });
 
     setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));

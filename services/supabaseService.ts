@@ -667,7 +667,7 @@ export const getFilteredTransactions = async (
   // Buscamos em lotes de 10000 usando .range(), 6 lotes em paralelo.
   // ═══════════════════════════════════════════════════════════
   const BATCH_SIZE = 1000;   // Limite real do Supabase server (max-rows)
-  const PARALLEL_BATCHES = 10; // 10 requests simultâneos
+  const PARALLEL_BATCHES = 3; // REDUZIDO: 3 requests simultâneos para evitar sobrecarga
 
   // Primeiro: obter contagem total
   let countQuery = supabase
