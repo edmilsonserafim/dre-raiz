@@ -215,6 +215,86 @@ export const getTag0Options = async (): Promise<string[]> => {
   return cachedTag0Options;
 };
 
+// Caches para opções de tags individuais
+let cachedTag01Options: string[] | null = null;
+let cachedTag02Options: string[] | null = null;
+let cachedTag03Options: string[] | null = null;
+
+/**
+ * Busca todas as opções de Tag01 disponíveis no banco
+ * Retorna lista única e ordenada de TODOS os tag01 distintos
+ */
+export const getTag01Options = async (): Promise<string[]> => {
+  if (cachedTag01Options) return cachedTag01Options;
+
+  console.log('🏷️ Carregando opções de Tag01...');
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('tag01')
+    .not('tag01', 'is', null);
+
+  if (error) {
+    console.error('❌ Erro ao carregar tag01 options:', error);
+    return [];
+  }
+
+  const uniqueTag01s = [...new Set(data?.map(row => row.tag01).filter(Boolean))].sort();
+  cachedTag01Options = uniqueTag01s;
+
+  console.log(`✅ ${cachedTag01Options.length} opções de Tag01 carregadas`);
+  return cachedTag01Options;
+};
+
+/**
+ * Busca todas as opções de Tag02 disponíveis no banco
+ * Retorna lista única e ordenada de TODOS os tag02 distintos
+ */
+export const getTag02Options = async (): Promise<string[]> => {
+  if (cachedTag02Options) return cachedTag02Options;
+
+  console.log('🏷️ Carregando opções de Tag02...');
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('tag02')
+    .not('tag02', 'is', null);
+
+  if (error) {
+    console.error('❌ Erro ao carregar tag02 options:', error);
+    return [];
+  }
+
+  const uniqueTag02s = [...new Set(data?.map(row => row.tag02).filter(Boolean))].sort();
+  cachedTag02Options = uniqueTag02s;
+
+  console.log(`✅ ${cachedTag02Options.length} opções de Tag02 carregadas`);
+  return cachedTag02Options;
+};
+
+/**
+ * Busca todas as opções de Tag03 disponíveis no banco
+ * Retorna lista única e ordenada de TODOS os tag03 distintos
+ */
+export const getTag03Options = async (): Promise<string[]> => {
+  if (cachedTag03Options) return cachedTag03Options;
+
+  console.log('🏷️ Carregando opções de Tag03...');
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('tag03')
+    .not('tag03', 'is', null);
+
+  if (error) {
+    console.error('❌ Erro ao carregar tag03 options:', error);
+    return [];
+  }
+
+  const uniqueTag03s = [...new Set(data?.map(row => row.tag03).filter(Boolean))].sort();
+  cachedTag03Options = uniqueTag03s;
+
+  console.log(`✅ ${cachedTag03Options.length} opções de Tag03 carregadas`);
+  return cachedTag03Options;
+};
+
 export const getFiliais = async (): Promise<FilialOption[]> => {
   if (cachedFiliais) return cachedFiliais;
 

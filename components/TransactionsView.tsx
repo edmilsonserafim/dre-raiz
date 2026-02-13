@@ -26,7 +26,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams, ContaContabilOption } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
-import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions, getTag0Map, getTag0Options, resolveTag0 } from '../services/supabaseService';
+import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions, getTag0Map, getTag0Options, getTag01Options, getTag02Options, getTag03Options, resolveTag0 } from '../services/supabaseService';
 import ContaContabilSelector from './ContaContabilSelector';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
@@ -126,13 +126,24 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     tagRecords: TagRecord[];
     tag0Map: Map<string, string>; // Mapeamento tag01 → tag0
     tag0Options: string[]; // Lista completa de Tag0
-  }>({ filiais: [], marcas: [], tagRecords: [], tag0Map: new Map(), tag0Options: [] });
+    tag01Options: string[]; // Lista completa de Tag01
+    tag02Options: string[]; // Lista completa de Tag02
+    tag03Options: string[]; // Lista completa de Tag03
+  }>({ filiais: [], marcas: [], tagRecords: [], tag0Map: new Map(), tag0Options: [], tag01Options: [], tag02Options: [], tag03Options: [] });
 
   // Carregar opções de lookup ao montar
   useEffect(() => {
-    Promise.all([getFiliais(), getTagRecords(), getTag0Map(), getTag0Options()]).then(([filiais, tagRecords, tag0Map, tag0Options]) => {
+    Promise.all([
+      getFiliais(),
+      getTagRecords(),
+      getTag0Map(),
+      getTag0Options(),
+      getTag01Options(),
+      getTag02Options(),
+      getTag03Options()
+    ]).then(([filiais, tagRecords, tag0Map, tag0Options, tag01Options, tag02Options, tag03Options]) => {
       const marcas = [...new Set(filiais.map(f => f.cia))].sort();
-      setFilterOptions({ filiais, marcas, tagRecords, tag0Map, tag0Options });
+      setFilterOptions({ filiais, marcas, tagRecords, tag0Map, tag0Options, tag01Options, tag02Options, tag03Options });
     });
   }, []);
 
@@ -233,10 +244,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     filterOptions.tag0Options
   , [filterOptions.tag0Options]);
 
-  // 🎯 Cascata: Tag0 → Tag1
-  // Filtrar tag1 baseado nos tag0 selecionados
+  // 🎯 Cascata: Tag0 → Tag01
+  // Filtrar tag01 baseado nos tag0 selecionados
   const tag1Options = useMemo(() => {
-    let tag1s = [...new Set(filterOptions.tagRecords.map(r => r.tag1).filter(Boolean))];
+    let tag1s = [...filterOptions.tag01Options]; // Usar lista completa do banco
 
     // Se tem filtro de tag0 ativo, mostrar apenas tag01 que pertencem aos tag0 selecionados
     if (colFilters.tag0?.length > 0 && filterOptions.tag0Map.size > 0) {
@@ -247,25 +258,46 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     }
 
     return tag1s.sort();
-  }, [filterOptions.tagRecords, filterOptions.tag0Map, colFilters.tag0]);
+  }, [filterOptions.tag01Options, filterOptions.tag0Map, colFilters.tag0]);
 
-  // Cascata: Tag1 → Tag2
+  // 🎯 Cascata: Tag01 → Tag02
+  // Filtrar tag02 baseado nos tag01 selecionados
   const tag2Options = useMemo(() => {
-    let records = filterOptions.tagRecords;
-    if (colFilters.tag01?.length > 0)
-      records = records.filter(r => colFilters.tag01.includes(r.tag1));
-    return [...new Set(records.map(r => r.tag2).filter(Boolean))].sort();
-  }, [filterOptions.tagRecords, colFilters.tag01]);
+    let tag2s = [...filterOptions.tag02Options]; // Usar lista completa do banco
 
-  // Cascata: Tag1 + Tag2 → Tag3
+    // Se tem filtro de tag01 ativo, filtrar pelos tag02 que aparecem com esses tag01
+    if (colFilters.tag01?.length > 0) {
+      const validTag2s = new Set(
+        filterOptions.tagRecords
+          .filter(r => colFilters.tag01.includes(r.tag1))
+          .map(r => r.tag2)
+          .filter(Boolean)
+      );
+      tag2s = tag2s.filter(tag2 => validTag2s.has(tag2));
+    }
+
+    return tag2s.sort();
+  }, [filterOptions.tag02Options, filterOptions.tagRecords, colFilters.tag01]);
+
+  // 🎯 Cascata: Tag01 + Tag02 → Tag03
+  // Filtrar tag03 baseado nos tag01 e tag02 selecionados
   const tag3Options = useMemo(() => {
+    let tag3s = [...filterOptions.tag03Options]; // Usar lista completa do banco
+
+    // Filtrar pelos tag03 que aparecem com os tag01/tag02 selecionados
     let records = filterOptions.tagRecords;
-    if (colFilters.tag01?.length > 0)
+    if (colFilters.tag01?.length > 0) {
       records = records.filter(r => colFilters.tag01.includes(r.tag1));
-    if (colFilters.tag02?.length > 0)
+    }
+    if (colFilters.tag02?.length > 0) {
       records = records.filter(r => colFilters.tag02.includes(r.tag2));
-    return [...new Set(records.map(r => r.tag3).filter(Boolean))].sort();
-  }, [filterOptions.tagRecords, colFilters.tag01, colFilters.tag02]);
+    }
+
+    const validTag3s = new Set(records.map(r => r.tag3).filter(Boolean));
+    tag3s = tag3s.filter(tag3 => validTag3s.has(tag3));
+
+    return tag3s.sort();
+  }, [filterOptions.tag03Options, filterOptions.tagRecords, colFilters.tag01, colFilters.tag02]);
 
   // 🎯 EFEITO CASCATA: Limpar filtros downstream quando tag0 mudar
   useEffect(() => {
