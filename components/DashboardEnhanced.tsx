@@ -3,7 +3,7 @@
  * Combina o Dashboard original com novos componentes de visualização
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Dashboard from './Dashboard';
 import {
   ChartBlock,
@@ -14,6 +14,8 @@ import { SchoolKPIs, Transaction } from '../types';
 import { BRANCHES, RECEITA_LIQUIDA_TAGS_SET } from '../constants';
 import { EChartsOption } from 'echarts';
 import { useBranchData } from '../hooks/useBranchData';
+import { generateExecutiveSummary, ExecutiveSummaryContext, ExecutiveSummaryResponse } from '../services/anthropicService';
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 interface DashboardEnhancedProps {
   kpis: SchoolKPIs;
@@ -69,6 +71,11 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   // State para controlar drill-down (CIA ou Filial)
   const [drillLevel, setDrillLevel] = React.useState<'cia' | 'filial'>('cia');
 
+  // ⚡ State para Resumo Executivo com IA
+  const [aiSummary, setAiSummary] = useState<ExecutiveSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+
   // Listener para evento de mudança de range de meses
   React.useEffect(() => {
     const handleMonthRangeChange = (event: any) => {
@@ -101,6 +108,126 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
       setDrillLevel('cia');
     }
   }, [selectedMarca]);
+
+  // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
+  useEffect(() => {
+    const generateSummary = async () => {
+      setIsLoadingSummary(true);
+
+      try {
+        // Filtrar transações pelo contexto atual
+        const filteredTrans = transactions.filter(t => {
+          const month = parseInt(t.date.substring(5, 7), 10) - 1;
+          const passMonth = month >= monthRange.start && month <= monthRange.end;
+          const passMarca = selectedMarca.length === 0 || selectedMarca.includes(t.marca || '');
+          const passFilial = selectedFilial.length === 0 || selectedFilial.includes(t.filial || '');
+          return t.scenario === 'Real' && passMonth && passMarca && passFilial;
+        });
+
+        // Calcular valor real da métrica selecionada
+        let realValue = 0;
+        for (const t of filteredTrans) {
+          if (branchMetric === 'revenue' && t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01)) {
+            realValue += t.amount;
+          } else if (branchMetric === 'fixedCosts' && (t.tag0 || '').startsWith('03.')) {
+            realValue += t.amount;
+          } else if (branchMetric === 'variableCosts' && (t.tag0 || '').startsWith('02.')) {
+            realValue += t.amount;
+          } else if (branchMetric === 'sga' && (t.tag0 || '').startsWith('04.')) {
+            realValue += t.amount;
+          } else if (branchMetric === 'ebitda') {
+            // EBITDA = Receita - Custos
+            if (t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01)) {
+              realValue += t.amount;
+            } else if ((t.tag0 || '').match(/^0[234]\./)) {
+              realValue -= Math.abs(t.amount);
+            }
+          }
+        }
+
+        // Calcular valor de comparação (Orçado ou A-1)
+        const compScenario = comparisonMode === 'budget' ? 'Orçado' : 'A-1';
+        const compTrans = transactions.filter(t => {
+          const month = parseInt(t.date.substring(5, 7), 10) - 1;
+          const passMonth = month >= monthRange.start && month <= monthRange.end;
+          const passMarca = selectedMarca.length === 0 || selectedMarca.includes(t.marca || '');
+          const passFilial = selectedFilial.length === 0 || selectedFilial.includes(t.filial || '');
+          return t.scenario === compScenario && passMonth && passMarca && passFilial;
+        });
+
+        let compValue = 0;
+        for (const t of compTrans) {
+          if (branchMetric === 'revenue' && t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01)) {
+            compValue += t.amount;
+          } else if (branchMetric === 'fixedCosts' && (t.tag0 || '').startsWith('03.')) {
+            compValue += t.amount;
+          } else if (branchMetric === 'variableCosts' && (t.tag0 || '').startsWith('02.')) {
+            compValue += t.amount;
+          } else if (branchMetric === 'sga' && (t.tag0 || '').startsWith('04.')) {
+            compValue += t.amount;
+          } else if (branchMetric === 'ebitda') {
+            if (t.tag01 && RECEITA_LIQUIDA_TAGS_SET.has(t.tag01)) {
+              compValue += t.amount;
+            } else if ((t.tag0 || '').match(/^0[234]\./)) {
+              compValue -= Math.abs(t.amount);
+            }
+          }
+        }
+
+        // Calcular variação percentual
+        const variation = compValue !== 0 ? ((realValue - compValue) / Math.abs(compValue)) * 100 : 0;
+
+        // Top 10 transações por valor absoluto
+        const topTransactions = filteredTrans
+          .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+          .slice(0, 10)
+          .map(t => ({
+            vendor: t.vendor || 'N/A',
+            ticket: t.ticket || 'N/A',
+            amount: t.amount,
+            description: t.description || 'Sem descrição',
+            date: t.date
+          }));
+
+        const context: ExecutiveSummaryContext = {
+          selectedMarca,
+          selectedFilial,
+          monthRange,
+          metric: branchMetric,
+          comparisonMode: comparisonMode === 'budget' ? 'budget' : 'lastYear',
+          realValue,
+          comparisonValue: compValue,
+          variation,
+          topTransactions,
+          kpis
+        };
+
+        const summary = await generateExecutiveSummary(context);
+        setAiSummary(summary);
+      } catch (error) {
+        console.error('Erro ao gerar resumo executivo:', error);
+        // Fallback
+        setAiSummary({
+          summary: '⚠️ Não foi possível gerar o resumo executivo com IA. Verifique sua conexão.',
+          detailedAnalysis: 'Análise detalhada indisponível no momento.',
+          keyFindings: ['Erro ao processar dados'],
+          recommendations: ['Tente novamente em alguns instantes']
+        });
+      } finally {
+        setIsLoadingSummary(false);
+      }
+    };
+
+    generateSummary();
+  }, [
+    transactions,
+    selectedMarca,
+    selectedFilial,
+    monthRange,
+    branchMetric,
+    comparisonMode,
+    kpis
+  ]);
 
   // ============================================
   // DADOS: DESEMPENHO POR UNIDADE (com Drill-Down CIA/Filial)
@@ -340,24 +467,8 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   ];
 
   // ============================================
-  // RESUMO EXECUTIVO
+  // RESUMO EXECUTIVO (Gerado com IA via useEffect)
   // ============================================
-  const topBranch = branchData[0] || { branch: 'N/A', revenue: 0 };
-  const totalBranchRevenue = branchData.reduce((acc, b) => acc + b.revenue, 0);
-  const topBranchPercentage = totalBranchRevenue > 0 ? (topBranch.revenue / totalBranchRevenue) * 100 : 0;
-  const branchesAboveTarget = branchData.filter(b => b.margin >= 25).length;
-
-  const executiveSummary = `
-**Destaques do Período:**${selectedMarca.length > 0 ? ` (Filtro: ${selectedMarca.join(', ')})` : ''}${selectedFilial.length > 0 ? ` (Unidade: ${selectedFilial.join(', ')})` : ''}
-
-${branchData.length > 0 ? `- A **${topBranch.branch}** lidera com ${topBranchPercentage.toFixed(1)}% da receita total (R$ ${topBranch.revenue.toLocaleString('pt-BR')})
-- **${branchesAboveTarget} de ${branchData.length} unidades** atingiram a meta de margem de 25%` : '- Nenhuma unidade encontrada com os filtros selecionados'}
-- Receita consolidada de **R$ ${kpis.totalRevenue.toLocaleString('pt-BR')}**
-- EBITDA total de **R$ ${kpis.ebitda.toLocaleString('pt-BR')}** (margem de ${kpis.netMargin.toFixed(1)}%)
-- Base de **${kpis.activeStudents} alunos ativos** com ticket médio de **R$ ${kpis.revenuePerStudent.toLocaleString('pt-BR')}**
-
-*Recomendação: ${branchesAboveTarget < branchData.length ? 'Revisar estrutura de custos das unidades abaixo da meta' : 'Manter estratégia atual e replicar melhores práticas'}*
-  `.trim();
 
 
   return (
@@ -459,16 +570,92 @@ ${branchData.length > 0 ? `- A **${topBranch.branch}** lidera com ${topBranchPer
         />
       </div>
 
-      {/* Resumo Executivo */}
-      <TextBlock
-        id="executive-summary"
-        type="text"
-        title="Resumo Executivo"
-        subtitle="Análise consolidada do período"
-        variant="highlight"
-        content={executiveSummary}
-        markdown={true}
-      />
+      {/* Resumo Executivo com IA */}
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">🎯 Resumo Executivo</h3>
+            <p className="text-sm text-gray-600 mt-1">Análise inteligente com IA - Atualiza automaticamente com seus filtros</p>
+          </div>
+          {!isLoadingSummary && aiSummary && (
+            <button
+              onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-lg border border-gray-300 transition-colors"
+            >
+              {isSummaryExpanded ? (
+                <>
+                  <ChevronUp size={16} />
+                  <span className="text-sm font-medium">Menos Detalhes</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={16} />
+                  <span className="text-sm font-medium">Mais Detalhes</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {isLoadingSummary ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="animate-spin text-blue-600" size={32} />
+              <p className="text-sm text-gray-600 font-medium">Analisando dados com IA...</p>
+            </div>
+          </div>
+        ) : aiSummary ? (
+          <div className="space-y-6">
+            {/* Resumo Principal */}
+            <div className="bg-white p-4 rounded-lg border border-blue-100">
+              <p className="text-gray-700 whitespace-pre-line leading-relaxed">{aiSummary.summary}</p>
+            </div>
+
+            {/* Descobertas Principais */}
+            <div className="bg-white p-4 rounded-lg border border-emerald-100">
+              <h4 className="text-md font-bold text-emerald-700 mb-3">💡 Descobertas Principais</h4>
+              <ul className="space-y-2">
+                {aiSummary.keyFindings.map((finding, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-emerald-600 font-bold mt-0.5">•</span>
+                    <span className="text-gray-700 text-sm">{finding}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Análise Detalhada (Expandível) */}
+            {isSummaryExpanded && (
+              <div className="space-y-4 animate-in slide-in-from-top duration-300">
+                <div className="bg-white p-4 rounded-lg border border-blue-100">
+                  <h4 className="text-md font-bold text-blue-700 mb-3">📊 Análise Detalhada</h4>
+                  <p className="text-gray-700 whitespace-pre-line leading-relaxed text-sm">
+                    {aiSummary.detailedAnalysis}
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg border border-amber-100">
+                  <h4 className="text-md font-bold text-amber-700 mb-3">🎯 Ações Recomendadas</h4>
+                  <ol className="space-y-3">
+                    {aiSummary.recommendations.map((rec, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <span className="flex-shrink-0 w-6 h-6 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center text-xs font-bold">
+                          {i + 1}
+                        </span>
+                        <span className="text-gray-700 text-sm pt-0.5">{rec}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <p className="text-gray-500 text-center">Nenhuma análise disponível</p>
+          </div>
+        )}
+      </div>
 
       {/* Detalhamento por Unidade */}
       <TableBlock

@@ -329,6 +329,219 @@ Responda APENAS com JSON válido.`;
 };
 
 /**
+ * generateExecutiveSummary - Gera Resumo Executivo dinâmico baseado em filtros
+ * Análise profunda com comparações Real vs Orçado vs A-1 e insights granulares
+ */
+export interface ExecutiveSummaryContext {
+  // Filtros aplicados
+  selectedMarca: string[];
+  selectedFilial: string[];
+  monthRange: { start: number; end: number };
+  metric: 'revenue' | 'fixedCosts' | 'variableCosts' | 'sga' | 'ebitda';
+  comparisonMode: 'budget' | 'lastYear';
+
+  // Dados agregados
+  realValue: number;
+  comparisonValue: number;
+  variation: number;
+
+  // Transações relevantes (top 10 por impacto)
+  topTransactions: Array<{
+    vendor: string;
+    ticket: string;
+    amount: number;
+    description: string;
+    date: string;
+  }>;
+
+  // Dados contextuais
+  kpis: SchoolKPIs;
+}
+
+export interface ExecutiveSummaryResponse {
+  summary: string;           // Resumo inicial (2-3 parágrafos)
+  detailedAnalysis: string;  // Análise detalhada expandida
+  keyFindings: string[];     // 3-5 descobertas principais
+  recommendations: string[]; // 3-5 ações recomendadas
+}
+
+export const generateExecutiveSummary = async (
+  context: ExecutiveSummaryContext
+): Promise<ExecutiveSummaryResponse> => {
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const periodText = context.monthRange.start === context.monthRange.end
+    ? monthNames[context.monthRange.start]
+    : `${monthNames[context.monthRange.start]} a ${monthNames[context.monthRange.end]}`;
+
+  const metricNames = {
+    revenue: 'Receita Líquida',
+    fixedCosts: 'Custos Fixos',
+    variableCosts: 'Custos Variáveis',
+    sga: 'Despesas Administrativas (SG&A)',
+    ebitda: 'EBITDA'
+  };
+
+  const comparisonNames = {
+    budget: 'Orçado',
+    lastYear: 'Ano Anterior (A-1)'
+  };
+
+  // Construir contexto rico para a IA
+  const scopeText = context.selectedMarca.length > 0
+    ? `CIA(s): ${context.selectedMarca.join(', ')}`
+    : context.selectedFilial.length > 0
+    ? `Filial(is): ${context.selectedFilial.join(', ')}`
+    : 'TODAS AS UNIDADES';
+
+  const systemInstruction = `Você é um CFO experiente da Raiz Educação, especializado em análise financeira de escolas.
+Sua missão é gerar um Resumo Executivo profundo e acionável baseado nos filtros selecionados pelo usuário.
+
+CONTEXTO DA ANÁLISE:
+- Escopo: ${scopeText}
+- Período: ${periodText}/2026
+- Métrica em foco: ${metricNames[context.metric]}
+- Comparação: Real vs ${comparisonNames[context.comparisonMode]}
+
+DADOS CONSOLIDADOS:
+- Valor Real: R$ ${context.realValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+- Valor ${comparisonNames[context.comparisonMode]}: R$ ${context.comparisonValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+- Variação: ${context.variation.toFixed(1)}% ${context.variation > 0 ? '(acima)' : '(abaixo)'}
+
+TOP TRANSAÇÕES POR IMPACTO:
+${context.topTransactions.slice(0, 5).map((t, i) =>
+  `${i + 1}. ${t.vendor || 'N/A'} | Ticket: ${t.ticket} | R$ ${t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} | ${t.description}`
+).join('\n')}
+
+KPIs GERAIS:
+- EBITDA Total: R$ ${context.kpis.ebitda.toLocaleString('pt-BR')} (${context.kpis.netMargin.toFixed(1)}%)
+- Alunos Ativos: ${context.kpis.activeStudents}
+- Ticket Médio: R$ ${context.kpis.revenuePerStudent.toLocaleString('pt-BR')}
+- Custo/Aluno: R$ ${context.kpis.costPerStudent.toLocaleString('pt-BR')}
+
+SUAS RESPONSABILIDADES:
+1. Explique O QUE aconteceu (variação, tendências)
+2. Explique POR QUÊ aconteceu (drivers principais)
+3. Destaque SURPRESAS nos dados (outliers, anomalias, oportunidades)
+4. Sugira O QUE FAZER (ações práticas e priorizadas)
+
+ESTILO:
+- Executivo, direto ao ponto, baseado em dados
+- Use números concretos das transações
+- Mencione fornecedores/tickets específicos quando relevante
+- Destaque insights surpreendentes ou contra-intuitivos
+- Tom profissional mas acessível
+
+Responda APENAS com JSON válido no formato:
+{
+  "summary": "Resumo inicial de 2-3 parágrafos",
+  "detailedAnalysis": "Análise detalhada expandida com breakdowns e drill-downs",
+  "keyFindings": ["Descoberta 1", "Descoberta 2", "Descoberta 3"],
+  "recommendations": ["Ação 1", "Ação 2", "Ação 3"]
+}`;
+
+  const prompt = `Analise o contexto fornecido e gere um Resumo Executivo profundo e acionável.
+
+Foque em:
+- Comparar Real vs ${comparisonNames[context.comparisonMode]} para ${metricNames[context.metric]}
+- Identificar os maiores drivers de variação
+- Analisar as transações de maior impacto
+- Encontrar padrões ou anomalias surpreendentes
+- Sugerir ações práticas priorizadas por impacto
+
+Responda APENAS com JSON válido.`;
+
+  try {
+    const response = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 3000,
+        system: systemInstruction,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error("❌ generateExecutiveSummary - Anthropic API error:", response.status, errorBody);
+      throw new Error(`Anthropic API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.content[0]?.text || "{}";
+
+    try {
+      // Extract JSON from markdown code blocks if present
+      const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+      const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+      const parsed = JSON.parse(jsonText) as ExecutiveSummaryResponse;
+
+      // Validate structure
+      if (!parsed.summary || !parsed.detailedAnalysis || !parsed.keyFindings || !parsed.recommendations) {
+        throw new Error("Invalid response structure");
+      }
+
+      return parsed;
+    } catch (e) {
+      console.error("JSON parse error in generateExecutiveSummary:", e, "Raw text:", text);
+      return getFallbackExecutiveSummary(context);
+    }
+  } catch (error) {
+    console.error("Erro em generateExecutiveSummary:", error);
+    return getFallbackExecutiveSummary(context);
+  }
+};
+
+/**
+ * Helper function to generate fallback executive summary
+ */
+function getFallbackExecutiveSummary(context: ExecutiveSummaryContext): ExecutiveSummaryResponse {
+  const metricNames = {
+    revenue: 'Receita Líquida',
+    fixedCosts: 'Custos Fixos',
+    variableCosts: 'Custos Variáveis',
+    sga: 'SG&A',
+    ebitda: 'EBITDA'
+  };
+
+  const comparisonNames = {
+    budget: 'Orçado',
+    lastYear: 'Ano Anterior'
+  };
+
+  const variationText = context.variation > 0 ? 'acima' : 'abaixo';
+  const variationIcon = context.variation > 0 ? '📈' : '📉';
+
+  return {
+    summary: `${variationIcon} A ${metricNames[context.metric]} do período analisado está ${Math.abs(context.variation).toFixed(1)}% ${variationText} do ${comparisonNames[context.comparisonMode]}.\n\nValor Real: R$ ${context.realValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\nValor ${comparisonNames[context.comparisonMode]}: R$ ${context.comparisonValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\nAs principais transações representam ${context.topTransactions.length} lançamentos de alto impacto que merecem atenção especial.`,
+
+    detailedAnalysis: `**Análise Detalhada:**\n\nAs ${context.topTransactions.length} principais transações somam R$ ${context.topTransactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\nPrincipais fornecedores:\n${context.topTransactions.slice(0, 3).map((t, i) => `${i + 1}. ${t.vendor || 'N/A'}: R$ ${t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`).join('\n')}\n\nA variação observada pode estar relacionada a mudanças operacionais, sazonalidade ou ajustes estratégicos no período.`,
+
+    keyFindings: [
+      `${metricNames[context.metric]} está ${variationText} do ${comparisonNames[context.comparisonMode]} em ${Math.abs(context.variation).toFixed(1)}%`,
+      `${context.topTransactions.length} transações de alto impacto identificadas`,
+      `Margem EBITDA atual: ${context.kpis.netMargin.toFixed(1)}% (Meta: 25%)`
+    ],
+
+    recommendations: [
+      "Revisar as principais transações identificadas para validar conformidade",
+      "Analisar tendência dos próximos meses para ajustar projeções",
+      `${context.kpis.netMargin < 25 ? 'Implementar plano de ação para atingir meta de margem' : 'Manter monitoramento para sustentar performance'}`
+    ]
+  };
+}
+
+/**
  * Helper function to generate fallback insights
  */
 function getFallbackInsights(kpis: SchoolKPIs): IAInsight[] {
