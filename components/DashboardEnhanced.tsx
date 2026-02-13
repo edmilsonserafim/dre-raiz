@@ -76,6 +76,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const isGeneratingRef = React.useRef(false); // Proteção contra loop
+  const lastGenerationTimeRef = React.useRef<number>(0); // Timestamp da última geração
 
   // Listener para evento de mudança de range de meses
   React.useEffect(() => {
@@ -110,12 +111,10 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     }
   }, [selectedMarca]);
 
-  // 📊 Log e reset quando branchMetric muda (para debug e garantir nova geração)
+  // 📊 Log quando branchMetric muda
   React.useEffect(() => {
     console.log('🔄 MUDANÇA DE ABA DETECTADA:', branchMetric);
-    console.log('   → Resetando proteção e disparando nova geração em ~500ms');
-    // Reset do flag para permitir nova geração imediata
-    isGeneratingRef.current = false;
+    console.log('   → Nova geração será iniciada em ~500ms (se não houver outra recente)');
   }, [branchMetric]);
 
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
@@ -129,9 +128,19 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
           return;
         }
 
+        // ⚡ PROTEÇÃO ANTI-LOOP: Verificar tempo desde última geração
+        const now = Date.now();
+        const timeSinceLastGeneration = now - lastGenerationTimeRef.current;
+        const MIN_INTERVAL = 3000; // Mínimo 3 segundos entre gerações
+
+        if (timeSinceLastGeneration < MIN_INTERVAL) {
+          console.log(`⏸️ Geração muito recente (${Math.round(timeSinceLastGeneration/1000)}s atrás). Aguardando ${Math.round((MIN_INTERVAL - timeSinceLastGeneration)/1000)}s...`);
+          return;
+        }
+
         // Proteção contra loop: se já está gerando, cancela a anterior e inicia nova
         if (isGeneratingRef.current) {
-          console.log('⏸️ Cancelando geração anterior, iniciando nova com filtros atualizados...');
+          console.log('⏸️ Já está gerando, cancelando para iniciar nova com filtros atualizados...');
         }
 
         console.log('🤖 Iniciando geração de Resumo Executivo com IA...');
@@ -140,6 +149,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
         console.log('   📍 Filiais:', selectedFilial.length > 0 ? selectedFilial.join(', ') : 'Todas');
 
         isGeneratingRef.current = true;
+        lastGenerationTimeRef.current = now; // Salva timestamp da geração
         setIsLoadingSummary(true);
 
       try {
