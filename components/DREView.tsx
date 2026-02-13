@@ -2309,8 +2309,19 @@ const DREView: React.FC<DREViewProps> = ({
               >
                 {analysisMode === 'ai-analysis' ? <CheckSquare size={10} className="text-purple-600 shrink-0" /> : <Square size={10} className="text-gray-400 shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <div className="text-[8px] font-bold text-gray-900">🤖 Análise com IA</div>
-                  <div className="text-[7px] text-gray-600 truncate">Explicação inteligente dos desvios</div>
+                  <div className="text-[8px] font-bold text-gray-900 flex items-center gap-1">
+                    🤖 Análise com IA
+                    {topDeviations.length > 0 && (
+                      <span className="bg-purple-500 text-white text-[6px] px-1 rounded-full font-black">
+                        {topDeviations.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[7px] text-gray-600 truncate">
+                    {topDeviations.length > 0
+                      ? `Análise de ${topDeviations.length} desvios encontrados`
+                      : `Ajuste threshold para ver análise`}
+                  </div>
                 </div>
               </button>
 
@@ -2447,7 +2458,7 @@ const DREView: React.FC<DREViewProps> = ({
               </p>
               <div className="bg-white/80 border border-purple-100 rounded-lg p-2 space-y-1">
                 <p className="text-[8px] font-bold text-gray-900">
-                  📊 Identificados {topDeviations.length} desvios significativos (≥ 10%)
+                  📊 Identificados {topDeviations.length} desvios significativos (≥ {deviationThreshold}%)
                 </p>
                 <p className="text-[7px] text-gray-700 leading-relaxed">
                   {topDeviations[0].variation > 0 ? '🔴' : '🟢'} <span className="font-semibold">{topDeviations[0].label}</span> apresenta a maior variação:
