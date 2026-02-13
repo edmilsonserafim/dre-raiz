@@ -217,9 +217,9 @@ const DREView: React.FC<DREViewProps> = ({
         getDRESummary({
           monthFrom,
           monthTo,
-          marcas: undefined, // ⚠️ TESTE: Removido filtro
-          nomeFiliais: undefined, // ⚠️ TESTE: Removido filtro
-          tags01: undefined, // ⚠️ TESTE: Removido filtro
+          marcas: finalMarcas,
+          nomeFiliais: finalFiliais,
+          tags01: finalTags01,
         }),
         getDREFilterOptions({ monthFrom, monthTo }),
         getFiliais(),
@@ -574,9 +574,9 @@ const DREView: React.FC<DREViewProps> = ({
       contaContabils: categories,
       scenario,
       dimension: dimensionKey,
-      marcas: undefined, // ⚠️ TESTE: Removido filtro
-      nomeFiliais: undefined, // ⚠️ TESTE: Removido filtro
-      tags01: undefined, // ⚠️ TESTE: Removido filtro
+      marcas: mergedMarcas,
+      nomeFiliais: mergedFiliais,
+      tags01: mergedTags01,
     });
 
     setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));
