@@ -348,61 +348,110 @@ const DREView: React.FC<DREViewProps> = ({
 
     console.log('📊 Cenários disponíveis:', { realCount, budgetCount, a1Count });
 
-    summaryRows.forEach(row => {
-      const label = row.tag01 || row.tag0 || 'Sem classificação';
-      const category = row.tag0 || '';
-      const real = Number(row.total_amount) || 0;
+    // 🎯 ANÁLISE ALTERNATIVA: Se só tem Real (sem Orçado/A-1), analisar por valor absoluto
+    const hasComparison = budgetCount > 0 || a1Count > 0;
 
-      // Buscar dados de Orçado e A-1 para a mesma linha
-      const budgetRow = summaryRows.find(r =>
-        r.tag0 === row.tag0 &&
-        r.tag01 === row.tag01 &&
-        r.scenario === 'Orçado'
-      );
-      const a1Row = summaryRows.find(r =>
-        r.tag0 === row.tag0 &&
-        r.tag01 === row.tag01 &&
-        r.scenario === 'A-1'
-      );
+    if (!hasComparison && realCount > 0) {
+      console.log('ℹ️ Apenas dados Real - analisando por valor absoluto');
 
-      const budget = Number(budgetRow?.total_amount) || 0;
-      const a1 = Number(a1Row?.total_amount) || 0;
+      // Coletar todos os valores Real
+      const realValues: Array<{
+        label: string;
+        category: string;
+        real: number;
+        level: number;
+      }> = [];
 
-      // Calcular variações (apenas se cenário Real)
-      if (row.scenario === 'Real') {
-        // Variação vs Orçado
-        if (budget !== 0) {
-          const varBudget = ((real - budget) / Math.abs(budget)) * 100;
-          if (Math.abs(varBudget) >= deviationThreshold) {
-            deviations.push({
+      summaryRows.forEach(row => {
+        if (row.scenario === 'Real') {
+          const label = row.tag01 || row.tag0 || 'Sem classificação';
+          const category = row.tag0 || '';
+          const real = Number(row.total_amount) || 0;
+
+          if (real !== 0) {
+            realValues.push({
               label,
               category,
-              variation: varBudget,
-              type: 'budget',
-              level: row.tag01 ? 2 : 1,
               real,
-              compare: budget
+              level: row.tag01 ? 2 : 1
             });
           }
         }
+      });
 
-        // Variação vs A-1
-        if (a1 !== 0) {
-          const varA1 = ((real - a1) / Math.abs(a1)) * 100;
-          if (Math.abs(varA1) >= deviationThreshold) {
-            deviations.push({
-              label,
-              category,
-              variation: varA1,
-              type: 'lastYear',
-              level: row.tag01 ? 2 : 1,
-              real,
-              compare: a1
-            });
+      // Ordenar por valor absoluto (maior primeiro)
+      realValues.sort((a, b) => Math.abs(b.real) - Math.abs(a.real));
+
+      // Converter para formato de desvio (usar o próprio valor como "variação")
+      realValues.slice(0, 10).forEach(item => {
+        deviations.push({
+          label: item.label,
+          category: item.category,
+          variation: 0, // Sem comparação
+          type: 'budget', // Tipo fake para compatibilidade
+          level: item.level,
+          real: item.real,
+          compare: 0 // Sem comparação
+        });
+      });
+    } else {
+      // Análise normal com comparação
+      summaryRows.forEach(row => {
+        const label = row.tag01 || row.tag0 || 'Sem classificação';
+        const category = row.tag0 || '';
+        const real = Number(row.total_amount) || 0;
+
+        // Buscar dados de Orçado e A-1 para a mesma linha
+        const budgetRow = summaryRows.find(r =>
+          r.tag0 === row.tag0 &&
+          r.tag01 === row.tag01 &&
+          r.scenario === 'Orçado'
+        );
+        const a1Row = summaryRows.find(r =>
+          r.tag0 === row.tag0 &&
+          r.tag01 === row.tag01 &&
+          r.scenario === 'A-1'
+        );
+
+        const budget = Number(budgetRow?.total_amount) || 0;
+        const a1 = Number(a1Row?.total_amount) || 0;
+
+        // Calcular variações (apenas se cenário Real)
+        if (row.scenario === 'Real') {
+          // Variação vs Orçado
+          if (budget !== 0) {
+            const varBudget = ((real - budget) / Math.abs(budget)) * 100;
+            if (Math.abs(varBudget) >= deviationThreshold) {
+              deviations.push({
+                label,
+                category,
+                variation: varBudget,
+                type: 'budget',
+                level: row.tag01 ? 2 : 1,
+                real,
+                compare: budget
+              });
+            }
+          }
+
+          // Variação vs A-1
+          if (a1 !== 0) {
+            const varA1 = ((real - a1) / Math.abs(a1)) * 100;
+            if (Math.abs(varA1) >= deviationThreshold) {
+              deviations.push({
+                label,
+                category,
+                variation: varA1,
+                type: 'lastYear',
+                level: row.tag01 ? 2 : 1,
+                real,
+                compare: a1
+              });
+            }
           }
         }
-      }
-    });
+      });
+    }
 
     // Ordenar por variação absoluta (maior desvio primeiro)
     deviations.sort((a, b) => Math.abs(b.variation) - Math.abs(a.variation));
@@ -2346,39 +2395,58 @@ const DREView: React.FC<DREViewProps> = ({
             </div>
           )}
 
-          {/* Mensagem: Nenhum desvio encontrado (todos os modos que dependem de topDeviations) */}
-          {(analysisMode === 'visual-alerts' || analysisMode === 'insights-dashboard' || analysisMode === 'ai-analysis' || analysisMode === 'guided-mode') && topDeviations.length === 0 && (
-            <div className="border-t border-emerald-200 bg-gradient-to-br from-gray-50 to-emerald-50 p-2">
-              <div className="bg-white/80 border border-gray-200 rounded-lg p-2 text-center">
-                <p className="text-[8px] font-bold text-gray-700 mb-1">📊 Nenhum desvio significativo encontrado</p>
-                <p className="text-[7px] text-gray-600 mb-2">
-                  Não há variações ≥ {deviationThreshold}% vs Orçado ou A-1
-                </p>
-                <div className="flex items-center justify-center gap-1">
-                  <button
-                    onClick={() => setDeviationThreshold(Math.max(1, deviationThreshold - 1))}
-                    className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
-                  >
-                    - Reduzir para {Math.max(1, deviationThreshold - 1)}%
-                  </button>
-                  <span className="text-[7px] font-bold text-gray-700">{deviationThreshold}%</span>
-                  <button
-                    onClick={() => setDeviationThreshold(Math.min(20, deviationThreshold + 1))}
-                    className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
-                  >
-                    + Aumentar para {Math.min(20, deviationThreshold + 1)}%
-                  </button>
+          {/* Mensagem: Nenhum desvio/dado encontrado (todos os modos que dependem de topDeviations) */}
+          {(analysisMode === 'visual-alerts' || analysisMode === 'insights-dashboard' || analysisMode === 'ai-analysis' || analysisMode === 'guided-mode') && topDeviations.length === 0 && (() => {
+            // Verificar se tem dados Real, Orçado ou A-1
+            const hasReal = summaryRows?.some(r => r.scenario === 'Real') || false;
+            const hasBudget = summaryRows?.some(r => r.scenario === 'Orçado') || false;
+            const hasA1 = summaryRows?.some(r => r.scenario === 'A-1') || false;
+            const hasComparison = hasBudget || hasA1;
+
+            return (
+              <div className="border-t border-emerald-200 bg-gradient-to-br from-gray-50 to-emerald-50 p-2">
+                <div className="bg-white/80 border border-gray-200 rounded-lg p-2 text-center">
+                  {hasReal && !hasComparison ? (
+                    <>
+                      <p className="text-[8px] font-bold text-gray-700 mb-1">📊 Nenhum dado Real encontrado</p>
+                      <p className="text-[7px] text-gray-600">
+                        Aplique filtros para carregar dados e ver análise
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[8px] font-bold text-gray-700 mb-1">📊 Nenhum desvio significativo encontrado</p>
+                      <p className="text-[7px] text-gray-600 mb-2">
+                        Não há variações ≥ {deviationThreshold}% vs Orçado ou A-1
+                      </p>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setDeviationThreshold(Math.max(1, deviationThreshold - 1))}
+                          className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
+                        >
+                          - Reduzir para {Math.max(1, deviationThreshold - 1)}%
+                        </button>
+                        <span className="text-[7px] font-bold text-gray-700">{deviationThreshold}%</span>
+                        <button
+                          onClick={() => setDeviationThreshold(Math.min(20, deviationThreshold + 1))}
+                          className="bg-blue-500 text-white px-2 py-0.5 rounded text-[7px] font-bold hover:bg-blue-600 transition-colors"
+                        >
+                          + Aumentar para {Math.min(20, deviationThreshold + 1)}%
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Dashboard de Insights (quando modo ativo) */}
           {analysisMode === 'insights-dashboard' && topDeviations.length > 0 && (
             <div className="border-t border-emerald-200 bg-gradient-to-br from-blue-50 to-emerald-50 p-2 space-y-1">
               <p className="text-[7px] font-black text-blue-900 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <TrendingUpDown size={10} />
-                Top {Math.min(5, topDeviations.length)} Maiores Desvios
+                {topDeviations[0]?.compare === 0 ? `Top ${Math.min(5, topDeviations.length)} Maiores Valores` : `Top ${Math.min(5, topDeviations.length)} Maiores Desvios`}
               </p>
               {topDeviations.slice(0, 5).map((dev, idx) => (
                 <div
@@ -2391,12 +2459,25 @@ const DREView: React.FC<DREViewProps> = ({
                       <div className="text-[7px] text-gray-600 truncate">{dev.category}</div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className={`text-[8px] font-black ${dev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {dev.variation > 0 ? '+' : ''}{dev.variation.toFixed(1)}%
-                      </div>
-                      <div className="text-[6px] text-gray-500">
-                        vs {dev.type === 'budget' ? 'Orç' : 'A-1'}
-                      </div>
+                      {dev.compare === 0 ? (
+                        <>
+                          <div className={`text-[8px] font-black ${dev.real < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            R$ {Math.abs(dev.real).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </div>
+                          <div className="text-[6px] text-gray-500">
+                            {dev.real < 0 ? 'Despesa' : 'Receita'}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className={`text-[8px] font-black ${dev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {dev.variation > 0 ? '+' : ''}{dev.variation.toFixed(1)}%
+                          </div>
+                          <div className="text-[6px] text-gray-500">
+                            vs {dev.type === 'budget' ? 'Orç' : 'A-1'}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2414,17 +2495,32 @@ const DREView: React.FC<DREViewProps> = ({
                     <div className="bg-white/90 border border-indigo-200 rounded-lg p-2 shadow-sm">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-[7px] font-black text-indigo-900 uppercase tracking-wider">
-                          Desvio {guidedModeIndex + 1} de {topDeviations.length}
+                          {currentDev.compare === 0 ? 'Item' : 'Desvio'} {guidedModeIndex + 1} de {topDeviations.length}
                         </span>
-                        <span className={`text-[9px] font-black ${currentDev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {currentDev.variation > 0 ? '+' : ''}{currentDev.variation.toFixed(1)}%
-                        </span>
+                        {currentDev.compare === 0 ? (
+                          <span className={`text-[9px] font-black ${currentDev.real < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            R$ {Math.abs(currentDev.real).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        ) : (
+                          <span className={`text-[9px] font-black ${currentDev.variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {currentDev.variation > 0 ? '+' : ''}{currentDev.variation.toFixed(1)}%
+                          </span>
+                        )}
                       </div>
                       <div className="text-[8px] font-bold text-gray-900 mb-0.5">{currentDev.label}</div>
                       <div className="text-[7px] text-gray-600 mb-1">{currentDev.category}</div>
                       <div className="text-[7px] text-gray-700 bg-indigo-50 rounded px-1.5 py-0.5">
-                        <span className="font-semibold">Real:</span> R$ {currentDev.real.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} |
-                        <span className="font-semibold ml-1">{currentDev.type === 'budget' ? 'Orç' : 'A-1'}:</span> R$ {currentDev.compare.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        {currentDev.compare === 0 ? (
+                          <>
+                            <span className="font-semibold">Valor Real:</span> R$ {currentDev.real.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            <span className="ml-1 text-gray-500">({currentDev.real < 0 ? 'Despesa' : 'Receita'})</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold">Real:</span> R$ {currentDev.real.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} |
+                            <span className="font-semibold ml-1">{currentDev.type === 'budget' ? 'Orç' : 'A-1'}:</span> R$ {currentDev.compare.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -2457,22 +2553,46 @@ const DREView: React.FC<DREViewProps> = ({
                 Análise Inteligente
               </p>
               <div className="bg-white/80 border border-purple-100 rounded-lg p-2 space-y-1">
-                <p className="text-[8px] font-bold text-gray-900">
-                  📊 Identificados {topDeviations.length} desvios significativos (≥ {deviationThreshold}%)
-                </p>
-                <p className="text-[7px] text-gray-700 leading-relaxed">
-                  {topDeviations[0].variation > 0 ? '🔴' : '🟢'} <span className="font-semibold">{topDeviations[0].label}</span> apresenta a maior variação:
-                  <span className={`font-black ml-0.5 ${topDeviations[0].variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {topDeviations[0].variation > 0 ? '+' : ''}{topDeviations[0].variation.toFixed(1)}%
-                  </span> vs {topDeviations[0].type === 'budget' ? 'Orçado' : 'A-1'}.
-                  {topDeviations[0].variation > 0
-                    ? ' Sugere-se investigar causas do aumento.'
-                    : ' Resultado positivo, mantendo abaixo do esperado.'}
-                </p>
-                {topDeviations.length > 1 && (
-                  <p className="text-[7px] text-gray-600">
-                    Outros desvios relevantes: {topDeviations.slice(1, 3).map(d => d.label).join(', ')}
-                  </p>
+                {topDeviations[0].compare === 0 ? (
+                  <>
+                    <p className="text-[8px] font-bold text-gray-900">
+                      💰 Análise dos {topDeviations.length} maiores valores em termos absolutos
+                    </p>
+                    <p className="text-[7px] text-gray-700 leading-relaxed">
+                      {topDeviations[0].real < 0 ? '🔴' : '🟢'} <span className="font-semibold">{topDeviations[0].label}</span> apresenta o maior valor absoluto:
+                      <span className={`font-black ml-0.5 ${topDeviations[0].real < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        R$ {Math.abs(topDeviations[0].real).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </span> ({topDeviations[0].real < 0 ? 'Despesa' : 'Receita'}).
+                      {topDeviations[0].real < 0
+                        ? ' Representa a maior despesa no período.'
+                        : ' Representa a maior receita no período.'}
+                    </p>
+                    {topDeviations.length > 1 && (
+                      <p className="text-[7px] text-gray-600">
+                        Outros valores relevantes: {topDeviations.slice(1, 3).map(d => d.label).join(', ')}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[8px] font-bold text-gray-900">
+                      📊 Identificados {topDeviations.length} desvios significativos (≥ {deviationThreshold}%)
+                    </p>
+                    <p className="text-[7px] text-gray-700 leading-relaxed">
+                      {topDeviations[0].variation > 0 ? '🔴' : '🟢'} <span className="font-semibold">{topDeviations[0].label}</span> apresenta a maior variação:
+                      <span className={`font-black ml-0.5 ${topDeviations[0].variation > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {topDeviations[0].variation > 0 ? '+' : ''}{topDeviations[0].variation.toFixed(1)}%
+                      </span> vs {topDeviations[0].type === 'budget' ? 'Orçado' : 'A-1'}.
+                      {topDeviations[0].variation > 0
+                        ? ' Sugere-se investigar causas do aumento.'
+                        : ' Resultado positivo, mantendo abaixo do esperado.'}
+                    </p>
+                    {topDeviations.length > 1 && (
+                      <p className="text-[7px] text-gray-600">
+                        Outros desvios relevantes: {topDeviations.slice(1, 3).map(d => d.label).join(', ')}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
