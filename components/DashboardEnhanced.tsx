@@ -11,24 +11,9 @@ import {
   TableBlock
 } from '../features/visualBlocks';
 import { SchoolKPIs, Transaction } from '../types';
-import { BRANCHES } from '../constants';
+import { BRANCHES, RECEITA_LIQUIDA_TAGS_SET } from '../constants';
 import { EChartsOption } from 'echarts';
-import { Download, FileText, ChevronDown, FileSpreadsheet, FileType } from 'lucide-react';
-import { exportDashboardToPPT } from '../services/pptExportService';
-import { exportDashboardToPDF } from '../services/pdfExportService';
-import { exportDashboardToDOCX } from '../services/docxExportService';
-import { generatePresentation, createDRESlides } from '../services/slidePptxService';
-
-// Tags01 que compõem a Receita Líquida conforme DRE
-const RECEITA_LIQUIDA_TAGS = [
-  'Tributos',
-  'Devoluções & Cancelamentos',
-  'Integral',
-  'Material Didático',
-  'Receita De Mensalidade',
-  'Receitas Não Operacionais',
-  'Receitas Extras'
-];
+import { useBranchData } from '../hooks/useBranchData';
 
 interface DashboardEnhancedProps {
   kpis: SchoolKPIs;
@@ -79,12 +64,17 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const [comparisonMode, setComparisonMode] = React.useState<'budget' | 'prevYear'>('budget');
 
   // State para controlar a aba ativa do gráfico de Desempenho por Unidade
-  const [branchMetric, setBranchMetric] = React.useState<'revenue' | 'margin' | 'ebitda'>('revenue');
+  const [branchMetric, setBranchMetric] = React.useState<'revenue' | 'fixedCosts' | 'variableCosts' | 'sga' | 'ebitda'>('revenue');
+
+  // State para controlar drill-down (CIA ou Filial)
+  const [drillLevel, setDrillLevel] = React.useState<'cia' | 'filial'>('cia');
 
   // Listener para evento de mudança de range de meses
   React.useEffect(() => {
     const handleMonthRangeChange = (event: any) => {
       if (event.detail) {
+        console.log('📅 DashboardEnhanced: ✅ EVENTO RECEBIDO!', event.detail);
+        console.log('   Atualizando monthRange de', monthRange, 'para', event.detail);
         setMonthRange({ start: event.detail.start, end: event.detail.end });
       }
     };
@@ -103,205 +93,37 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     return () => window.removeEventListener('comparisonModeChange', handleComparisonModeChange);
   }, []);
 
-  // ============================================
-  // DADOS: EVOLUÇÃO MENSAL
-  // ============================================
-  const monthlyData = useMemo(() => {
-    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-    // Filtrar por cenário, marca e unidade
-    let filteredTrans = transactions.filter(t => t.scenario === 'Real');
+  // Auto drill-down: Quando marca filtrada, mostra visão Filial automaticamente
+  React.useEffect(() => {
     if (selectedMarca.length > 0) {
-      filteredTrans = filteredTrans.filter(t => selectedMarca.includes(t.marca || ''));
-    }
-    if (selectedFilial.length > 0) {
-      filteredTrans = filteredTrans.filter(t => selectedFilial.includes(t.filial || ''));
-    }
-
-    return months.map((month, index) => {
-      // Aplicar filtro de mês do Dashboard
-      if (index < monthRange.start || index > monthRange.end) {
-        return { name: month, revenue: 0, ebitda: 0, costs: 0 };
-      }
-
-      const monthTrans = filteredTrans.filter(t => parseInt(t.date.substring(5, 7), 10) - 1 === index);
-      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-      const revenue = monthTrans.filter(t =>
-        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const costs = monthTrans.filter(t =>
-        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const ebitda = revenue - costs;
-
-      return { name: month, revenue, ebitda, costs };
-    });
-  }, [transactions, selectedMarca, selectedFilial, monthRange]);
-
-  // Gráfico de Evolução Mensal (Receita + EBITDA)
-  const monthlyChartOptions: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' },
-      formatter: (params: any) => {
-        let result = `<strong>${params[0].name}</strong><br/>`;
-        params.forEach((item: any) => {
-          result += `${item.marker} ${item.seriesName}: R$ ${item.value.toLocaleString('pt-BR')}<br/>`;
-        });
-        return result;
-      }
-    },
-    legend: {
-      data: ['Receita', 'EBITDA'],
-      top: 10,
-      textStyle: { fontSize: 12, fontWeight: 'bold' }
-    },
-    xAxis: {
-      type: 'category',
-      data: monthlyData.map(d => d.name),
-      axisLine: { lineStyle: { color: '#94a3b8' } },
-      axisLabel: { fontSize: 11, fontWeight: 'bold' }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { lineStyle: { color: '#94a3b8' } },
-      axisLabel: {
-        fontSize: 11,
-        formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`
-      }
-    },
-    series: [
-      {
-        name: 'Receita',
-        type: 'bar',
-        data: monthlyData.map(d => d.revenue),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: '#1B75BB' },
-              { offset: 1, color: '#4AC8F4' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        },
-        barWidth: '40%'
-      },
-      {
-        name: 'EBITDA',
-        type: 'line',
-        data: monthlyData.map(d => d.ebitda),
-        smooth: true,
-        lineStyle: { width: 3, color: '#7AC5BF' },
-        itemStyle: { color: '#7AC5BF' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(122, 197, 191, 0.3)' },
-              { offset: 1, color: 'rgba(122, 197, 191, 0.0)' }
-            ]
-          }
-        }
-      }
-    ],
-    grid: { left: '15%', right: '5%', top: 60, bottom: 50 }
-  };
-
-  // ============================================
-  // DADOS: DESEMPENHO POR UNIDADE
-  // ============================================
-  const branchData = useMemo(() => {
-    // Filtrar por cenário Real, marca e mês
-    let filteredTrans = transactions.filter(t => {
-      const month = parseInt(t.date.substring(5, 7), 10) - 1;
-      return t.scenario === 'Real' && month >= monthRange.start && month <= monthRange.end;
-    });
-    if (selectedMarca.length > 0) {
-      filteredTrans = filteredTrans.filter(t => selectedMarca.includes(t.marca || ''));
-    }
-
-    // Filtrar transações de comparação (Orçado ou A-1)
-    const comparisonScenario = comparisonMode === 'budget' ? 'Orçado' : 'A-1';
-    let comparisonTrans = transactions.filter(t => {
-      const month = parseInt(t.date.substring(5, 7), 10) - 1;
-      return t.scenario === comparisonScenario && month >= monthRange.start && month <= monthRange.end;
-    });
-    if (selectedMarca.length > 0) {
-      comparisonTrans = comparisonTrans.filter(t => selectedMarca.includes(t.marca || ''));
-    }
-
-    // Determinar quais branches mostrar baseado nas transações filtradas
-    let branchesToShow: string[];
-    if (selectedFilial.length > 0) {
-      // Se filiais específicas foram selecionadas, usar apenas essas
-      branchesToShow = selectedFilial;
+      setDrillLevel('filial');
     } else {
-      // Se nenhuma filial foi selecionada, pegar apenas as branches que existem nas transações filtradas
-      const branchesInFilteredData = new Set(filteredTrans.map(t => t.filial).filter(Boolean));
-      branchesToShow = Array.from(branchesInFilteredData).sort();
-
-      // Se não há marcas selecionadas e não há transações filtradas, usar todas as branches
-      if (branchesToShow.length === 0 && selectedMarca.length === 0) {
-        branchesToShow = BRANCHES;
-      }
+      setDrillLevel('cia');
     }
+  }, [selectedMarca]);
 
-    return branchesToShow.map(branch => {
-      // Dados reais
-      const branchTrans = filteredTrans.filter(t => t.filial === branch);
-      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-      const revenue = branchTrans.filter(t =>
-        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const costs = branchTrans.filter(t =>
-        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const ebitda = revenue - costs;
-      const margin = revenue > 0 ? (ebitda / revenue) * 100 : 0;
-
-      // Dados de comparação
-      const compBranchTrans = comparisonTrans.filter(t => t.filial === branch);
-      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-      const compRevenue = compBranchTrans.filter(t =>
-        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const compCosts = compBranchTrans.filter(t =>
-        !(t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01))
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const compEbitda = compRevenue - compCosts;
-      const compMargin = compRevenue > 0 ? (compEbitda / compRevenue) * 100 : 0;
-
-      // Calcular variações
-      const revenueVariation = compRevenue !== 0 ? ((revenue - compRevenue) / compRevenue) * 100 : 0;
-      const ebitdaVariation = compEbitda !== 0 ? ((ebitda - compEbitda) / Math.abs(compEbitda)) * 100 : 0;
-      const marginVariation = margin - compMargin;
-
-      // Calcular número de alunos estimado (proporcionalmente)
-      // RECEITA LÍQUIDA: Soma das tag01 específicas conforme DRE
-      const totalRevenue = filteredTrans.filter(t =>
-        t.tag01 && RECEITA_LIQUIDA_TAGS.includes(t.tag01)
-      ).reduce((acc, t) => acc + t.amount, 0);
-      const branchStudents = totalRevenue > 0 ? Math.round(kpis.activeStudents * (revenue / totalRevenue)) : 0;
-
-      return {
-        branch,
-        revenue,
-        costs,
-        ebitda,
-        margin,
-        students: branchStudents,
-        revenueVariation,
-        ebitdaVariation,
-        marginVariation
-      };
-    }).sort((a, b) => b.revenue - a.revenue);
-  }, [transactions, kpis, selectedMarca, selectedFilial, monthRange, comparisonMode]);
+  // ============================================
+  // DADOS: DESEMPENHO POR UNIDADE (com Drill-Down CIA/Filial)
+  // ⚡ OTIMIZAÇÃO #5: Hook compartilhado para cálculo de branchData
+  // Elimina duplicação de cálculo entre Dashboard e DashboardEnhanced (-50% computação duplicada)
+  const branchData = useBranchData({
+    transactions,
+    monthRange,
+    selectedMarca,
+    selectedFilial,
+    drillLevel,
+    comparisonMode,
+    activeStudents: kpis.activeStudents
+  }).sort((a, b) => b.revenue - a.revenue);
 
   // Gráfico de Barras por Unidade - Dinâmico baseado na métrica selecionada
   const branchChartOptions: EChartsOption = React.useMemo(() => {
+    // Helper para formatar números com separador de milhares
+    const formatCurrency = (value: number) => {
+      const valueInK = value / 1000;
+      return `R$ ${valueInK.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}k`;
+    };
+
     const getMetricData = () => {
       switch (branchMetric) {
         case 'revenue':
@@ -309,23 +131,39 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
             data: branchData.map(d => d.revenue),
             variations: branchData.map(d => d.revenueVariation),
             label: 'Receita',
-            formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`,
+            formatter: formatCurrency,
             tooltipFormatter: (value: number) => `Receita: R$ ${value.toLocaleString('pt-BR')}`
           };
-        case 'margin':
+        case 'fixedCosts':
           return {
-            data: branchData.map(d => d.margin),
-            variations: branchData.map(d => d.marginVariation),
-            label: 'Margem %',
-            formatter: (value: number) => `${value.toFixed(1)}%`,
-            tooltipFormatter: (value: number) => `Margem: ${value.toFixed(2)}%`
+            data: branchData.map(d => d.fixedCosts),
+            variations: branchData.map(d => d.fixedCostsVariation),
+            label: 'Custos Fixos',
+            formatter: formatCurrency,
+            tooltipFormatter: (value: number) => `Custos Fixos: R$ ${value.toLocaleString('pt-BR')}`
+          };
+        case 'variableCosts':
+          return {
+            data: branchData.map(d => d.variableCosts),
+            variations: branchData.map(d => d.variableCostsVariation),
+            label: 'Custos Variáveis',
+            formatter: formatCurrency,
+            tooltipFormatter: (value: number) => `Custos Variáveis: R$ ${value.toLocaleString('pt-BR')}`
+          };
+        case 'sga':
+          return {
+            data: branchData.map(d => d.sga),
+            variations: branchData.map(d => d.sgaVariation),
+            label: 'SG&A',
+            formatter: formatCurrency,
+            tooltipFormatter: (value: number) => `SG&A: R$ ${value.toLocaleString('pt-BR')}`
           };
         case 'ebitda':
           return {
             data: branchData.map(d => d.ebitda),
             variations: branchData.map(d => d.ebitdaVariation),
             label: 'EBITDA',
-            formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`,
+            formatter: formatCurrency,
             tooltipFormatter: (value: number) => `EBITDA: R$ ${value.toLocaleString('pt-BR')}`
           };
       }
@@ -390,7 +228,9 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
               if (branchMetric === 'margin') {
                 valueText = `${value.toFixed(1)}%`;
               } else {
-                valueText = `R$ ${(value / 1000).toFixed(0)}k`;
+                // Formatar com separador de milhares
+                const valueInK = value / 1000;
+                valueText = `R$ ${valueInK.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}k`;
               }
 
               // Usar rich text style diferente baseado na variação
@@ -420,7 +260,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
           }
         }
       ],
-      grid: { left: '15%', right: '5%', top: 60, bottom: 80 }
+      grid: { left: '3%', right: '3%', top: 60, bottom: 80 }
     };
   }, [branchData, branchMetric, comparisonMode]);
 
@@ -450,9 +290,25 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
       format: (value: number) => `R$ ${value.toLocaleString('pt-BR')}`
     },
     {
-      id: 'costs',
-      header: 'Custos',
-      accessor: 'costs',
+      id: 'fixedCosts',
+      header: 'Custos Fixos',
+      accessor: 'fixedCosts',
+      align: 'right' as const,
+      sortable: true,
+      format: (value: number) => `R$ ${value.toLocaleString('pt-BR')}`
+    },
+    {
+      id: 'variableCosts',
+      header: 'Custos Variáveis',
+      accessor: 'variableCosts',
+      align: 'right' as const,
+      sortable: true,
+      format: (value: number) => `R$ ${value.toLocaleString('pt-BR')}`
+    },
+    {
+      id: 'sga',
+      header: 'SG&A',
+      accessor: 'sga',
       align: 'right' as const,
       sortable: true,
       format: (value: number) => `R$ ${value.toLocaleString('pt-BR')}`
@@ -503,259 +359,104 @@ ${branchData.length > 0 ? `- A **${topBranch.branch}** lidera com ${topBranchPer
 *Recomendação: ${branchesAboveTarget < branchData.length ? 'Revisar estrutura de custos das unidades abaixo da meta' : 'Manter estratégia atual e replicar melhores práticas'}*
   `.trim();
 
-  // ============================================
-  // FUNÇÃO DE EXPORT
-  // ============================================
-  const [showExportMenu, setShowExportMenu] = React.useState(false);
-  const [exporting, setExporting] = React.useState('');
-
-  const getFilteredTransactions = () => {
-    let exportTrans = transactions.filter(t => t.scenario === 'Real');
-    if (selectedMarca.length > 0) {
-      exportTrans = exportTrans.filter(t => selectedMarca.includes(t.marca || ''));
-    }
-    if (selectedFilial.length > 0) {
-      exportTrans = exportTrans.filter(t => selectedFilial.includes(t.filial || ''));
-    }
-    return exportTrans;
-  };
-
-  const handleExportPPT = async () => {
-    try {
-      setExporting('ppt');
-      setShowExportMenu(false);
-      await exportDashboardToPPT({
-        kpis,
-        transactions: getFilteredTransactions(),
-        selectedBrand: selectedMarca,
-        selectedBranch: selectedFilial
-      });
-      alert('Apresentação PPT exportada com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar PPT:', error);
-      alert('Erro ao exportar apresentação.');
-    } finally {
-      setExporting('');
-    }
-  };
-
-  const handleExportPPTAdvanced = async () => {
-    try {
-      setExporting('ppt-adv');
-      setShowExportMenu(false);
-      const exportTrans = getFilteredTransactions();
-      const slides = createDRESlides(
-        {
-          receita: kpis.totalRevenue,
-          ebitda: kpis.ebitda,
-          margem: kpis.netMargin,
-          alunos: kpis.activeStudents,
-          receitaPorAluno: kpis.revenuePerStudent,
-        },
-        branchData.map(b => ({
-          branch: b.branch,
-          revenue: b.revenue,
-          costs: b.costs,
-          ebitda: b.ebitda,
-          margin: b.margin,
-        })),
-        monthlyData.map(d => ({
-          month: d.name,
-          revenue: d.revenue,
-          ebitda: d.ebitda,
-        })),
-        { title: 'Relatório Executivo DRE RAIZ' }
-      );
-      await generatePresentation(slides, {
-        title: 'Relatório Executivo DRE RAIZ',
-        theme: 'corporate',
-      });
-      alert('Apresentação avançada exportada com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar PPT Avançado:', error);
-      alert('Erro ao exportar apresentação avançada.');
-    } finally {
-      setExporting('');
-    }
-  };
-
-  const handleExportPDF = async () => {
-    try {
-      setExporting('pdf');
-      setShowExportMenu(false);
-      await exportDashboardToPDF({
-        kpis,
-        transactions: getFilteredTransactions(),
-        selectedBrand: selectedMarca,
-        selectedBranch: selectedFilial,
-      });
-      alert('PDF exportado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar PDF:', error);
-      alert('Erro ao exportar PDF.');
-    } finally {
-      setExporting('');
-    }
-  };
-
-  const handleExportDOCX = async () => {
-    try {
-      setExporting('docx');
-      setShowExportMenu(false);
-      await exportDashboardToDOCX({
-        kpis,
-        transactions: getFilteredTransactions(),
-        selectedBrand: selectedMarca,
-        selectedBranch: selectedFilial,
-      });
-      alert('DOCX exportado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar DOCX:', error);
-      alert('Erro ao exportar DOCX.');
-    } finally {
-      setExporting('');
-    }
-  };
 
   return (
     <div className="space-y-6">
       {/* Dashboard Original */}
       <Dashboard {...props} />
 
-      {/* Botão de Export (fixo no topo dos novos componentes) */}
-      <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-        <div>
-          <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-            <FileText size={18} className="text-[#1B75BB]" />
-            Análises Avançadas
-          </h3>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
-            Visualizações detalhadas e resumo executivo
-          </p>
+      {/* Desempenho por Unidade - Full Width */}
+      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+        {/* Header com Abas */}
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-base font-black text-gray-900 uppercase tracking-tighter flex items-center gap-2">
+              Desempenho por {drillLevel === 'cia' ? 'CIA' : 'Unidade'}
+              <button
+                onClick={() => setDrillLevel(drillLevel === 'cia' ? 'filial' : 'cia')}
+                className="px-3 py-1 bg-gradient-to-r from-[#1B75BB] to-[#1557BB] text-white rounded-lg text-[10px] font-bold uppercase tracking-tight hover:shadow-lg transition-all flex items-center gap-1"
+                title={drillLevel === 'cia' ? 'Expandir para Filial' : 'Voltar para CIA'}
+              >
+                {drillLevel === 'cia' ? '⬇ Abrir Filial' : '⬆ Voltar CIA'}
+              </button>
+              <span className="px-2 py-1 bg-amber-100 text-amber-800 text-[9px] font-bold rounded">
+                DEBUG: Range={monthRange.start}-{monthRange.end}
+              </span>
+            </h3>
+            <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">
+              {branchMetric === 'revenue' && `Receita por ${drillLevel === 'cia' ? 'CIA' : 'filial'} (cores indicam margem)`}
+              {branchMetric === 'fixedCosts' && `Custos Fixos por ${drillLevel === 'cia' ? 'CIA' : 'filial'} (cores indicam margem)`}
+              {branchMetric === 'variableCosts' && `Custos Variáveis por ${drillLevel === 'cia' ? 'CIA' : 'filial'} (cores indicam margem)`}
+              {branchMetric === 'sga' && `SG&A por ${drillLevel === 'cia' ? 'CIA' : 'filial'} (cores indicam margem)`}
+              {branchMetric === 'ebitda' && `EBITDA por ${drillLevel === 'cia' ? 'CIA' : 'filial'} (cores indicam margem)`}
+            </p>
+          </div>
         </div>
-        <div className="relative">
+
+        {/* Abas de Navegação */}
+        <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
           <button
-            onClick={() => setShowExportMenu(!showExportMenu)}
-            disabled={!!exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-[#F44C00] text-white rounded-lg font-bold text-sm hover:bg-[#d43d00] transition-all shadow-lg disabled:opacity-50"
+            onClick={() => setBranchMetric('revenue')}
+            className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
+              branchMetric === 'revenue'
+                ? 'bg-[#1B75BB] text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
-            <Download size={16} />
-            {exporting ? 'Exportando...' : 'Exportar'}
-            <ChevronDown size={14} />
+            Receita
           </button>
-          {showExportMenu && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 min-w-[220px] py-1">
-              <button
-                onClick={handleExportPPTAdvanced}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 text-left text-sm text-gray-700 font-medium"
-              >
-                <FileText size={16} className="text-[#1B75BB]" />
-                PPT Avançado (12 layouts)
-              </button>
-              <button
-                onClick={handleExportPPT}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 text-left text-sm text-gray-700 font-medium"
-              >
-                <FileText size={16} className="text-[#F44C00]" />
-                PPT Simples
-              </button>
-              <div className="border-t border-gray-100 my-1" />
-              <button
-                onClick={handleExportPDF}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-left text-sm text-gray-700 font-medium"
-              >
-                <FileType size={16} className="text-red-600" />
-                Exportar PDF
-              </button>
-              <button
-                onClick={handleExportDOCX}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 text-left text-sm text-gray-700 font-medium"
-              >
-                <FileSpreadsheet size={16} className="text-blue-600" />
-                Exportar DOCX
-              </button>
-            </div>
-          )}
-          {showExportMenu && (
-            <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
-          )}
+          <button
+            onClick={() => setBranchMetric('fixedCosts')}
+            className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
+              branchMetric === 'fixedCosts'
+                ? 'bg-[#EF4444] text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Custos Fixos
+          </button>
+          <button
+            onClick={() => setBranchMetric('variableCosts')}
+            className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
+              branchMetric === 'variableCosts'
+                ? 'bg-[#F59E0B] text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Custos Variáveis
+          </button>
+          <button
+            onClick={() => setBranchMetric('sga')}
+            className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
+              branchMetric === 'sga'
+                ? 'bg-[#8B5CF6] text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            SG&A
+          </button>
+          <button
+            onClick={() => setBranchMetric('ebitda')}
+            className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
+              branchMetric === 'ebitda'
+                ? 'bg-[#10B981] text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            EBITDA
+          </button>
         </div>
-      </div>
 
-      {/* Novos Componentes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Evolução Mensal */}
+        {/* Gráfico */}
         <ChartBlock
-          id="monthly-evolution"
+          id="branch-performance"
           type="chart"
-          title="Evolução Mensal"
-          subtitle="Receita e EBITDA consolidados"
+          title=""
+          subtitle=""
           chartType="bar"
-          options={monthlyChartOptions}
-          height={350}
+          options={branchChartOptions}
+          height={400}
         />
-
-        {/* Desempenho por Unidade */}
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          {/* Header com Abas */}
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-base font-black text-gray-900 uppercase tracking-tighter">
-                Desempenho por Unidade
-              </h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">
-                {branchMetric === 'revenue' && 'Receita por filial (cores indicam margem)'}
-                {branchMetric === 'margin' && 'Margem de Contribuição por filial'}
-                {branchMetric === 'ebitda' && 'EBITDA por filial (cores indicam margem)'}
-              </p>
-            </div>
-          </div>
-
-          {/* Abas de Navegação */}
-          <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
-            <button
-              onClick={() => setBranchMetric('revenue')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
-                branchMetric === 'revenue'
-                  ? 'bg-[#1B75BB] text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Receita
-            </button>
-            <button
-              onClick={() => setBranchMetric('margin')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
-                branchMetric === 'margin'
-                  ? 'bg-[#7AC5BF] text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Margem %
-            </button>
-            <button
-              onClick={() => setBranchMetric('ebitda')}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-tight transition-all ${
-                branchMetric === 'ebitda'
-                  ? 'bg-[#F44C00] text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              EBITDA
-            </button>
-          </div>
-
-          {/* Gráfico */}
-          <ChartBlock
-            id="branch-performance"
-            type="chart"
-            title=""
-            subtitle=""
-            chartType="bar"
-            options={branchChartOptions}
-            height={350}
-          />
-        </div>
       </div>
 
       {/* Resumo Executivo */}
