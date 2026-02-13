@@ -63,7 +63,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const [monthRange, setMonthRange] = React.useState({ start: 0, end: 11 });
 
   // State para capturar o modo de comparação do Dashboard
-  const [comparisonMode, setComparisonMode] = React.useState<'budget' | 'prevYear'>('budget');
+  const [comparisonMode, setComparisonMode] = React.useState<'budget' | 'lastYear'>('budget');
 
   // State para controlar a aba ativa do gráfico de Desempenho por Unidade
   const [branchMetric, setBranchMetric] = React.useState<'revenue' | 'fixedCosts' | 'variableCosts' | 'sga' | 'ebitda'>('revenue');
@@ -112,6 +112,12 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
   useEffect(() => {
     const generateSummary = async () => {
+      // Proteção: não executar se não houver dados
+      if (!transactions || transactions.length === 0 || !kpis) {
+        console.log('⏸️ Aguardando dados para gerar resumo executivo...');
+        return;
+      }
+
       setIsLoadingSummary(true);
 
       try {
