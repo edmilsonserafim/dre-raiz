@@ -36,7 +36,8 @@ import {
   ArrowUpDown,
   ArrowDownAZ,
   ArrowDown10,
-  ArrowUp10
+  ArrowUp10,
+  AlertTriangle
 } from 'lucide-react';
 
 interface DREViewProps {
@@ -671,6 +672,18 @@ const DREView: React.FC<DREViewProps> = ({
     setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));
   }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01, allowedMarcas, allowedFiliais, allowedTag01]);
 
+  // 🚨 Helper: Verificar se linha tem alerta de desvio significativo
+  const hasDeviationAlert = (label: string): { hasAlert: boolean; deviation?: typeof topDeviations[0] } => {
+    if (analysisMode !== 'visual-alerts' || topDeviations.length === 0) {
+      return { hasAlert: false };
+    }
+    const deviation = topDeviations.find(d => d.label === label);
+    return {
+      hasAlert: !!deviation,
+      deviation
+    };
+  };
+
   const renderRow = (
     id: string,
     label: string,
@@ -990,18 +1003,27 @@ const DREView: React.FC<DREViewProps> = ({
 
                   const deltaBgColor = element.includes('Orcado') ? 'bg-green-50 text-green-900' : 'bg-purple-50 text-purple-900';
 
+                  // 🚨 Verificar se tem alerta de desvio
+                  const { hasAlert } = hasDeviationAlert(label);
+
                   if (isPercentual) {
                     const deltaPerc = compareYTD !== 0 ? ((baseYTD - compareYTD) / Math.abs(compareYTD)) * 100 : 0;
                     return (
-                      <td key={`ytd-${element}`} className={`px-1 text-center font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator}`}>
-                        {deltaPerc !== 0 ? `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%` : '-'}
+                      <td key={`ytd-${element}`} className={`px-1 text-center font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator} ${hasAlert ? 'ring-2 ring-orange-500 ring-inset' : ''}`}>
+                        <div className="flex items-center justify-center gap-0.5">
+                          {hasAlert && <AlertTriangle size={10} className="text-orange-600 shrink-0" />}
+                          <span>{deltaPerc !== 0 ? `${deltaPerc > 0 ? '+' : ''}${deltaPerc.toFixed(0)}%` : '-'}</span>
+                        </div>
                       </td>
                     );
                   } else {
                     const deltaAbs = baseYTD - compareYTD;
                     return (
-                      <td key={`ytd-${element}`} className={`px-1 text-right font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator}`}>
-                        {deltaAbs !== 0 ? `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}` : '-'}
+                      <td key={`ytd-${element}`} className={`px-1 text-right font-mono font-black hover:bg-yellow-200/40 transition-colors w-[100px] ${level === 1 ? 'bg-white/10 text-white' : deltaBgColor} ${ytdSeparator} ${hasAlert ? 'ring-2 ring-orange-500 ring-inset' : ''}`}>
+                        <div className="flex items-center justify-end gap-0.5">
+                          {hasAlert && <AlertTriangle size={10} className="text-orange-600 shrink-0" />}
+                          <span>{deltaAbs !== 0 ? `${deltaAbs > 0 ? '+' : ''}${Math.round(deltaAbs).toLocaleString()}` : '-'}</span>
+                        </div>
                       </td>
                     );
                   }
