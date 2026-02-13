@@ -188,6 +188,32 @@ export const resolveTag0 = (tag01: string | undefined | null, tag0Map: Map<strin
 // Cache em variável do módulo (evita re-fetch desnecessário)
 let cachedFiliais: FilialOption[] | null = null;
 let cachedTagRecords: TagRecord[] | null = null;
+let cachedTag0Options: string[] | null = null;
+
+/**
+ * Busca todas as opções de Tag0 disponíveis no banco (via tag0_map)
+ * Retorna lista única e ordenada
+ */
+export const getTag0Options = async (): Promise<string[]> => {
+  if (cachedTag0Options) return cachedTag0Options;
+
+  console.log('🏷️ Carregando opções de Tag0...');
+  const { data, error } = await supabase
+    .from('tag0_map')
+    .select('tag0');
+
+  if (error) {
+    console.error('❌ Erro ao carregar tag0 options:', error);
+    return [];
+  }
+
+  // Extrair valores únicos
+  const uniqueTag0s = [...new Set(data?.map(row => row.tag0).filter(Boolean))].sort();
+  cachedTag0Options = uniqueTag0s;
+
+  console.log(`✅ ${cachedTag0Options.length} opções de Tag0 carregadas`);
+  return cachedTag0Options;
+};
 
 export const getFiliais = async (): Promise<FilialOption[]> => {
   if (cachedFiliais) return cachedFiliais;

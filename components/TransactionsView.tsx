@@ -26,7 +26,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, ManualChange, PaginationParams, ContaContabilOption } from '../types';
 import { BRANCHES, ALL_CATEGORIES, CATEGORIES } from '../constants';
-import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions, getTag0Map, resolveTag0 } from '../services/supabaseService';
+import { getFilteredTransactions, TransactionFilters, getFiliais, getTagRecords, FilialOption, TagRecord, getContaContabilOptions, getTag0Map, getTag0Options, resolveTag0 } from '../services/supabaseService';
 import ContaContabilSelector from './ContaContabilSelector';
 import * as XLSX from 'xlsx';
 import debounce from 'lodash.debounce';
@@ -125,13 +125,14 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     marcas: string[];
     tagRecords: TagRecord[];
     tag0Map: Map<string, string>; // Mapeamento tag01 → tag0
-  }>({ filiais: [], marcas: [], tagRecords: [], tag0Map: new Map() });
+    tag0Options: string[]; // Lista completa de Tag0
+  }>({ filiais: [], marcas: [], tagRecords: [], tag0Map: new Map(), tag0Options: [] });
 
   // Carregar opções de lookup ao montar
   useEffect(() => {
-    Promise.all([getFiliais(), getTagRecords(), getTag0Map()]).then(([filiais, tagRecords, tag0Map]) => {
+    Promise.all([getFiliais(), getTagRecords(), getTag0Map(), getTag0Options()]).then(([filiais, tagRecords, tag0Map, tag0Options]) => {
       const marcas = [...new Set(filiais.map(f => f.cia))].sort();
-      setFilterOptions({ filiais, marcas, tagRecords, tag0Map });
+      setFilterOptions({ filiais, marcas, tagRecords, tag0Map, tag0Options });
     });
   }, []);
 
@@ -227,10 +228,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     return [...new Set(filiais.map(f => f.label))].sort();
   }, [filterOptions.filiais, colFilters.marca]);
 
-  // Tag0 (distintos direto das transactions)
+  // 🎯 Tag0 Options (todas do banco via tag0_map)
   const tag0Options = useMemo(() =>
-    [...new Set(transactions.map(t => t.tag0).filter(Boolean))].sort() as string[]
-  , [transactions]);
+    filterOptions.tag0Options
+  , [filterOptions.tag0Options]);
 
   // 🎯 Cascata: Tag0 → Tag1
   // Filtrar tag1 baseado nos tag0 selecionados
