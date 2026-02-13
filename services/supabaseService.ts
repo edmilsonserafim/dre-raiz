@@ -191,6 +191,21 @@ let cachedTagRecords: TagRecord[] | null = null;
 let cachedTag0Options: string[] | null = null;
 
 /**
+ * 🔄 LIMPAR TODOS OS CACHES
+ * Use depois de atualizar dados no banco (tag0_map, etc)
+ */
+export const clearAllCaches = () => {
+  cachedFiliais = null;
+  cachedTagRecords = null;
+  cachedTag0Map = null;
+  cachedTag0Options = null;
+  cachedTag01Options = null;
+  cachedTag02Options = null;
+  cachedTag03Options = null;
+  console.log('🔄 TODOS OS CACHES LIMPOS - Próxima busca vai buscar do banco');
+};
+
+/**
  * Busca todas as opções de Tag0 disponíveis no banco (via tag0_map)
  * Retorna lista única e ordenada
  */
@@ -477,8 +492,14 @@ export const getDREDimension = async (params: {
   marcas?: string[];
   nomeFiliais?: string[];
   tags01?: string[];
+  tags02?: string[];  // ← NOVO: Filtrar por tag02
+  tags03?: string[];  // ← NOVO: Filtrar por tag03
 }): Promise<DREDimensionRow[]> => {
-  console.log('📊 getDREDimension: Buscando dimensão', params.dimension);
+  console.log('📊 getDREDimension: Buscando dimensão', params.dimension, {
+    tags01: params.tags01,
+    tags02: params.tags02,
+    tags03: params.tags03
+  });
 
   const { data, error } = await supabase.rpc('get_dre_dimension', {
     p_month_from: params.monthFrom || null,
@@ -489,6 +510,8 @@ export const getDREDimension = async (params: {
     p_marcas: params.marcas && params.marcas.length > 0 ? params.marcas : null,
     p_nome_filiais: params.nomeFiliais && params.nomeFiliais.length > 0 ? params.nomeFiliais : null,
     p_tags01: params.tags01 && params.tags01.length > 0 ? params.tags01 : null,
+    p_tags02: params.tags02 && params.tags02.length > 0 ? params.tags02 : null,  // ← NOVO
+    p_tags03: params.tags03 && params.tags03.length > 0 ? params.tags03 : null,  // ← NOVO
   });
 
   if (error) {

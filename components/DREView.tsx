@@ -713,6 +713,10 @@ const DREView: React.FC<DREViewProps> = ({
       ? [accFilters.nome_filial]
       : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
 
+    // ✅ NOVO: Merge filtros de TAG02 e TAG03 acumulados
+    let mergedTags02 = accFilters.tag02 ? [accFilters.tag02] : undefined;
+    let mergedTags03 = accFilters.tag03 ? [accFilters.tag03] : undefined;
+
     // ✅ APLICAR PERMISSÕES: Sempre injetar filtros de permissão
     if (allowedMarcas && allowedMarcas.length > 0) {
       if (mergedMarcas && mergedMarcas.length > 0) {
@@ -743,6 +747,14 @@ const DREView: React.FC<DREViewProps> = ({
       console.log('🔒 DRE Dimension: Filtro de permissão TAG01 aplicado:', mergedTags01);
     }
 
+    console.log('🎯 getDREDimension: Filtros acumulados', {
+      marca: mergedMarcas,
+      filial: mergedFiliais,
+      tag01: mergedTags01,
+      tag02: mergedTags02,  // ← NOVO
+      tag03: mergedTags03   // ← NOVO
+    });
+
     const rows = await getDREDimension({
       monthFrom,
       monthTo,
@@ -752,6 +764,8 @@ const DREView: React.FC<DREViewProps> = ({
       marcas: mergedMarcas,
       nomeFiliais: mergedFiliais,
       tags01: mergedTags01,
+      tags02: mergedTags02,  // ← NOVO
+      tags03: mergedTags03,  // ← NOVO
     });
 
     setDimensionCache(prev => ({ ...prev, [cacheKey]: rows }));
