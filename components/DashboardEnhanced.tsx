@@ -475,6 +475,8 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   // ============================================
   // RESUMO EXECUTIVO (Gerado com IA via useEffect)
   // ============================================
+  // Calcular total de receita para o footer da tabela
+  const totalBranchRevenue = branchData.reduce((acc, b) => acc + b.revenue, 0);
 
 
   return (
