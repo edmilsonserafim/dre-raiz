@@ -110,6 +110,14 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
     }
   }, [selectedMarca]);
 
+  // 📊 Log e reset quando branchMetric muda (para debug e garantir nova geração)
+  React.useEffect(() => {
+    console.log('🔄 MUDANÇA DE ABA DETECTADA:', branchMetric);
+    console.log('   → Resetando proteção e disparando nova geração em ~500ms');
+    // Reset do flag para permitir nova geração imediata
+    isGeneratingRef.current = false;
+  }, [branchMetric]);
+
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
   useEffect(() => {
     // Debounce: aguardar 500ms antes de gerar
