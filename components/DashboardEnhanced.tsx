@@ -75,6 +75,7 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
   const [aiSummary, setAiSummary] = useState<ExecutiveSummaryResponse | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  const isGeneratingRef = React.useRef(false); // Proteção contra loop
 
   // Listener para evento de mudança de range de meses
   React.useEffect(() => {
@@ -111,14 +112,24 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
 
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
   useEffect(() => {
-    const generateSummary = async () => {
-      // Proteção: não executar se não houver dados
-      if (!transactions || transactions.length === 0 || !kpis) {
-        console.log('⏸️ Aguardando dados para gerar resumo executivo...');
-        return;
-      }
+    // Debounce: aguardar 800ms antes de gerar
+    const timeoutId = setTimeout(() => {
+      const generateSummary = async () => {
+        // Proteção: não executar se não houver dados
+        if (!transactions || transactions.length === 0 || !kpis) {
+          console.log('⏸️ Aguardando dados para gerar resumo executivo...');
+          return;
+        }
 
-      setIsLoadingSummary(true);
+        // Proteção contra loop: se já está gerando, não inicia nova geração
+        if (isGeneratingRef.current) {
+          console.log('⏸️ Já está gerando resumo, aguardando...');
+          return;
+        }
+
+        console.log('🤖 Iniciando geração de Resumo Executivo com IA...');
+        isGeneratingRef.current = true;
+        setIsLoadingSummary(true);
 
       try {
         // Filtrar transações pelo contexto atual
@@ -210,8 +221,9 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
 
         const summary = await generateExecutiveSummary(context);
         setAiSummary(summary);
+        console.log('✅ Resumo Executivo gerado com sucesso!');
       } catch (error) {
-        console.error('Erro ao gerar resumo executivo:', error);
+        console.error('❌ Erro ao gerar resumo executivo:', error);
         // Fallback
         setAiSummary({
           summary: '⚠️ Não foi possível gerar o resumo executivo com IA. Verifique sua conexão.',
@@ -221,10 +233,15 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
         });
       } finally {
         setIsLoadingSummary(false);
+        isGeneratingRef.current = false; // Libera para próxima geração
       }
     };
 
-    generateSummary();
+      generateSummary();
+    }, 800); // Debounce de 800ms
+
+    // Cleanup: cancela timeout se componente desmontar ou deps mudarem
+    return () => clearTimeout(timeoutId);
   }, [
     transactions,
     selectedMarca,
