@@ -119,6 +119,14 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
 
   // ⚡ Gerar Resumo Executivo com IA quando filtros mudarem
   useEffect(() => {
+    console.log('⚙️ useEffect DISPARADO - Iniciando timeout de 500ms', {
+      branchMetric,
+      selectedMarca: selectedMarca.length,
+      selectedFilial: selectedFilial.length,
+      monthRange: `${monthRange.start}-${monthRange.end}`,
+      comparisonMode
+    });
+
     // Debounce: aguardar 500ms antes de gerar
     const timeoutId = setTimeout(() => {
       const generateSummary = async () => {
@@ -267,13 +275,14 @@ export const DashboardEnhanced: React.FC<DashboardEnhancedProps> = (props) => {
       // Não resetar isGeneratingRef aqui, pois pode cancelar geração em andamento
     };
   }, [
-    transactions,
+    // ⚡ APENAS FILTROS - removido transactions e kpis para evitar loop
+    // transactions e kpis são lidos dentro do useEffect mas não disparam re-geração
     selectedMarca,
     selectedFilial,
-    monthRange,
+    monthRange.start,
+    monthRange.end,
     branchMetric,
-    comparisonMode,
-    kpis
+    comparisonMode
   ]);
 
   // ============================================
