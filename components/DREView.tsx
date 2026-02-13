@@ -317,14 +317,36 @@ const DREView: React.FC<DREViewProps> = ({
 
   // 🎯 ANÁLISE AUTOMÁTICA: Calcular top desvios sempre que dados mudam
   useEffect(() => {
-    if (!summaryRows || summaryRows.length === 0 || analysisMode === 'none') {
+    console.log('🔍 ANÁLISE DE DESVIOS:', {
+      summaryRowsLength: summaryRows?.length || 0,
+      analysisMode,
+      temDados: !!summaryRows && summaryRows.length > 0
+    });
+
+    if (!summaryRows || summaryRows.length === 0) {
+      console.warn('⚠️ Sem dados para analisar');
+      setTopDeviations([]);
+      return;
+    }
+
+    if (analysisMode === 'none') {
+      console.log('ℹ️ Modo "none" - análise desabilitada');
       setTopDeviations([]);
       return;
     }
 
     const deviations: typeof topDeviations = [];
+    let realCount = 0, budgetCount = 0, a1Count = 0;
 
     // Analisar cada linha do summary
+    summaryRows.forEach(row => {
+      if (row.scenario === 'Real') realCount++;
+      if (row.scenario === 'Orçado') budgetCount++;
+      if (row.scenario === 'A-1') a1Count++;
+    });
+
+    console.log('📊 Cenários disponíveis:', { realCount, budgetCount, a1Count });
+
     summaryRows.forEach(row => {
       const label = row.tag01 || row.tag0 || 'Sem classificação';
       const category = row.tag0 || '';
@@ -385,7 +407,20 @@ const DREView: React.FC<DREViewProps> = ({
     deviations.sort((a, b) => Math.abs(b.variation) - Math.abs(a.variation));
 
     // Pegar top 10
-    setTopDeviations(deviations.slice(0, 10));
+    const top10 = deviations.slice(0, 10);
+    console.log('✅ Análise concluída:', {
+      totalDesvios: deviations.length,
+      top10Length: top10.length,
+      primeiroDesvio: top10[0] || null
+    });
+
+    if (top10.length > 0) {
+      console.log('🎯 Top 3 maiores desvios:', top10.slice(0, 3));
+    } else {
+      console.warn('⚠️ Nenhum desvio ≥ 10% encontrado');
+    }
+
+    setTopDeviations(top10);
   }, [summaryRows, analysisMode]);
 
   const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
