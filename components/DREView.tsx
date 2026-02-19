@@ -335,9 +335,9 @@ const DREView: React.FC<DREViewProps> = ({
   // Modo de visualização: 'scenario' (por cenário) ou 'month' (por mês)
   const [viewMode, setViewMode] = useState<'scenario' | 'month'>('scenario');
 
-  // 🎨 V3: MODO FIXO COMO DETALHADO (sem botões de toggle)
-  const presentationMode: 'detailed' = 'detailed';
-  const setPresentationMode = () => {}; // Função vazia para compatibilidade
+  // 🎨 Usar modo de apresentação externo (controlado pelo App.tsx)
+  const presentationMode = externalPresentationMode || 'detailed';
+  const setPresentationMode = externalSetPresentationMode || (() => {});
 
   // 🎨 V2: LAYOUT DOS CARDS (compacto, médio, expandido, lista)
   const [cardLayout, setCardLayout] = useState<'compact' | 'medium' | 'expanded' | 'list'>('compact'); // 🔧 Padrão: compact
