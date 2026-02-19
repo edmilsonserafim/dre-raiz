@@ -1545,7 +1545,7 @@ const DREView: React.FC<DREViewProps> = ({
     hasChildren: boolean = false,
     accumulatedFilters: Record<string, string> = {}
   ) => {
-    const isExpanded = expandedRows[id];
+    const isExpanded = expandedRows[id] ?? true; // ✅ Expandido por padrão se não definido
 
     // Obter valores para todos os cenários
     // level 1-2: dados do summary (getValues), level 3+: drill-down dinâmico
