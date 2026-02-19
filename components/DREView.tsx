@@ -702,16 +702,20 @@ const DREView: React.FC<DREViewProps> = ({
     }
   }, []); // 🔧 SEM DEPENDÊNCIAS - usa refs para valores atuais
 
-  // Carregar dados na montagem e quando filtros mudam
+  // 🚫 DESABILITADO: useEffect automático causava loop infinito
+  // Agora o fetch só acontece:
+  // 1. Na montagem inicial (useEffect abaixo)
+  // 2. Quando usuário clica no botão "Atualizar"
+  //
+  // Se precisar reativar no futuro, investigar por que arrays estão mudando de referência
+  /*
   useEffect(() => {
-    // ⚠️ Pular primeira montagem - fetchDREData será chamado manualmente após componente montar
     if (isFirstMount.current) {
       isFirstMount.current = false;
       console.log('🔧 [SKIP] Primeira montagem - aguardando inicialização de filtros...');
       return;
     }
 
-    // 🔧 Comparar valores anteriores com atuais (evitar fetch desnecessário)
     const arraysEqual = (a: string[], b: string[]) =>
       a.length === b.length && a.every((val, idx) => val === b[idx]);
 
@@ -720,40 +724,21 @@ const DREView: React.FC<DREViewProps> = ({
     const tags01Changed = !arraysEqual(selectedTags01, prevTags01Ref.current);
     const yearChanged = currentYear !== prevYearRef.current;
 
-    console.log('🔍 [CHECK] Verificando mudanças reais:', {
-      marcasChanged,
-      filiaisChanged,
-      tags01Changed,
-      yearChanged
-    });
-
     if (!marcasChanged && !filiaisChanged && !tags01Changed && !yearChanged) {
       console.log('⏭️ [SKIP] Valores não mudaram, pulando fetch');
       return;
     }
 
-    // Atualizar valores anteriores
     prevMarcasRef.current = [...selectedMarcas];
     prevFiliaisRef.current = [...selectedFiliais];
     prevTags01Ref.current = [...selectedTags01];
     prevYearRef.current = currentYear;
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔄 [TRIGGER] useEffect detectou mudança REAL nos filtros!');
-    console.log('   currentYear:', currentYear);
-    console.log('   selectedMarcas:', selectedMarcas);
-    console.log('   selectedFiliais:', selectedFiliais);
-    console.log('   selectedTags01:', selectedTags01);
-    console.log('   ⚡ LIMPANDO dados antigos e chamando fetchDREData()...');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-    // 🎯 LIMPAR dados antigos ANTES de buscar novos (evita race condition no useMemo)
     setSummaryRows([]);
     setDimensionCache({});
-
     fetchDREData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+  */
 
   // 🚀 Fetch inicial APENAS na montagem do componente
   useEffect(() => {
