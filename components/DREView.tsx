@@ -1554,15 +1554,8 @@ const DREView: React.FC<DREViewProps> = ({
     const filtersKey = Object.entries(accFilters).sort().map(([k, v]) => `${k}=${v}`).join('&');
     const cacheKey = `${scenario}|${categories.sort().join(',')}|${dimensionKey}|${filtersKey}`;
 
-    // 🔧 Verificar cache via setState callback (acessa valor atual sem dependência)
-    let shouldLoad = true;
-    setDimensionCache(prev => {
-      if (prev[cacheKey]) {
-        shouldLoad = false;
-      }
-      return prev; // Não muda o estado
-    });
-    if (!shouldLoad) return; // Já carregado
+    // 🔧 Remover verificação de cache - deixar sempre carregar
+    // (a verificação estava causando problemas de travamento)
 
     const monthFrom = `${year}-01`;
     const monthTo = `${year}-12`;
