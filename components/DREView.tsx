@@ -4349,37 +4349,6 @@ const DREView: React.FC<DREViewProps> = ({
       {/* 🎨 V2: TABELA DETALHADA (só mostra se presentationMode === 'detailed') */}
       {presentationMode === 'detailed' && (
       <>
-        {/* Seção informativa do modo de visualização */}
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 shadow-sm p-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-1.5 rounded-lg shadow-sm">
-              <Brain size={14} className="text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-900">💡 Modo Detalhado</span>
-              <div className="h-4 w-px bg-indigo-300" />
-              <p className="text-xs text-gray-700">
-                <span className="font-bold text-indigo-600">
-                  {(() => {
-                    const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
-                    const totalTag0 = Object.keys(dreStructure.data).length;
-                    const displayedTag0 = showOnlyEbitda
-                      ? Object.values(dreStructure.data).filter(n => ebitdaPrefixes.some(p => n.label.startsWith(p))).length
-                      : totalTag0;
-                    return `${displayedTag0}/${totalTag0}`;
-                  })()}
-                </span>
-                <span className="text-gray-600 ml-1">Tag0</span>
-                {showOnlyEbitda && (
-                  <span className="ml-1 text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                    EBITDA
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
       <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-2xl overflow-hidden relative">
         {/* Loading overlay */}
         {isLoadingDRE && (
