@@ -1544,34 +1544,49 @@ const DREView: React.FC<DREViewProps> = ({
     scenario: string,
     accFilters: Record<string, string> = {}
   ) => {
+    // 🔧 Usar refs para obter valores atuais (evita recriar função)
+    const year = currentYearRef.current;
+    const marcas = selectedMarcasRef.current;
+    const filiais = selectedFiliaisRef.current;
+    const tags01 = selectedTags01Ref.current;
+
     // Cache key inclui accumulatedFilters para diferenciar marca QI vs CGS
     const filtersKey = Object.entries(accFilters).sort().map(([k, v]) => `${k}=${v}`).join('&');
     const cacheKey = `${scenario}|${categories.sort().join(',')}|${dimensionKey}|${filtersKey}`;
-    if (dimensionCache[cacheKey]) return; // Já carregado
 
-    const monthFrom = `${currentYear}-01`;
-    const monthTo = `${currentYear}-12`;
+    // 🔧 Verificar cache via setState callback (acessa valor atual sem dependência)
+    let shouldLoad = true;
+    setDimensionCache(prev => {
+      if (prev[cacheKey]) {
+        shouldLoad = false;
+      }
+      return prev; // Não muda o estado
+    });
+    if (!shouldLoad) return; // Já carregado
+
+    const monthFrom = `${year}-01`;
+    const monthTo = `${year}-12`;
 
     // Merge filtros do dropdown + filtros acumulados do drill-down
     let mergedMarcas = accFilters.marca
       ? [accFilters.marca]
-      : (selectedMarcas.length > 0 ? selectedMarcas : undefined);
+      : (marcas.length > 0 ? marcas : undefined);
 
     let mergedFiliais = accFilters.nome_filial
       ? [accFilters.nome_filial]
-      : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
+      : (filiais.length > 0 ? filiais : undefined);
 
     // Merge filtros de TAG01, TAG02 e TAG03 (prioriza accFilters do drill-down)
     const mergedTags01 = accFilters.tag01
       ? [accFilters.tag01]
-      : (selectedTags01.length > 0 ? selectedTags01 : undefined);
+      : (tags01.length > 0 ? tags01 : undefined);
     const mergedTags02 = accFilters.tag02 ? [accFilters.tag02] : undefined;
     const mergedTags03 = accFilters.tag03 ? [accFilters.tag03] : undefined;
 
     console.log('🔍 [DRILL-DOWN] Usando filtros:', {
       accFilters,
-      selectedMarcas,
-      selectedFiliais,
+      marcas,
+      filiais,
       mergedMarcas,
       mergedFiliais
     });
@@ -1606,7 +1621,7 @@ const DREView: React.FC<DREViewProps> = ({
       });
       return newCache;
     });
-  }, [currentYear, selectedMarcas, selectedTags01, dimensionCache]);
+  }, []); // 🔧 SEM DEPENDÊNCIAS - usa refs + setState callback
 
   // 🚨 Helper: Verificar se linha tem alerta de desvio significativo
   const hasDeviationAlert = (label: string): { hasAlert: boolean; deviation?: typeof topDeviations[0] } => {
