@@ -6,6 +6,7 @@ import {
   getDREDimension,
   getDREFilterOptions,
   getMarcasEFiliais,
+  getAllTag01WithTag0,
   DRESummaryRow,
   DREDimensionRow,
   DREFilterOptions
@@ -86,7 +87,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
   // Estado para dados agregados do servidor
   const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
   const [filterOptions, setFilterOptions] = useState<DREFilterOptions>({ marcas: [], nome_filiais: [], tags01: [] });
-
+  // 🆕 TODAS as tag01 do banco (para sempre mostrar, mesmo zeradas)
+  const [allTag01Options, setAllTag01Options] = useState<Array<{ tag0: string; tag01: string }>>([]);
 
   const [isLoadingDRE, setIsLoadingDRE] = useState(true);
   const [dimensionCache, setDimensionCache] = useState<Record<string, DREDimensionRow[]>>({});
@@ -328,23 +330,23 @@ const DREViewV2: React.FC<DREViewProps> = ({
     sessionStorage.setItem('dreFilial', selectedFilial);
   }, [selectedFilial]);
 
-  // Registrar ações para uso externo (App.tsx)
-  useEffect(() => {
-    if (onRegisterActions) {
-      onRegisterActions({
-        refresh: fetchDREData,
-        exportTable: exportAsTable,
-        exportLayout: exportCurrentLayout
-      });
-    }
-  }, [onRegisterActions]);
-
   // Notificar mudanças no loading
   useEffect(() => {
     if (onLoadingChange) {
       onLoadingChange(isLoadingDRE);
     }
   }, [isLoadingDRE, onLoadingChange]);
+
+  // 🆕 Buscar TODAS as tag01 do banco (uma vez na montagem)
+  useEffect(() => {
+    const loadAllTag01Options = async () => {
+      console.log('🏷️ Buscando TODAS as tag01 do banco...');
+      const options = await getAllTag01WithTag0();
+      setAllTag01Options(options);
+      console.log(`✅ ${options.length} tag01 carregadas para sempre mostrar`);
+    };
+    loadAllTag01Options();
+  }, []); // Apenas na montagem
 
   // (Removido: useEffect que buscava filiais dinamicamente - agora usa estrutura da tabela FILIAL)
 
@@ -364,10 +366,10 @@ const DREViewV2: React.FC<DREViewProps> = ({
       const finalTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🔍 [DEBUG FILTROS]');
-      console.log('   selectedMarca:', selectedMarca);
-      console.log('   selectedFilial:', selectedFilial);
-      console.log('   finalMarcas:', finalMarcas);
+      console.log('🔍 [DEBUG FILTROS - fetchDREData]');
+      console.log('   selectedMarca:', JSON.stringify(selectedMarca), '(length:', selectedMarca.length, ')');
+      console.log('   selectedFilial:', JSON.stringify(selectedFilial));
+      console.log('   finalMarcas:', finalMarcas, '← deve ser undefined se marca=TODAS');
       console.log('   finalFiliais:', finalFiliais);
       console.log('   finalTags01:', finalTags01);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -988,6 +990,17 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log('✅ Exportado layout hierárquico Excel com', exportData.length, 'linhas e formatação');
   };
 
+  // Registrar ações para uso externo (App.tsx) - DEPOIS das definições das funções
+  useEffect(() => {
+    if (onRegisterActions) {
+      onRegisterActions({
+        refresh: fetchDREData,
+        exportTable: exportAsTable,
+        exportLayout: exportCurrentLayout
+      });
+    }
+  }, [onRegisterActions, fetchDREData, exportAsTable, exportCurrentLayout]); // 🔥 FIX: Adicionar funções para re-registrar quando mudarem
+
   // ========== CONSTRUIR dataMap E dreStructure A PARTIR DE summaryRows ==========
 
   const dataMap = useMemo(() => {
@@ -1073,6 +1086,11 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarca || 'TODAS'}, Filial: ${selectedFilial || 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
+    // 🆕 Se NÃO há filtro de marca/filial, agregar dados ignorando marca/filial
+    const hasFilter = selectedMarca || selectedFilial;
+    console.log(`🔄 Modo de agregação: ${hasFilter ? 'COM filtro (usar marca/filial)' : 'SEM filtro (ignorar marca/filial)'}`);
+
+    // Processar dados do summaryRows
     filteredRows.forEach(row => {
       const tag0 = row.tag0 || 'Sem Classificação';
       const tag01 = row.tag01 || 'Sem Subclassificação';
@@ -1087,6 +1105,25 @@ const DREViewV2: React.FC<DREViewProps> = ({
       const counts = tag0TypeCount.get(tag0)!;
       counts[row.tipo] = (counts[row.tipo] || 0) + Number(row.tx_count);
     });
+
+    // 🆕 ADICIONAR TODAS as tag01 do banco (para sempre mostrar, mesmo zeradas)
+    if (allTag01Options && allTag01Options.length > 0) {
+      console.log(`📋 Adicionando TODAS as tag01 do banco (${allTag01Options.length} opções)...`);
+      allTag01Options.forEach(({ tag0, tag01 }) => {
+        if (!tag0Map.has(tag0)) {
+          tag0Map.set(tag0, new Map());
+          // Inicializar typeCount com tipo padrão
+          tag0TypeCount.set(tag0, { 'FIXED_COST': 1 });
+        }
+        const tag01Map = tag0Map.get(tag0)!;
+        if (!tag01Map.has(tag01)) {
+          // Tag01 sem dados - adiciona com Set vazio (vai aparecer zerada)
+          tag01Map.set(tag01, new Set());
+        }
+      });
+    } else {
+      console.log('⚠️ allTag01Options ainda não carregado, pulando...');
+    }
 
     const data: Record<string, { label: string; type: string; items: Array<{ id: string; nivel_2_label: string; items: string[] }> }> = {};
 
@@ -1107,11 +1144,20 @@ const DREViewV2: React.FC<DREViewProps> = ({
       data[code] = {
         label: tag0,
         type: predominantType,
-        items: sortedTag01s.map((tag01, jdx) => ({
-          id: `${code}-${jdx}`,
-          nivel_2_label: tag01,
-          items: Array.from(tag01Map.get(tag01)!).sort()
-        }))
+        items: sortedTag01s.map((tag01, jdx) => {
+          const contas = Array.from(tag01Map.get(tag01)!).sort();
+
+          // 🔍 DEBUG: Log para tags específicas
+          if (tag01.toLowerCase().includes('imovel') || tag01.toLowerCase().includes('concession')) {
+            console.log(`🔍 [HIERARQUIA] tag01="${tag01}" tem ${contas.length} contas:`, contas.slice(0, 5));
+          }
+
+          return {
+            id: `${code}-${jdx}`,
+            nivel_2_label: tag01,
+            items: contas
+          };
+        })
       };
     });
 
@@ -1126,22 +1172,43 @@ const DREViewV2: React.FC<DREViewProps> = ({
           .filter(r => r.tag0 === tag0)
           .reduce((sum, r) => sum + Number(r.total_amount), 0);
         console.log(`   ${code}. ${tag0}: R$ ${totalNivel1.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${nivel1.items.length} tag01s)`);
+
+        // 🔍 LOG DETALHADO: Listar TODAS as tag01 dentro deste tag0
+        const tag01List = nivel1.items.map(item => item.nivel_2_label).join(', ');
+        console.log(`      📋 Tag01s: ${tag01List}`);
       }
     });
     console.log('   🏷️ Filtro de marca ativo:', selectedMarca || 'TODAS');
     console.log('   📌 dataVersion:', dataVersion);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return { source: 'data', data };
-  }, [summaryRows, selectedMarca, currentYear, dataVersion]);
+  }, [summaryRows, selectedMarca, currentYear, dataVersion, allTag01Options]);
 
   const getValues = (scenario: string, categories: string[]) => {
     const values = new Array(12).fill(0);
     const scenarioMap = dataMap[scenario] || {};
+
+    // 🔍 DEBUG: Log para tags específicas
+    const isDebugCategory = categories.some(cat =>
+      cat && (cat.toLowerCase().includes('imovel') || cat.toLowerCase().includes('aluguel'))
+    );
+
     categories.forEach(cat => {
       if (scenarioMap[cat]) {
         scenarioMap[cat].forEach((v, i) => values[i] += v);
       }
     });
+
+    if (isDebugCategory) {
+      console.log('🔍 getValues DEBUG:', {
+        scenario,
+        categories,
+        categoriasNoMap: categories.filter(c => scenarioMap[c]).length,
+        total: values.reduce((a,b) => a+b, 0),
+        primeiroMes: values[0]
+      });
+    }
+
     return values;
   };
 

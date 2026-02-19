@@ -571,6 +571,24 @@ export const getDREFilterOptions = async (params: {
 };
 
 /**
+ * 🆕 Buscar TODAS as tag01 com seus tag0 (para mostrar sempre, mesmo zeradas)
+ * Retorna lista completa de tag01 do banco com mapeamento tag0
+ */
+export const getAllTag01WithTag0 = async (): Promise<Array<{ tag0: string; tag01: string }>> => {
+  console.log('🏷️ Buscando TODAS as tag01 com tag0 do banco...');
+
+  const { data, error } = await supabase.rpc('get_all_tag01_with_tag0');
+
+  if (error) {
+    console.error('❌ Erro ao buscar tag01:', error);
+    return [];
+  }
+
+  console.log(`✅ getAllTag01WithTag0: ${data?.length || 0} tag01 encontradas`);
+  return data || [];
+};
+
+/**
  * ✅ Busca estrutura de Marcas e Filiais da tabela TRANSACTIONS
  * Garante que labels são EXATAMENTE as mesmas dos dados
  * Retorna: { marcas: string[], filiais: Array<{marca, label}> }

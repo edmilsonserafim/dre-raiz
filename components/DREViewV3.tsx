@@ -329,17 +329,6 @@ const DREViewV3: React.FC<DREViewProps> = ({
     sessionStorage.setItem('dreFilial', selectedFilial);
   }, [selectedFilial]);
 
-  // Registrar ações para uso externo (App.tsx)
-  useEffect(() => {
-    if (onRegisterActions) {
-      onRegisterActions({
-        refresh: fetchDREData,
-        exportTable: exportAsTable,
-        exportLayout: exportCurrentLayout
-      });
-    }
-  }, [onRegisterActions]);
-
   // Notificar mudanças no loading
   useEffect(() => {
     if (onLoadingChange) {
@@ -1017,6 +1006,17 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
     console.log('✅ Exportado layout hierárquico Excel com', exportData.length, 'linhas e formatação');
   };
+
+  // Registrar ações para uso externo (App.tsx) - DEPOIS das definições das funções
+  useEffect(() => {
+    if (onRegisterActions) {
+      onRegisterActions({
+        refresh: fetchDREData,
+        exportTable: exportAsTable,
+        exportLayout: exportCurrentLayout
+      });
+    }
+  }, [onRegisterActions, fetchDREData, exportAsTable, exportCurrentLayout]); // 🔥 FIX: Adicionar funções para re-registrar quando mudarem
 
   // ========== CONSTRUIR dataMap E dreStructure A PARTIR DE summaryRows ==========
 
