@@ -519,6 +519,13 @@ const DREView: React.FC<DREViewProps> = ({
 
   // ✅ NOVO: Selecionar todas as Tag01 por padrão quando carregar as opções (APENAS UMA VEZ)
   useEffect(() => {
+    console.log('🔍 [useEffect AUTO-SELECT] DISPARADO!', {
+      'filterOptions.tags01.length': filterOptions.tags01.length,
+      'selectedTags01.length': selectedTags01.length,
+      'hasAutoSelectedTags': hasAutoSelectedTags.current,
+      'timestamp': new Date().toISOString()
+    });
+
     // Só ativar se:
     // 1. filterOptions.tags01 tiver dados (foi carregado do servidor)
     // 2. selectedTags01 estiver vazio (nenhuma seleção atual)
@@ -535,12 +542,18 @@ const DREView: React.FC<DREViewProps> = ({
       console.log('✅ Ativando todas as Tag01 por padrão (PRIMEIRA VEZ):', filterOptions.tags01);
       hasAutoSelectedTags.current = true; // Marcar como feito
       setSelectedTags01(filterOptions.tags01);
+    } else {
+      console.log('⏭️ [useEffect AUTO-SELECT] PULADO - condições não atendidas');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterOptions.tags01]); // Apenas filterOptions.tags01 - não incluir selectedTags01 para evitar loop
 
   // Notificar mudanças no loading
   useEffect(() => {
+    console.log('🔍 [useEffect LOADING] DISPARADO!', {
+      'isLoadingDRE': isLoadingDRE,
+      'timestamp': new Date().toISOString()
+    });
     if (onLoadingChange) {
       onLoadingChange(isLoadingDRE);
     }
@@ -622,9 +635,16 @@ const DREView: React.FC<DREViewProps> = ({
 
       // 🔴 ATUALIZAR ESTADO COM NOVOS DADOS
       console.log('🔴 [SET STATE] Atualizando summaryRows com', summary.length, 'linhas');
+      console.log('🔍 [DEBUG] setFilterOptions será chamado com:', {
+        marcas: options.marcas.length,
+        filiais: options.nome_filiais.length,
+        tags01: options.tags01.length,
+        timestamp: new Date().toISOString()
+      });
       // ⚡ CRIAR NOVO ARRAY para forçar React detectar mudança
       setSummaryRows([...summary]);
       setFilterOptions(options);
+      console.log('✅ [SET STATE] setFilterOptions CHAMADO!');
       // 🔄 Incrementar versão para forçar reconstrução de dataMap e dreStructure
       setDataVersion(v => v + 1);
       console.log('✅ [SET STATE] summaryRows atualizado! dataVersion:', dataVersion + 1);
@@ -742,7 +762,9 @@ const DREView: React.FC<DREViewProps> = ({
 
   // 🚀 Fetch inicial APENAS na montagem do componente
   useEffect(() => {
-    console.log('🚀 [MOUNT] Componente montado - iniciando fetch inicial...');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 [MOUNT] COMPONENTE MONTADO - iniciando fetch inicial');
+    console.log('═══════════════════════════════════════════════════════');
     fetchDREData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Array vazio = executa apenas uma vez na montagem
