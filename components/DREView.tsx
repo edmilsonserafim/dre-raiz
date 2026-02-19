@@ -2789,6 +2789,1063 @@ const DREView: React.FC<DREViewProps> = ({
       )}
 
       {/* 🎨 V2: MODO EXECUTIVO COM CARDS - VERSÃO COMPLETA */}
+      {presentationMode === 'executive' && (
+        <div className="space-y-4 pb-4 animate-in fade-in duration-500">
+          {/* Barra de controles do Modo Executivo */}
+          <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 px-4 py-4 rounded-2xl border-2 border-blue-300 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+              {/* Info */}
+              <div className="flex items-center gap-2">
+                <div className="bg-white p-1.5 rounded-lg shadow-sm">
+                  <Activity className="w-4 h-4 text-purple-600" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-xs font-black text-gray-900 leading-tight">💡 Modo Executivo</p>
+                    <p className="text-[10px] text-gray-600 leading-tight">Cards interativos</p>
+                  </div>
+                  {/* 📊 Indicador de Cards Exibidos - inline */}
+                  {(() => {
+                    const totalCards = Object.keys(dreStructure.data).length;
+                    const ebitdaCards = Object.keys(dreStructure.data).filter(code => {
+                      const node = dreStructure.data[code];
+                      const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
+                      return ebitdaPrefixes.some(prefix => node.label.startsWith(prefix));
+                    }).length;
+                    const displayedCards = showOnlyEbitda ? ebitdaCards : totalCards;
+
+                    return (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg shadow-sm">
+                        <Layers size={12} className="text-indigo-600" />
+                        <span className="text-[10px] font-bold text-gray-700 whitespace-nowrap">
+                          <span className="text-indigo-600">{displayedCards}</span>/{totalCards} Tag0
+                        </span>
+                        {showOnlyEbitda && (
+                          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                            EBITDA
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Controles */}
+              <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+                {/* Filtro por Tipo */}
+                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
+                  <span className="text-xs font-bold text-gray-600">Mostrar:</span>
+                  <button
+                    onClick={() => setExecFilterType('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      execFilterType === 'all'
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={() => setExecFilterType('positive')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      execFilterType === 'positive'
+                        ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    ✅ Positivos
+                  </button>
+                  <button
+                    onClick={() => setExecFilterType('negative')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      execFilterType === 'negative'
+                        ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    ❌ Negativos
+                  </button>
+                </div>
+
+                {/* Ordenação */}
+                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
+                  <span className="text-xs font-bold text-gray-600 whitespace-nowrap">Ordenar:</span>
+                  <button
+                    onClick={() => setExecSortBy('alphabetical')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      execSortBy === 'alphabetical'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    A-Z
+                  </button>
+                  <button
+                    onClick={() => setExecSortBy('value')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      execSortBy === 'value'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    💰 Valor
+                  </button>
+                  <button
+                    onClick={() => setExecSortBy('delta')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      execSortBy === 'delta'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    📈 Δ%
+                  </button>
+                </div>
+
+                {/* Layout dos Cards */}
+                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
+                  <span className="text-xs font-bold text-gray-600">Layout:</span>
+                  <button
+                    onClick={() => setCardLayout('compact')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      cardLayout === 'compact'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                    title="Compacto - 4 colunas"
+                  >
+                    ⚡
+                  </button>
+                  <button
+                    onClick={() => setCardLayout('medium')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      cardLayout === 'medium'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                    title="Médio - Comparativo Real vs Orçado (3 colunas)"
+                  >
+                    📊
+                  </button>
+                  <button
+                    onClick={() => setCardLayout('expanded')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      cardLayout === 'expanded'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                    title="Expandido - 2 colunas"
+                  >
+                    📈
+                  </button>
+                  <button
+                    onClick={() => setCardLayout('list')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      cardLayout === 'list'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                    title="Lista - 1 coluna"
+                  >
+                    📋
+                  </button>
+                </div>
+
+                {/* 🎯 Filtro EBITDA: Apenas 01-04 ou Todas */}
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
+                  <span className="text-xs font-bold text-gray-600">Escopo:</span>
+                  <button
+                    onClick={() => setShowOnlyEbitda(!showOnlyEbitda)}
+                    className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      showOnlyEbitda
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+                        : 'bg-gradient-to-r from-gray-600 to-slate-600 text-white shadow-md'
+                    }`}
+                    title={showOnlyEbitda ? 'Mostrando apenas EBITDA (Tag0 01-04)' : 'Mostrando todas as Tag0'}
+                  >
+                    {showOnlyEbitda ? (
+                      <>
+                        <CheckSquare size={14} />
+                        <span>Até EBITDA</span>
+                      </>
+                    ) : (
+                      <>
+                        <Square size={14} />
+                        <span>Todas Tag0</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Botão Comparar (aparece quando 2 cards selecionados) */}
+          {selectedCardsForComparison.length === 2 && (
+            <div className="mb-4 flex justify-center animate-in fade-in slide-in-from-top-4">
+              <button
+                onClick={() => setShowComparison(true)}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 flex items-center gap-2"
+              >
+                <ArrowLeftRight size={20} />
+                Comparar {selectedCardsForComparison.length} Cards Selecionados
+              </button>
+            </div>
+          )}
+
+          {/* Grid de Cards */}
+          <div className={`grid gap-4 ${
+            cardLayout === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' :
+            cardLayout === 'medium' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+            cardLayout === 'expanded' ? 'grid-cols-1 lg:grid-cols-2' :
+            'grid-cols-1'
+          }`}>
+            {Object.keys(dreStructure.data)
+              .map((code) => {
+                const node = dreStructure.data[code];
+                const categories = node.items.flatMap(item => item.items);
+                const realValues = getValues('Real', categories);
+                const orcadoValues = getValues('Orçado', categories);
+
+                // Calcular totais APENAS para o período filtrado
+                const realTotal = realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
+                const orcadoTotal = orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
+                const delta = orcadoTotal !== 0 ? ((realTotal - orcadoTotal) / Math.abs(orcadoTotal) * 100) : 0;
+
+                return { code, node, categories, realValues, orcadoValues, realTotal, orcadoTotal, delta };
+              })
+              // 🎯 Filtrar por EBITDA (apenas tag0 01-04) ou Todas
+              .filter(({ node }) => {
+                if (!showOnlyEbitda) return true; // Mostrar todas
+                // Mostrar apenas tag0s que começam com 01., 02., 03., 04.
+                const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
+                return ebitdaPrefixes.some(prefix => node.label.startsWith(prefix));
+              })
+              // Filtrar por tipo (positive/negative/all)
+              .filter(({ delta }) => {
+                if (execFilterType === 'positive') return delta >= 0;
+                if (execFilterType === 'negative') return delta < 0;
+                return true;
+              })
+              // Ordenar
+              .sort((a, b) => {
+                if (execSortBy === 'alphabetical') return a.node.label.localeCompare(b.node.label);
+                if (execSortBy === 'value') return Math.abs(b.realTotal) - Math.abs(a.realTotal);
+                if (execSortBy === 'delta') return Math.abs(b.delta) - Math.abs(a.delta);
+                return 0;
+              })
+              .map(({ code, node, categories, realValues, orcadoValues, realTotal, orcadoTotal, delta }, cardIndex) => {
+
+              // Mini sparkline
+              const sparklineData = realValues.slice(selectedMonthStart, selectedMonthEnd + 1);
+              const maxVal = Math.max(...sparklineData);
+              const minVal = Math.min(...sparklineData);
+
+              const isSelected = selectedCardsForComparison.includes(code);
+
+              return (
+                <div
+                  key={code}
+                  className={`bg-white rounded-2xl border-2 shadow-lg hover:shadow-2xl transition-all duration-500 ease-out cursor-pointer animate-in fade-in slide-in-from-bottom-4 group ${
+                    cardLayout === 'list' ? 'flex items-center gap-6 p-4' : 'p-5 hover:scale-105'
+                  } ${isSelected ? 'border-blue-500 ring-4 ring-blue-200' : 'border-gray-200'}`}
+                  style={{
+                    animationDelay: `${cardIndex * 50}ms`,
+                    transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  {/* Header */}
+                  <div className={`flex items-start justify-between ${cardLayout === 'compact' ? 'mb-2' : 'mb-4'}`}>
+                    <div className="flex-1" onClick={() => {
+                      setPresentationMode('detailed');
+                      const element = document.getElementById(`row-${code}`);
+                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}>
+                      <h3 className={`font-black text-gray-900 ${
+                        cardLayout === 'compact'
+                          ? 'text-sm leading-tight line-clamp-2'
+                          : 'text-lg'
+                      }`}>{node.label}</h3>
+                      <p className={`text-gray-500 font-semibold ${
+                        cardLayout === 'compact' ? 'text-[10px]' : 'text-xs'
+                      }`}>{node.items.length} subgrupos</p>
+                    </div>
+
+                    {/* Ações do Card */}
+                    <div className="flex items-center gap-2">
+                      <div className={`px-3 py-1 rounded-full text-xs font-black ${
+                        delta >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                      }`}>
+                        {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
+                      </div>
+
+                      {/* Botão Export */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportIndividualCard(code, node.label, realValues, orcadoValues);
+                        }}
+                        className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
+                        title="Exportar este card"
+                      >
+                        <Download size={14} />
+                      </button>
+
+                      {/* Checkbox para Comparação */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCardSelection(code);
+                        }}
+                        className={`p-2 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                        }`}
+                        title={isSelected ? "Remover da comparação" : "Adicionar para comparar (máx 2)"}
+                      >
+                        {isSelected ? <CheckCircle size={14} /> : <Plus size={14} />}
+                      </button>
+
+                      {/* Botão Expandir Gráfico (apenas para layouts médio e expandido) */}
+                      {(cardLayout === 'medium' || cardLayout === 'expanded') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFullscreenChart({
+                              code,
+                              label: node.label,
+                              realValues,
+                              orcadoValues,
+                              layout: cardLayout
+                            });
+                          }}
+                          className="p-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 transition-colors"
+                          title="Expandir gráfico em tela cheia"
+                        >
+                          <Maximize2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Valor Principal */}
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500 font-semibold mb-1">Real (YTD)</p>
+                    <p className="text-2xl font-black text-gray-900">
+                      {realTotal >= 0 ? 'R$ ' : '-R$ '}
+                      {formatValue(realTotal / 1000)}
+                    </p>
+                  </div>
+
+                  {/* 🎨 V2: Sparkline com Estilos Diferentes por Layout */}
+                  <div className={`relative ${cardLayout === 'compact' ? 'h-8' : cardLayout === 'list' ? 'h-16 w-64' : cardLayout === 'expanded' ? 'h-20' : 'h-16'} mb-3`}>
+                    {/* COMPACTO: Barras finas verticais */}
+                    {cardLayout === 'compact' && (
+                      <div className="flex items-end gap-px h-full">
+                        {sparklineData.map((val, idx) => {
+                          const height = maxVal !== minVal ? ((val - minVal) / (maxVal - minVal)) * 100 : 50;
+                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                          const monthName = months[selectedMonthStart + idx] || `M${idx + 1}`;
+                          return (
+                            <div key={idx} className="relative flex-1 group/bar" onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)} onMouseLeave={() => setHoveredSparkline(null)}>
+                              <div className={`w-full rounded-t transition-all ${val >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ height: `${height}%` }} />
+                              {hoveredSparkline === `${code}-${idx}` && (
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-[10px] font-bold rounded shadow-xl z-50 whitespace-nowrap">
+                                  {monthName}: {formatValue(val / 1000)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* MÉDIO: Barras Agrupadas (Real vs Orçado lado a lado) */}
+                    {cardLayout === 'medium' && (
+                      <div className="flex items-end gap-1 h-full px-1">
+                        {sparklineData.map((realVal, idx) => {
+                          const orcadoVal = orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)[idx] || 0;
+
+                          // Normalizar alturas baseado no maior/menor valor entre Real e Orçado
+                          const allValues = [...sparklineData, ...orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)];
+                          const maxValue = Math.max(...allValues);
+                          const minValue = Math.min(...allValues);
+
+                          // Garantir altura mínima de 8% para visibilidade (mesmo quando valor é 0)
+                          const realHeight = Math.max(8, maxValue !== minValue ? ((realVal - minValue) / (maxValue - minValue)) * 100 : 50);
+                          const orcadoHeight = Math.max(8, maxValue !== minValue ? ((orcadoVal - minValue) / (maxValue - minValue)) * 100 : 50);
+
+                          // Debug: Log para verificar valores (remover depois)
+                          if (idx === 0) {
+                            console.log(`📊 Card ${code} - Real: ${realVal}, Orçado: ${orcadoVal}, Heights: R=${realHeight}%, O=${orcadoHeight}%`);
+                          }
+
+                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                          const monthName = months[selectedMonthStart + idx] || `M${idx + 1}`;
+
+                          // Calcular % de variação
+                          const variance = orcadoVal !== 0 ? (((realVal - orcadoVal) / Math.abs(orcadoVal)) * 100) : 0;
+                          const isHovered = hoveredSparkline === `${code}-${idx}`;
+
+                          return (
+                            <div
+                              key={idx}
+                              className="relative flex-1 group/month"
+                              onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)}
+                              onMouseLeave={() => setHoveredSparkline(null)}
+                            >
+                              {/* Container das duas barras */}
+                              <div className="flex items-end gap-0.5 h-full">
+                                {/* Barra REAL (azul/verde) */}
+                                <div className="relative flex-1 flex items-end h-full">
+                                  <div
+                                    className={`w-full rounded-t transition-all duration-300 ${
+                                      realVal >= 0
+                                        ? 'bg-gradient-to-t from-blue-400 to-blue-600 group-hover/month:from-blue-500 group-hover/month:to-blue-700'
+                                        : 'bg-gradient-to-t from-rose-400 to-rose-600 group-hover/month:from-rose-500 group-hover/month:to-rose-700'
+                                    } ${isHovered ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`}
+                                    style={{ height: `${realHeight}%`, minHeight: '4px' }}
+                                  />
+                                </div>
+
+                                {/* Barra ORÇADO (roxo/cinza transparente) */}
+                                <div className="relative flex-1 flex items-end h-full">
+                                  <div
+                                    className={`w-full rounded-t transition-all duration-300 ${
+                                      orcadoVal >= 0
+                                        ? 'bg-gradient-to-t from-purple-300/60 to-purple-500/60 group-hover/month:from-purple-400/70 group-hover/month:to-purple-600/70'
+                                        : 'bg-gradient-to-t from-gray-300/60 to-gray-500/60 group-hover/month:from-gray-400/70 group-hover/month:to-gray-600/70'
+                                    } ${isHovered ? 'ring-2 ring-offset-1 ring-purple-500' : ''}`}
+                                    style={{ height: `${orcadoHeight}%`, minHeight: '4px' }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Tooltip com informações detalhadas */}
+                              {isHovered && (
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs font-bold rounded-lg shadow-xl z-50 whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
+                                  <div className="text-center space-y-1">
+                                    <div className="text-[10px] text-gray-300 font-bold">{monthName}</div>
+                                    <div className="flex items-center gap-2 text-[10px]">
+                                      <span className="text-blue-400">Real:</span>
+                                      <span className="text-white">{realVal >= 0 ? 'R$ ' : '-R$ '}{formatValue(Math.abs(realVal) / 1000)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px]">
+                                      <span className="text-purple-400">Orç:</span>
+                                      <span className="text-white">{orcadoVal >= 0 ? 'R$ ' : '-R$ '}{formatValue(Math.abs(orcadoVal) / 1000)}</span>
+                                    </div>
+                                    <div className="pt-1 border-t border-gray-700">
+                                      <span className={`text-[11px] font-black ${variance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {variance >= 0 ? '▲' : '▼'} {Math.abs(variance).toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                                </div>
+                              )}
+
+                              {/* Badge de variação (sempre visível no topo) */}
+                              {Math.abs(variance) >= 10 && (
+                                <div className="absolute -top-5 left-1/2 transform -translate-x-1/2">
+                                  <span className={`text-[8px] font-black px-1 py-0.5 rounded ${
+                                    variance >= 0
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-rose-100 text-rose-700'
+                                  }`}>
+                                    {variance >= 0 ? '+' : ''}{variance.toFixed(0)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* EXPANDIDO: Área chart com linha + gradiente */}
+                    {cardLayout === 'expanded' && (
+                      <div className="relative h-full">
+                        <svg className="w-full h-full">
+                          {/* Área preenchida */}
+                          <defs>
+                            <linearGradient id={`gradient-${code}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor={realTotal >= 0 ? '#10b981' : '#ef4444'} stopOpacity="0.6" />
+                              <stop offset="100%" stopColor={realTotal >= 0 ? '#10b981' : '#ef4444'} stopOpacity="0.1" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d={`M 0 ${80} ${sparklineData.map((val, idx) => {
+                              const x = (idx / (sparklineData.length - 1)) * 100;
+                              const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
+                              return `L ${x} ${y}`;
+                            }).join(' ')} L 100 80 Z`}
+                            fill={`url(#gradient-${code})`}
+                          />
+                          {/* Linha */}
+                          <path
+                            d={`M 0 ${maxVal !== minVal ? 80 - ((sparklineData[0] - minVal) / (maxVal - minVal)) * 70 : 40} ${sparklineData.map((val, idx) => {
+                              const x = (idx / (sparklineData.length - 1)) * 100;
+                              const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
+                              return `L ${x} ${y}`;
+                            }).join(' ')}`}
+                            fill="none"
+                            stroke={realTotal >= 0 ? '#059669' : '#dc2626'}
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          {/* Pontos interativos */}
+                          {sparklineData.map((val, idx) => {
+                            const x = (idx / (sparklineData.length - 1)) * 100;
+                            const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
+                            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                            const monthName = months[selectedMonthStart + idx];
+                            return (
+                              <g key={idx}>
+                                <circle
+                                  cx={x}
+                                  cy={y}
+                                  r={hoveredSparkline === `${code}-${idx}` ? 4 : 2.5}
+                                  fill={realTotal >= 0 ? '#059669' : '#dc2626'}
+                                  stroke="white"
+                                  strokeWidth="2"
+                                  className="cursor-pointer transition-all"
+                                  onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)}
+                                  onMouseLeave={() => setHoveredSparkline(null)}
+                                />
+                                {hoveredSparkline === `${code}-${idx}` && (
+                                  <g>
+                                    <rect x={x - 30} y={y - 35} width="60" height="30" rx="4" fill="#1f2937" />
+                                    <text x={x} y={y - 22} textAnchor="middle" fill="#d1d5db" fontSize="9" fontWeight="bold">{monthName}</text>
+                                    <text x={x} y={y - 12} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{formatValue(val / 1000)}</text>
+                                  </g>
+                                )}
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    )}
+
+                    {/* LISTA: Barras horizontais com valores */}
+                    {cardLayout === 'list' && (
+                      <div className="space-y-1">
+                        {sparklineData.map((val, idx) => {
+                          const width = maxVal !== minVal ? ((val - minVal) / (maxVal - minVal)) * 100 : 50;
+                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                          const monthName = months[selectedMonthStart + idx];
+                          return (
+                            <div key={idx} className="flex items-center gap-2 group/bar" onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)} onMouseLeave={() => setHoveredSparkline(null)}>
+                              <span className="text-[9px] font-bold text-gray-500 w-8">{monthName}</span>
+                              <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden relative">
+                                <div className={`h-full rounded-full transition-all duration-300 ${val >= 0 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-rose-400 to-rose-600'} ${hoveredSparkline === `${code}-${idx}` ? 'ring-2 ring-blue-500' : ''}`} style={{ width: `${width}%` }} />
+                              </div>
+                              <span className={`text-[10px] font-black w-16 text-right ${val >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {formatValue(val / 1000)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer com Legenda Visual para Layout Médio */}
+                  {cardLayout === 'medium' ? (
+                    <div className="space-y-2">
+                      {/* Legenda Real vs Orçado */}
+                      <div className="flex items-center justify-center gap-3 text-[10px]">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-blue-400 to-blue-600"></div>
+                          <span className="text-gray-600 font-bold">Real</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-purple-300/60 to-purple-500/60"></div>
+                          <span className="text-gray-600 font-bold">Orçado</span>
+                        </div>
+                      </div>
+                      {/* Delta Total */}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                        <span className="text-gray-500 font-semibold">Variação Total</span>
+                        <span className={`font-black ${(realTotal - orcadoTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {(realTotal - orcadoTotal) >= 0 ? '+' : '-'}{formatValue(Math.abs(realTotal - orcadoTotal))}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">vs Orçado</span>
+                      <span className={`font-black ${(realTotal - orcadoTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {(realTotal - orcadoTotal) >= 0 ? '+' : '-'}{formatValue(Math.abs(realTotal - orcadoTotal))}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 🎨 V2: Botão Ver Detalhes com Animação */}
+                  <button
+                    className={`w-full px-4 py-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white rounded-xl font-bold text-sm hover:shadow-2xl transition-all duration-300 hover:scale-105 group-hover:from-blue-700 group-hover:via-purple-700 group-hover:to-pink-700 ${
+                      cardLayout === 'compact' ? 'py-1.5 text-xs mt-2' : 'mt-4'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPresentationMode('detailed');
+                      setTimeout(() => {
+                        const element = document.getElementById(`row-${code}`);
+                        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                  >
+                    <span className="flex items-center justify-center gap-2">
+                      <span>Ver Detalhes</span>
+                      <span className="group-hover:translate-x-1 transition-transform">→</span>
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 📊 MODAL FULLSCREEN - Gráfico Ampliado */}
+      {fullscreenChart && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-8 animate-in fade-in duration-200">
+          {/* Container do Gráfico */}
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col animate-in zoom-in-95 duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900">{fullscreenChart.label}</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Período: {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][selectedMonthStart]} - {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][selectedMonthEnd]} {currentYear}
+                </p>
+              </div>
+              <button
+                onClick={() => setFullscreenChart(null)}
+                className="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                title="Fechar"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Corpo do Gráfico */}
+            <div className="flex-1 p-8 overflow-hidden flex flex-col">
+              {fullscreenChart.layout === 'medium' ? (
+                // Gráfico de Barras Agrupadas (Real vs Orçado)
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* Legenda */}
+                  <div className="flex items-center justify-center gap-6 mb-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-gradient-to-t from-blue-400 to-blue-600"></div>
+                      <span className="text-sm font-bold text-gray-700">Real</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-gradient-to-t from-purple-300/60 to-purple-500/60"></div>
+                      <span className="text-sm font-bold text-gray-700">Orçado</span>
+                    </div>
+                  </div>
+
+                  {/* Gráfico */}
+                  <div className="flex-1 flex items-end gap-4 px-8 pb-12">
+                    {fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).map((realVal, idx) => {
+                      const orcadoVal = fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)[idx] || 0;
+                      const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                      const monthName = months[selectedMonthStart + idx];
+
+                      // Normalização baseada no valor máximo absoluto (escala proporcional)
+                      const allValues = [
+                        ...fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).map(v => Math.abs(v)),
+                        ...fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).map(v => Math.abs(v))
+                      ];
+                      const maxValue = Math.max(...allValues);
+
+                      // Barras proporcionais ao valor (partindo de zero)
+                      const realHeight = maxValue > 0 ? Math.max(3, (Math.abs(realVal) / maxValue) * 100) : 50;
+                      const orcadoHeight = maxValue > 0 ? Math.max(3, (Math.abs(orcadoVal) / maxValue) * 100) : 50;
+
+                      const variance = orcadoVal !== 0 ? (((realVal - orcadoVal) / Math.abs(orcadoVal)) * 100) : 0;
+
+                      const deltaAbs = realVal - orcadoVal;
+                      const isHovered = fullscreenHoveredMonth === idx;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex-1 flex flex-col items-center group relative"
+                          onMouseEnter={() => setFullscreenHoveredMonth(idx)}
+                          onMouseLeave={() => setFullscreenHoveredMonth(null)}
+                        >
+                          {/* Tooltip Detalhado */}
+                          {isHovered && (
+                            <div className="absolute bottom-full mb-4 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                              <div className="bg-gray-900 text-white rounded-xl shadow-2xl p-4 min-w-[220px]">
+                                <div className="text-center space-y-2">
+                                  <div className="text-sm font-black text-gray-300 border-b border-gray-700 pb-2">
+                                    {monthName} {currentYear}
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-xs text-blue-400 font-semibold">Real:</span>
+                                      <span className="text-sm font-black text-white">
+                                        R$ {(Math.abs(realVal) / 1000).toFixed(2).replace('.', ',')}K
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-xs text-purple-400 font-semibold">Orçado:</span>
+                                      <span className="text-sm font-black text-white">
+                                        R$ {(Math.abs(orcadoVal) / 1000).toFixed(2).replace('.', ',')}K
+                                      </span>
+                                    </div>
+
+                                    <div className="border-t border-gray-700 pt-2 mt-2 space-y-1">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-xs text-gray-400 font-semibold">Δ %:</span>
+                                        <span className={`text-sm font-black ${
+                                          variance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                        }`}>
+                                          {variance >= 0 ? '+' : ''}{variance.toFixed(1)}%
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-xs text-gray-400 font-semibold">Δ R$:</span>
+                                        <span className={`text-sm font-black ${
+                                          deltaAbs >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                        }`}>
+                                          {deltaAbs >= 0 ? '+' : ''}R$ {(Math.abs(deltaAbs) / 1000).toFixed(2).replace('.', ',')}K
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Seta do tooltip */}
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Valores no topo */}
+                          <div className="mb-2 space-y-1 text-center min-h-[60px] flex flex-col justify-end">
+                            <div className="text-xs font-bold text-blue-600">
+                              {formatValue(Math.abs(realVal) / 1000)}
+                            </div>
+                            <div className="text-xs font-bold text-purple-600">
+                              {formatValue(Math.abs(orcadoVal) / 1000)}
+                            </div>
+                            {Math.abs(variance) >= 5 && (
+                              <div className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                variance >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                              }`}>
+                                {variance >= 0 ? '+' : ''}{variance.toFixed(0)}%
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Barras */}
+                          <div className={`flex items-end gap-2 flex-1 w-full transition-all duration-200 ${
+                            isHovered ? 'scale-105' : ''
+                          }`}>
+                            {/* Barra Real */}
+                            <div className="flex-1 flex items-end h-full">
+                              <div
+                                className={`w-full rounded-t-lg transition-all ${
+                                  realVal >= 0
+                                    ? 'bg-gradient-to-t from-blue-400 to-blue-600'
+                                    : 'bg-gradient-to-t from-rose-400 to-rose-600'
+                                }`}
+                                style={{ height: `${realHeight}%`, minHeight: '20px' }}
+                              />
+                            </div>
+
+                            {/* Barra Orçado */}
+                            <div className="flex-1 flex items-end h-full">
+                              <div
+                                className={`w-full rounded-t-lg transition-all ${
+                                  orcadoVal >= 0
+                                    ? 'bg-gradient-to-t from-purple-300/60 to-purple-500/60'
+                                    : 'bg-gradient-to-t from-gray-300/60 to-gray-500/60'
+                                }`}
+                                style={{ height: `${orcadoHeight}%`, minHeight: '20px' }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Label do mês */}
+                          <div className="mt-3 text-sm font-bold text-gray-700">
+                            {monthName}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Label do Eixo X */}
+                  <div className="text-center mt-4">
+                    <span className="text-sm font-bold text-gray-600">Meses</span>
+                  </div>
+                </div>
+              ) : (
+                // Gráfico de Área/Linha (Expandido)
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 relative overflow-hidden">
+                    {/* Tooltip HTML para gráfico expandido */}
+                    {fullscreenHoveredMonth !== null && (() => {
+                      const hoveredIdx = fullscreenHoveredMonth;
+                      const realVal = fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1)[hoveredIdx];
+                      const orcadoVal = fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)[hoveredIdx];
+                      const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                      const monthName = months[selectedMonthStart + hoveredIdx];
+                      const variance = orcadoVal !== 0 ? (((realVal - orcadoVal) / Math.abs(orcadoVal)) * 100) : 0;
+                      const deltaAbs = realVal - orcadoVal;
+
+                      const sparklineData = fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1);
+                      const maxVal = Math.max(...sparklineData);
+                      const minVal = Math.min(...sparklineData);
+
+                      // Calcular posição do tooltip (proporção no SVG viewBox 1000x500)
+                      const xPercent = (hoveredIdx / (sparklineData.length - 1)) * 90 + 5; // 5% offset inicial
+                      const yValue = maxVal !== minVal ? 450 - ((realVal - minVal) / (maxVal - minVal)) * 400 : 250;
+                      const yPercent = (yValue / 500) * 100;
+
+                      return (
+                        <div
+                          className="absolute z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+                          style={{
+                            left: `${xPercent}%`,
+                            top: `${yPercent}%`,
+                            transform: 'translate(-50%, -120%)'
+                          }}
+                        >
+                          <div className="bg-gray-900 text-white rounded-xl shadow-2xl p-4 min-w-[220px]">
+                            <div className="text-center space-y-2">
+                              <div className="text-sm font-black text-gray-300 border-b border-gray-700 pb-2">
+                                {monthName} {currentYear}
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-xs text-emerald-400 font-semibold">Real:</span>
+                                  <span className="text-sm font-black text-white">
+                                    R$ {(Math.abs(realVal) / 1000).toFixed(2).replace('.', ',')}K
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-xs text-purple-400 font-semibold">Orçado:</span>
+                                  <span className="text-sm font-black text-white">
+                                    R$ {(Math.abs(orcadoVal) / 1000).toFixed(2).replace('.', ',')}K
+                                  </span>
+                                </div>
+
+                                <div className="border-t border-gray-700 pt-2 mt-2 space-y-1">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs text-gray-400 font-semibold">Δ %:</span>
+                                    <span className={`text-sm font-black ${
+                                      variance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                    }`}>
+                                      {variance >= 0 ? '+' : ''}{variance.toFixed(1)}%
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs text-gray-400 font-semibold">Δ R$:</span>
+                                    <span className={`text-sm font-black ${
+                                      deltaAbs >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                    }`}>
+                                      {deltaAbs >= 0 ? '+' : ''}R$ {(Math.abs(deltaAbs) / 1000).toFixed(2).replace('.', ',')}K
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            {/* Seta do tooltip */}
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <svg className="w-full h-full" viewBox="0 0 1000 550" preserveAspectRatio="xMidYMid meet">
+                      {/* Grid lines */}
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <line
+                          key={i}
+                          x1="50"
+                          y1={50 + i * 100}
+                          x2="950"
+                          y2={50 + i * 100}
+                          stroke="#e5e7eb"
+                          strokeWidth="1"
+                        />
+                      ))}
+
+                      {/* Eixos */}
+                      <line x1="50" y1="50" x2="50" y2="450" stroke="#374151" strokeWidth="2" />
+                      <line x1="50" y1="450" x2="950" y2="450" stroke="#374151" strokeWidth="2" />
+
+                      {/* Label do eixo X */}
+                      <text x="500" y="530" textAnchor="middle" fill="#6b7280" fontSize="18" fontWeight="bold">
+                        Meses
+                      </text>
+
+                      {(() => {
+                        const sparklineData = fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1);
+                        const maxVal = Math.max(...sparklineData);
+                        const minVal = Math.min(...sparklineData);
+                        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+                        return (
+                          <>
+                            {/* Área preenchida */}
+                            <defs>
+                              <linearGradient id="fullscreen-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                                <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
+                              </linearGradient>
+                            </defs>
+                            <path
+                              d={`M 50 450 ${sparklineData.map((val, idx) => {
+                                const x = 50 + (idx / (sparklineData.length - 1)) * 900;
+                                const y = maxVal !== minVal ? 450 - ((val - minVal) / (maxVal - minVal)) * 400 : 250;
+                                return `L ${x} ${y}`;
+                              }).join(' ')} L 950 450 Z`}
+                              fill="url(#fullscreen-gradient)"
+                            />
+
+                            {/* Linha */}
+                            <path
+                              d={`M ${sparklineData.map((val, idx) => {
+                                const x = 50 + (idx / (sparklineData.length - 1)) * 900;
+                                const y = maxVal !== minVal ? 450 - ((val - minVal) / (maxVal - minVal)) * 400 : 250;
+                                return `${x} ${y}`;
+                              }).join(' L ')}`}
+                              fill="none"
+                              stroke="#059669"
+                              strokeWidth="4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+
+                            {/* Pontos com valores */}
+                            {sparklineData.map((val, idx) => {
+                              const x = 50 + (idx / (sparklineData.length - 1)) * 900;
+                              const y = maxVal !== minVal ? 450 - ((val - minVal) / (maxVal - minVal)) * 400 : 250;
+                              const monthName = months[selectedMonthStart + idx];
+                              const isHovered = fullscreenHoveredMonth === idx;
+
+                              return (
+                                <g key={idx}>
+                                  {/* Área de hover maior (invisível) */}
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r="25"
+                                    fill="transparent"
+                                    className="cursor-pointer"
+                                    onMouseEnter={() => setFullscreenHoveredMonth(idx)}
+                                    onMouseLeave={() => setFullscreenHoveredMonth(null)}
+                                  />
+                                  {/* Ponto */}
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r={isHovered ? "12" : "8"}
+                                    fill="#059669"
+                                    stroke="white"
+                                    strokeWidth="3"
+                                    className="transition-all pointer-events-none"
+                                  />
+                                  {/* Valor acima do ponto */}
+                                  <text
+                                    x={x}
+                                    y={y - 20}
+                                    textAnchor="middle"
+                                    fill="#059669"
+                                    fontSize="16"
+                                    fontWeight="bold"
+                                  >
+                                    {formatValue(val / 1000)}
+                                  </text>
+                                  {/* Label do mês */}
+                                  <text
+                                    x={x}
+                                    y={470}
+                                    textAnchor="middle"
+                                    fill="#374151"
+                                    fontSize="14"
+                                    fontWeight="bold"
+                                  >
+                                    {monthName}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer com estatísticas */}
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="grid grid-cols-4 gap-6">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-semibold">Total Real</p>
+                  <p className="text-xl font-black text-blue-600">
+                    {formatValue(fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0) / 1000)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-semibold">Total Orçado</p>
+                  <p className="text-xl font-black text-purple-600">
+                    {formatValue(fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0) / 1000)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-semibold">Variação Absoluta</p>
+                  <p className={`text-xl font-black ${
+                    (fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0) -
+                     fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0)) >= 0
+                      ? 'text-emerald-600'
+                      : 'text-rose-600'
+                  }`}>
+                    {((fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0) -
+                       fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0)) >= 0 ? '+' : '')}
+                    {formatValue((fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0) -
+                                  fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0)) / 1000)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-semibold">Variação %</p>
+                  <p className={`text-xl font-black ${
+                    (() => {
+                      const real = fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
+                      const orcado = fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
+                      return ((real - orcado) / Math.abs(orcado)) * 100 >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                    })()
+                  }`}>
+                    {(() => {
+                      const real = fullscreenChart.realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
+                      const orcado = fullscreenChart.orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
+                      const variance = orcado !== 0 ? ((real - orcado) / Math.abs(orcado)) * 100 : 0;
+                      return `${variance >= 0 ? '+' : ''}${variance.toFixed(1)}%`;
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
       {/* 📊 MODAL FULLSCREEN - Gráfico Ampliado */}
       {fullscreenChart && (
