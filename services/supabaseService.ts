@@ -311,9 +311,14 @@ export const getTag03Options = async (): Promise<string[]> => {
 };
 
 export const getFiliais = async (): Promise<FilialOption[]> => {
-  if (cachedFiliais) return cachedFiliais;
+  console.log('🔍 [MARCA] getFiliais() CHAMADO');
 
-  console.log('🏢 Carregando tabela filial...');
+  if (cachedFiliais) {
+    console.log('🔍 [MARCA] Retornando cache:', cachedFiliais.length, 'filiais');
+    return cachedFiliais;
+  }
+
+  console.log('🏢 [MARCA] Buscando tabela FILIAL no banco...');
   const { data, error } = await supabase
     .from('filial')
     .select('cia, filial, nomefilial')
@@ -321,9 +326,12 @@ export const getFiliais = async (): Promise<FilialOption[]> => {
     .order('nomefilial', { ascending: true });
 
   if (error) {
-    console.error('❌ Erro ao carregar filiais:', error);
+    console.error('❌ [MARCA] ERRO ao carregar filiais:', error);
     return [];
   }
+
+  console.log('🔍 [MARCA] Dados brutos recebidos:', data?.length, 'registros');
+  console.log('🔍 [MARCA] Sample:', data?.slice(0, 3));
 
   // Agrupar por cia+nomefilial (label) → coletar todos os códigos de filial do grupo
   const groupMap = new Map<string, FilialOption>();
@@ -346,7 +354,8 @@ export const getFiliais = async (): Promise<FilialOption[]> => {
   }
   cachedFiliais = Array.from(groupMap.values());
 
-  console.log(`✅ ${cachedFiliais.length} filiais carregadas (agrupadas por cia+nome)`);
+  console.log(`✅ [MARCA] ${cachedFiliais.length} filiais processadas`);
+  console.log('✅ [MARCA] CIAs únicas:', [...new Set(cachedFiliais.map(f => f.cia))]);
   return cachedFiliais;
 };
 
@@ -397,6 +406,8 @@ export interface DRESummaryRow {
   tag02: string;
   tag03: string;
   tipo: string;        // type (REVENUE, FIXED_COST, etc.)
+  marca: string;
+  nome_filial: string;
   total_amount: number;
   tx_count: number;
 }
@@ -421,18 +432,22 @@ export const getDRESummary = async (params: {
   monthFrom?: string;
   monthTo?: string;
   marcas?: string[];
-  nomeFiliais?: string[];
+  nomeFiliais?: string[];  // ✅ Labels completas: ["GT - Bosque", "QI - Central"]
   tags01?: string[];
 }): Promise<DRESummaryRow[]> => {
   console.log('📊 getDRESummary: Buscando dados agregados...', params);
 
-  const { data, error } = await supabase.rpc('get_dre_summary', {
+  const rpcParams = {
     p_month_from: params.monthFrom || null,
     p_month_to: params.monthTo || null,
     p_marcas: params.marcas && params.marcas.length > 0 ? params.marcas : null,
     p_nome_filiais: params.nomeFiliais && params.nomeFiliais.length > 0 ? params.nomeFiliais : null,
     p_tags01: params.tags01 && params.tags01.length > 0 ? params.tags01 : null,
-  });
+  };
+
+  console.log('🔍 RPC params sendo enviados:', rpcParams);
+
+  const { data, error } = await supabase.rpc('get_dre_summary', rpcParams);
 
   if (error) {
     console.error('❌ Erro ao buscar DRE summary:', error);
@@ -440,6 +455,13 @@ export const getDRESummary = async (params: {
   }
 
   console.log(`✅ getDRESummary: ${data?.length || 0} linhas agregadas retornadas`);
+
+  // Se retornou 0 linhas com filtros, pode ser problema de matching
+  if (data?.length === 0 && (rpcParams.p_marcas || rpcParams.p_nome_filiais || rpcParams.p_tags01)) {
+    console.warn('⚠️ ATENÇÃO: Filtros aplicados mas nenhum resultado retornado!');
+    console.warn('🔍 Verifique se os valores dos filtros correspondem exatamente ao banco de dados');
+  }
+
   return (data || []) as DRESummaryRow[];
 };
 
@@ -546,6 +568,59 @@ export const getDREFilterOptions = async (params: {
   const result = data?.[0] || { marcas: [], nome_filiais: [], tags01: [] };
   console.log(`✅ getDREFilterOptions: ${result.marcas?.length || 0} marcas, ${result.nome_filiais?.length || 0} filiais, ${result.tags01?.length || 0} tags01`);
   return result as DREFilterOptions;
+};
+
+/**
+ * ✅ Busca estrutura de Marcas e Filiais da tabela TRANSACTIONS
+ * Garante que labels são EXATAMENTE as mesmas dos dados
+ * Retorna: { marcas: string[], filiais: Array<{marca, label}> }
+ */
+export const getMarcasEFiliais = async (): Promise<{
+  marcas: string[];
+  filiais: Array<{ marca: string; label: string }>;
+}> => {
+  console.log('🏢 Buscando marcas e filiais da tabela transactions...');
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('marca, nome_filial')
+    .not('marca', 'is', null)
+    .not('nome_filial', 'is', null);
+
+  if (error) {
+    console.error('❌ Erro ao buscar marcas e filiais:', error);
+    return { marcas: [], filiais: [] };
+  }
+
+  console.log(`✅ Query retornou ${data?.length || 0} registros`);
+
+  // Criar conjunto único de combinações marca + nome_filial
+  const filiaisSet = new Set<string>();
+  const filiaisArray: Array<{ marca: string; label: string }> = [];
+
+  (data || []).forEach(row => {
+    const key = `${row.marca}|${row.nome_filial}`;
+    if (!filiaisSet.has(key)) {
+      filiaisSet.add(key);
+      filiaisArray.push({
+        marca: row.marca,
+        label: row.nome_filial
+      });
+    }
+  });
+
+  // Ordenar
+  filiaisArray.sort((a, b) => {
+    if (a.marca !== b.marca) return a.marca.localeCompare(b.marca);
+    return a.label.localeCompare(b.label);
+  });
+
+  const marcasUnicas = [...new Set(filiaisArray.map(f => f.marca))].sort();
+
+  console.log(`✅ Encontradas ${marcasUnicas.length} marcas e ${filiaisArray.length} filiais`);
+  console.log(`   Marcas:`, marcasUnicas);
+
+  return { marcas: marcasUnicas, filiais: filiaisArray };
 };
 
 // ========== TRANSACTIONS ==========

@@ -10,14 +10,15 @@ import { Toaster } from 'sonner';
 // Lazy loading de views pesadas (carregam sob demanda)
 const KPIsView = React.lazy(() => import('./components/KPIsView'));
 const AnalysisView = React.lazy(() => import('./components/AnalysisView'));
-const DREView = React.lazy(() => import('./components/DREView'));
+const DREView = React.lazy(() => import('./components/DREViewV2'));
 const ManualChangesView = React.lazy(() => import('./components/ManualChangesView'));
 const TransactionsView = React.lazy(() => import('./components/TransactionsView'));
 const ForecastingView = React.lazy(() => import('./components/ForecastingView'));
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
+const DREViewV3 = React.lazy(() => import('./components/DREViewV3'));
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
-import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X } from 'lucide-react';
+import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X, Activity, Table as TableIcon, RefreshCw, Download, ChevronDown } from 'lucide-react';
 import * as supabaseService from './services/supabaseService';
 import { useAuth } from './contexts/AuthContext';
 import { usePermissions } from './hooks/usePermissions';
@@ -62,6 +63,26 @@ const App: React.FC = () => {
     const saved = sessionStorage.getItem('drillDownActiveTab');
     return saved ? JSON.parse(saved) : undefined;
   });
+
+  // Estado para controlar visualização da DRE (Executivo/Detalhado)
+  const [presentationMode, setPresentationMode] = useState<'executive' | 'detailed'>(() => {
+    const saved = sessionStorage.getItem('drePresentationMode');
+    return (saved as 'executive' | 'detailed') || 'executive';
+  });
+
+  // Salvar presentationMode no sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('drePresentationMode', presentationMode);
+  }, [presentationMode]);
+
+  // Estados para ações do DRE
+  const [dreActions, setDreActions] = useState<{
+    refresh?: () => void;
+    exportTable?: () => void;
+    exportLayout?: () => void;
+  }>({});
+  const [isDreLoading, setIsDreLoading] = useState(false);
+  const [isDreExportOpen, setIsDreExportOpen] = useState(false);
 
   // Usar transactions do Context em vez de estado local
   const transactions = contextTransactions;
@@ -776,6 +797,116 @@ const App: React.FC = () => {
 
             {/* Indicador de Sincronização - Fase 2 */}
             <TransactionsSyncUI />
+
+            {/* Toggle Modo Executivo/Detalhado - DRE (estilo switch) */}
+            {currentView === 'dre' && (
+              <div className="relative inline-flex items-center bg-gray-200 rounded-full p-0.5 shadow-inner">
+                {/* Track do switch */}
+                <div
+                  className={`absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] bg-gradient-to-r from-purple-600 to-blue-600 rounded-full shadow-md transition-all duration-300 ease-in-out ${
+                    presentationMode === 'executive' ? 'left-0.5' : 'left-[calc(50%+0.5px)]'
+                  }`}
+                />
+
+                {/* Botão Executivo */}
+                <button
+                  onClick={() => setPresentationMode('executive')}
+                  className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition-all ${
+                    presentationMode === 'executive'
+                      ? 'text-white'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <Activity size={12} />
+                  <span>Executivo</span>
+                </button>
+
+                {/* Botão Detalhado */}
+                <button
+                  onClick={() => setPresentationMode('detailed')}
+                  className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider transition-all ${
+                    presentationMode === 'detailed'
+                      ? 'text-white'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <TableIcon size={12} />
+                  <span>Detalhado</span>
+                </button>
+              </div>
+            )}
+
+            {/* Botões de Ação DRE (Exportar e Atualizar) */}
+            {currentView === 'dre' && (
+              <>
+                {/* Botão Exportar */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsDreExportOpen(!isDreExportOpen)}
+                    disabled={isDreLoading}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-[10px] uppercase tracking-wider shadow-md"
+                    title="Exportar dados da DRE"
+                  >
+                    <Download size={14} />
+                    <span className="whitespace-nowrap">Exportar</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${isDreExportOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown de exportação */}
+                  {isDreExportOpen && (
+                    <div className="absolute top-full mt-1 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 min-w-[200px] overflow-hidden">
+                      <button
+                        onClick={() => {
+                          dreActions.exportTable?.();
+                          setIsDreExportOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left text-xs font-semibold text-gray-700"
+                      >
+                        <TableIcon size={16} className="text-blue-600" />
+                        <div>
+                          <div className="font-bold">Exportar Tabela</div>
+                          <div className="text-[10px] text-gray-500 font-normal">CSV agregado</div>
+                        </div>
+                      </button>
+                      <div className="h-px bg-gray-100" />
+                      <button
+                        onClick={() => {
+                          dreActions.exportLayout?.();
+                          setIsDreExportOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left text-xs font-semibold text-gray-700"
+                      >
+                        <Download size={16} className="text-green-600" />
+                        <div>
+                          <div className="font-bold">Exportar Layout</div>
+                          <div className="text-[10px] text-gray-500 font-normal">Visual atual</div>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botão Atualizar */}
+                <button
+                  onClick={() => dreActions.refresh?.()}
+                  disabled={isDreLoading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-[10px] uppercase tracking-wider shadow-md"
+                  title="Atualizar dados da DRE"
+                >
+                  {isDreLoading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span className="whitespace-nowrap">Atualizando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={14} />
+                      <span className="whitespace-nowrap">Atualizar</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </div>
 
           {showGlobalFilters && (
@@ -848,12 +979,10 @@ const App: React.FC = () => {
               <Suspense fallback={<LoadingSpinner message="Carregando DRE..." />}>
                 <DREView
                   onDrillDown={handleDrillDown}
-                  allowedMarcas={allowedMarcas}
-                  allowedFiliais={allowedFiliais}
-                  allowedCategories={allowedCategories}
-                  allowedTag01={allowedTag01}
-                  allowedTag02={allowedTag02}
-                  allowedTag03={allowedTag03}
+                  presentationMode={presentationMode}
+                  setPresentationMode={setPresentationMode}
+                  onRegisterActions={setDreActions}
+                  onLoadingChange={setIsDreLoading}
                 />
               </Suspense>
             </div>
@@ -877,6 +1006,11 @@ const App: React.FC = () => {
                 allowedFiliais={allowedFiliais}
                 allowedCategories={allowedCategories}
               />
+            </Suspense>
+          )}
+          {currentView === 'dre-v2' && (
+            <Suspense fallback={<LoadingSpinner message="Carregando DRE V2..." />}>
+              <DREViewV3 />
             </Suspense>
           )}
           {currentView === 'admin' && (

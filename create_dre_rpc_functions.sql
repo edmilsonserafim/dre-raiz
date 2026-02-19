@@ -62,6 +62,7 @@ $$;
 
 -- 1B. get_dre_dimension: Detalhe por dimensão dinâmica (drill-down)
 DROP FUNCTION IF EXISTS get_dre_dimension(text, text, text[], text, text, text[], text[], text[]);
+DROP FUNCTION IF EXISTS get_dre_dimension(text, text, text[], text, text, text[], text[], text[], text[], text[]);
 
 CREATE OR REPLACE FUNCTION get_dre_dimension(
   p_month_from text DEFAULT NULL,
@@ -71,7 +72,9 @@ CREATE OR REPLACE FUNCTION get_dre_dimension(
   p_dimension text DEFAULT 'marca',
   p_marcas text[] DEFAULT NULL,
   p_nome_filiais text[] DEFAULT NULL,
-  p_tags01 text[] DEFAULT NULL
+  p_tags01 text[] DEFAULT NULL,
+  p_tags02 text[] DEFAULT NULL,  -- ✅ NOVO: Filtro por tag02
+  p_tags03 text[] DEFAULT NULL   -- ✅ NOVO: Filtro por tag03
 )
 RETURNS TABLE(
   dimension_value text,
@@ -82,7 +85,8 @@ LANGUAGE plpgsql STABLE
 AS $$
 BEGIN
   -- Validar nome da coluna para prevenir SQL injection
-  IF p_dimension NOT IN ('tag02', 'tag03', 'category', 'marca', 'nome_filial', 'vendor', 'ticket', 'responsavel') THEN
+  -- ✅ ATUALIZADO: Adicionado 'tag01' como dimensão válida
+  IF p_dimension NOT IN ('tag01', 'tag02', 'tag03', 'category', 'marca', 'nome_filial', 'vendor', 'ticket', 'responsavel') THEN
     RAISE EXCEPTION 'Dimensão inválida: %', p_dimension;
   END IF;
 
@@ -100,11 +104,13 @@ BEGIN
        AND ($5 IS NULL OR t.marca = ANY($5))
        AND ($6 IS NULL OR t.nome_filial = ANY($6))
        AND ($7 IS NULL OR t.tag01 = ANY($7))
+       AND ($8 IS NULL OR t.tag02 = ANY($8))  -- ✅ NOVO: Filtro tag02
+       AND ($9 IS NULL OR t.tag03 = ANY($9))  -- ✅ NOVO: Filtro tag03
      GROUP BY COALESCE(CAST(%I AS text), ''N/A''), substring(t.date, 1, 7)',
     p_dimension, p_dimension
   )
   USING p_month_from, p_month_to, p_conta_contabils, p_scenario,
-        p_marcas, p_nome_filiais, p_tags01;
+        p_marcas, p_nome_filiais, p_tags01, p_tags02, p_tags03;  -- ✅ Adicionados no USING
 END;
 $$;
 
