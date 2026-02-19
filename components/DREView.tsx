@@ -406,6 +406,12 @@ const DREView: React.FC<DREViewProps> = ({
   const selectedFiliaisRef = useRef(selectedFiliais);
   const selectedTags01Ref = useRef(selectedTags01);
 
+  // 🔧 Refs para valores anteriores (detectar mudanças reais)
+  const prevMarcasRef = useRef<string[]>([]);
+  const prevFiliaisRef = useRef<string[]>([]);
+  const prevTags01Ref = useRef<string[]>([]);
+  const prevYearRef = useRef<number>(currentYear);
+
   // Atualizar refs quando valores mudam
   useEffect(() => { currentYearRef.current = currentYear; }, [currentYear]);
   useEffect(() => { selectedMarcasRef.current = selectedMarcas; }, [selectedMarcas]);
@@ -705,8 +711,35 @@ const DREView: React.FC<DREViewProps> = ({
       return;
     }
 
+    // 🔧 Comparar valores anteriores com atuais (evitar fetch desnecessário)
+    const arraysEqual = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((val, idx) => val === b[idx]);
+
+    const marcasChanged = !arraysEqual(selectedMarcas, prevMarcasRef.current);
+    const filiaisChanged = !arraysEqual(selectedFiliais, prevFiliaisRef.current);
+    const tags01Changed = !arraysEqual(selectedTags01, prevTags01Ref.current);
+    const yearChanged = currentYear !== prevYearRef.current;
+
+    console.log('🔍 [CHECK] Verificando mudanças reais:', {
+      marcasChanged,
+      filiaisChanged,
+      tags01Changed,
+      yearChanged
+    });
+
+    if (!marcasChanged && !filiaisChanged && !tags01Changed && !yearChanged) {
+      console.log('⏭️ [SKIP] Valores não mudaram, pulando fetch');
+      return;
+    }
+
+    // Atualizar valores anteriores
+    prevMarcasRef.current = [...selectedMarcas];
+    prevFiliaisRef.current = [...selectedFiliais];
+    prevTags01Ref.current = [...selectedTags01];
+    prevYearRef.current = currentYear;
+
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔄 [TRIGGER] useEffect detectou mudança nos filtros!');
+    console.log('🔄 [TRIGGER] useEffect detectou mudança REAL nos filtros!');
     console.log('   currentYear:', currentYear);
     console.log('   selectedMarcas:', selectedMarcas);
     console.log('   selectedFiliais:', selectedFiliais);
