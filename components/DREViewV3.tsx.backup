@@ -57,9 +57,7 @@ const MultiSelectFilter: React.FC<{
   colorScheme: 'blue' | 'orange' | 'purple';
 }> = React.memo(({ label, icon, options, selected, onChange, colorScheme }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLDivElement>(null);
 
   const colors = {
     blue: {
@@ -124,23 +122,10 @@ const MultiSelectFilter: React.FC<{
     ? selected[0].toUpperCase()
     : `${selected.length} SELECIONADAS`;
 
-  // Calcular posição do dropdown quando abrir
-  const handleToggle = () => {
-    if (!isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 8,
-        left: rect.left
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-
   return (
     <div ref={dropdownRef} className="relative">
       <div
-        ref={buttonRef}
-        onClick={handleToggle}
+        onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
           hasSelection ? `${scheme.border} ring-4 ${scheme.ring}` : scheme.borderLight
         }`}
@@ -159,43 +144,58 @@ const MultiSelectFilter: React.FC<{
         </div>
       </div>
 
-      {/* Dropdown - position fixed para "explodir" fora do container */}
+      {/* Dropdown */}
       {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="fixed bg-white rounded-md border border-gray-300 shadow-lg z-[9999] w-[200px] max-h-[320px] overflow-hidden flex flex-col"
-          style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}
-        >
-          {/* Header */}
-          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-            <span className="text-xs font-semibold text-gray-700">Selecione</span>
+        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg border-2 border-gray-200 shadow-xl z-[9999] min-w-[240px] max-h-[400px] overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* Header with actions */}
+          <div className="p-2 border-b border-gray-100 flex gap-2">
+            <button
+              onClick={selectAll}
+              className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
+            >
+              Selecionar Todas
+            </button>
             <button
               onClick={clearAll}
-              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+              className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
             >
               Limpar
             </button>
           </div>
 
-          {/* Options list - interface limpa */}
-          <div className="overflow-y-auto">
+          {/* Options list */}
+          <div className="overflow-y-auto flex-1">
             {options.map((option) => {
               const isSelected = selected.includes(option);
               return (
-                <div
+                <label
                   key={option}
-                  onClick={() => toggleOption(option)}
-                  className={`px-3 py-2.5 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
-                    isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-50 text-gray-700'
-                  }`}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{option}</span>
-                    {isSelected && <Check size={14} className="text-blue-600" />}
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                    isSelected
+                      ? `${scheme.border} ${scheme.bg}`
+                      : 'border-gray-300'
+                  }`}>
+                    {isSelected && <Check size={12} className="text-white" />}
                   </div>
-                </div>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleOption(option)}
+                    className="sr-only"
+                  />
+                  <span className="text-xs font-bold text-gray-900">{option}</span>
+                </label>
               );
             })}
+          </div>
+
+          {/* Footer with count */}
+          <div className="p-2 border-t border-gray-100 bg-gray-50">
+            <span className="text-[9px] font-bold text-gray-600">
+              {selected.length} de {options.length} selecionada(s)
+            </span>
           </div>
         </div>
       )}
@@ -234,7 +234,7 @@ const DRE_DIMENSIONS = [
   { id: 'ticket', label: 'Ticket' },
 ];
 
-const DREViewV2: React.FC<DREViewProps> = ({
+const DREViewV3: React.FC<DREViewProps> = ({
   onDrillDown,
   onRefresh,
   isRefreshing = false,
@@ -244,7 +244,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
   onRegisterActions,
   onLoadingChange
 }) => {
-  // console.log('🚀 DREViewV2: Componente montado');
+  // console.log('🚀 DREViewV3: Componente montado');
 
   // Estado para dados agregados do servidor
   const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
@@ -345,7 +345,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
   // 🎨 V2: FILTROS DO MODO EXECUTIVO
   const [execFilterType, setExecFilterType] = useState<'all' | 'positive' | 'negative'>('all');
   const [execSortBy, setExecSortBy] = useState<'alphabetical' | 'value' | 'delta'>('value');
-  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(true); // ✅ ATIVO por padrão - mostra até EBITDA
+  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(false); // V3: Desativado - sem Tag0, mostrar todas as linhas
 
   // 🎨 V2: Estado para hover nos sparklines (formato: "code-barIndex")
   const [hoveredSparkline, setHoveredSparkline] = useState<string | null>(null);
@@ -1020,16 +1020,14 @@ const DREViewV2: React.FC<DREViewProps> = ({
       const node = dreStructure.data[code];
       if (!node) return;
 
-      // items é Record<tag01, contas[]> - flatten para exportar
-      const tag01Items = node.items as Record<string, string[]>;
-      const categories = Object.values(tag01Items).flat();
+      // 🔥 ATUALIZADO: Agora temos apenas 1 nível fixo (Type → Contas direto)
+      const categories = node.items as string[];
 
       console.log(`🔍 [EXPORT] Processando ${code} - ${node.label}`);
-      console.log(`   Tag01s count: ${Object.keys(tag01Items).length}`);
-      console.log(`   Total categories: ${categories.length}`);
+      console.log(`   Categories count: ${categories.length}`);
       console.log(`   Sample categories:`, categories.slice(0, 3));
 
-      // Linha tag0 (Nível 1)
+      // Linha Type (Nível 1) - único nível fixo
       const tag0Row: any[] = [node.label];
 
       for (let idx = selectedMonthStart; idx <= selectedMonthEnd; idx++) {
@@ -1076,7 +1074,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
       exportData.push(tag0Row);
       rowLevels.push(1);
 
-      // Tag01s podem ser exportados em drill-down separado se necessário
+      // 🔥 REMOVIDO: Não temos mais nível 2 fixo (Tag01)
+      // Os dados detalhados estão no drill-down, não na exportação básica
     };
 
     // Processar todos os níveis TAG0
@@ -1310,8 +1309,9 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log('📦 Linhas por marca:', porMarca);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    // ✅ Hierarquia ORIGINAL: tag0 → tag01 → conta_contabil
-    const tag0Map = new Map<string, Map<string, Set<string>>>(); // tag0 → tag01 → contas
+    // 🔥 V3 TESTE: Hierarquia com APENAS 1 NÍVEL (Type), sem Tag01
+    // Type → drill-down direto (Tag02, Tag03, etc)
+    const typeMap = new Map<string, Set<string>>(); // Type → Contas
 
     // ✅ DADOS JÁ VÊM FILTRADOS DO RPC - não precisa filtrar localmente!
     const filteredRows = summaryRows;
@@ -1319,60 +1319,67 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial: ${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
-    // Agrupar por tag0 → tag01 → conta_contabil (hierarquia completa)
+    // Agrupar apenas por Type → Contas (SEM Tag01 intermediário)
     filteredRows.forEach(row => {
-      const tag0 = row.tag0 || 'Sem Tag0';
-      const tag01 = row.tag01 || 'Sem Tag01';
+      const type = row.tipo || 'Sem Type';
       const conta = row.conta_contabil;
 
-      // Criar estrutura hierárquica de 3 níveis
-      if (!tag0Map.has(tag0)) tag0Map.set(tag0, new Map());
-      const tag01Map = tag0Map.get(tag0)!;
-      if (!tag01Map.has(tag01)) tag01Map.set(tag01, new Set());
-      tag01Map.get(tag01)!.add(conta);
+      // Criar estrutura de 1 único nível fixo
+      if (!typeMap.has(type)) typeMap.set(type, new Set());
+      typeMap.get(type)!.add(conta);
     });
 
     const data: Record<string, {
       label: string;
       type: string;
-      items: Record<string, string[]> | string[]; // tag01 → contas OU array direto de contas
+      items: string[]; // Direto: array de contas (SEM nível intermediário)
     }> = {};
 
-    // Ordenar tag0s
-    const sortedTag0s = Array.from(tag0Map.keys()).sort((a, b) => {
-      // Ordenar por prefixo numérico (01., 02., etc)
-      const matchA = a.match(/^(\d+)\./);
-      const matchB = b.match(/^(\d+)\./);
-      if (matchA && matchB) {
-        return parseInt(matchA[1]) - parseInt(matchB[1]);
-      }
-      return a.localeCompare(b);
+    // Ordenar Types
+    const sortedTypes = Array.from(typeMap.keys()).sort((a, b) => {
+      const typeOrder: Record<string, number> = {
+        'REVENUE': 1,
+        'VARIABLE_COST': 2,
+        'FIXED_COST': 3,
+        'SGA': 4,
+        'RATEIO': 5,
+        'Sem Type': 99
+      };
+      return (typeOrder[a] || 50) - (typeOrder[b] || 50);
     });
 
-    // Construir hierarquia completa: tag0 → tag01 → contas
-    sortedTag0s.forEach(tag0 => {
-      const tag01Map = tag0Map.get(tag0)!;
-      const tag01Items: Record<string, string[]> = {};
+    // Construir hierarquia de 1 único nível fixo
+    sortedTypes.forEach((type, typeIdx) => {
+      const code = String(typeIdx + 1).padStart(2, '0');
+      const contas = typeMap.get(type)!;
 
-      tag01Map.forEach((contas, tag01) => {
-        tag01Items[tag01] = Array.from(contas).sort();
-      });
+      // Mapear nome amigável do tipo
+      const typeLabels: Record<string, string> = {
+        'REVENUE': 'Receita',
+        'VARIABLE_COST': 'Custos Variáveis',
+        'FIXED_COST': 'Custos Fixos',
+        'SGA': 'Despesas Administrativas',
+        'RATEIO': 'Rateio',
+        'Sem Type': 'Sem Classificação'
+      };
 
-      data[tag0] = {
-        label: tag0,
-        type: tag0.split('.')[0] || 'outros', // Extrair prefixo numérico
-        items: tag01Items // Hierarquia de tag01 → contas
+      data[code] = {
+        label: typeLabels[type] || type,
+        type: type,
+        items: Array.from(contas).sort() // Array direto de contas
       };
     });
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`✅ [HIERARQUIA ORIGINAL] tag0 → tag01 → conta_contabil`);
-    console.log(`   📊 Total de tag0s: ${sortedTag0s.length}`);
-    sortedTag0s.forEach(tag0 => {
-      const nivel = data[tag0];
-      const totalTag01s = Object.keys(nivel.items).length;
-      const totalContas = Object.values(nivel.items as Record<string, string[]>).reduce((acc, arr) => acc + arr.length, 0);
-      console.log(`   ${tag0}: ${totalTag01s} tag01s, ${totalContas} contas`);
+    console.log(`✅ [HIERARQUIA V3 TESTE] APENAS 1 NÍVEL (Type), sem Tag01`);
+    console.log(`   📊 Total de Types: ${sortedTypes.length}`);
+    sortedTypes.forEach(type => {
+      const code = Object.keys(data).find(k => data[k].type === type);
+      if (code) {
+        const nivel = data[code];
+        const totalContas = nivel.items.length;
+        console.log(`   ${code}. ${data[code].label}: ${totalContas} contas diretas`);
+      }
     });
     console.log('   🏷️ Filtro de marca ativo:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS');
     console.log('   🏢 Filtro de filial ativo:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
@@ -2373,8 +2380,157 @@ const DREViewV2: React.FC<DREViewProps> = ({
     );
   };
 
+  // 🔍 DEBUG: Verificar se dados estão carregados (componente MultiSelectFilter movido para fora)
+
+    const colors = {
+      blue: {
+        border: 'border-[#1B75BB]',
+        borderLight: 'border-gray-100',
+        bg: 'bg-[#1B75BB]',
+        bgLight: 'bg-blue-50',
+        text: 'text-[#1B75BB]',
+        ring: 'ring-[#1B75BB]/10'
+      },
+      orange: {
+        border: 'border-[#F44C00]',
+        borderLight: 'border-gray-100',
+        bg: 'bg-[#F44C00]',
+        bgLight: 'bg-orange-50',
+        text: 'text-[#F44C00]',
+        ring: 'ring-[#F44C00]/10'
+      },
+      purple: {
+        border: 'border-purple-600',
+        borderLight: 'border-gray-100',
+        bg: 'bg-purple-600',
+        bgLight: 'bg-purple-50',
+        text: 'text-purple-600',
+        ring: 'ring-purple-600/10'
+      }
+    };
+
+    const scheme = colors[colorScheme];
+    const hasSelection = selected.length > 0;
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleOption = (option: string) => {
+      if (selected.includes(option)) {
+        onChange(selected.filter(item => item !== option));
+      } else {
+        onChange([...selected, option]);
+      }
+    };
+
+    const selectAll = () => {
+      onChange(options);
+    };
+
+    const clearAll = () => {
+      onChange([]);
+    };
+
+    const displayText = selected.length === 0
+      ? 'TODAS'
+      : selected.length === 1
+      ? selected[0].toUpperCase()
+      : `${selected.length} SELECIONADAS`;
+
+    return (
+      <div ref={dropdownRef} className="relative">
+        <div
+          onClick={() => {
+            console.log(`🖱️ Clicou em ${label}, isOpen antes:`, isOpen, '→ depois:', !isOpen);
+            setIsOpen(!isOpen);
+          }}
+          className={`flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
+            hasSelection ? `${scheme.border} ring-4 ${scheme.ring}` : scheme.borderLight
+          }`}
+        >
+          <div className={`p-1.5 rounded-lg ${hasSelection ? `${scheme.bg} text-white` : `${scheme.bgLight} ${scheme.text}`}`}>
+            {icon}
+          </div>
+          <div className="flex flex-col justify-center">
+            <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-[10px] uppercase tracking-tight text-gray-900 min-w-[100px]">
+                {displayText}
+              </span>
+              <ChevronDown size={12} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </div>
+        </div>
+
+        {/* Dropdown */}
+        {isOpen && (
+          <div className="absolute top-full left-0 mt-2 bg-white rounded-lg border-2 border-gray-200 shadow-xl z-[9999] min-w-[240px] max-h-[400px] overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+            {/* Header with actions */}
+            <div className="p-2 border-b border-gray-100 flex gap-2">
+              <button
+                onClick={selectAll}
+                className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
+              >
+                Selecionar Todas
+              </button>
+              <button
+                onClick={clearAll}
+                className="flex-1 px-2 py-1.5 text-[9px] font-black uppercase bg-gray-100 hover:bg-gray-200 rounded transition-all"
+              >
+                Limpar
+              </button>
+            </div>
+
+            {/* Options list */}
+            <div className="overflow-y-auto flex-1">
+              {options.map((option) => {
+                const isSelected = selected.includes(option);
+                return (
+                  <label
+                    key={option}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                      isSelected
+                        ? `${scheme.border} ${scheme.bg}`
+                        : 'border-gray-300'
+                    }`}>
+                      {isSelected && <Check size={12} className="text-white" />}
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOption(option)}
+                      className="sr-only"
+                    />
+                    <span className="text-xs font-bold text-gray-900">{option}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Footer with count */}
+            <div className="p-2 border-t border-gray-100 bg-gray-50">
+              <span className="text-[9px] font-bold text-gray-600">
+                {selected.length} de {options.length} selecionada(s)
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // 🔍 DEBUG: Verificar se dados estão carregados
-  console.log('🎨 [RENDER DREViewV2]', {
+  console.log('🎨 [RENDER DREViewV3]', {
     marcas: filterOptions.marcas.length,
     filiais: filterOptions.nome_filiais.length,
     tags01: filterOptions.tags01.length,
@@ -2402,31 +2558,45 @@ const DREViewV2: React.FC<DREViewProps> = ({
               colorScheme="orange"
             />
 
-            {/* Filtro de Filial (Unidade) - MULTI-SELEÇÃO */}
-            <MultiSelectFilter
-              label="Filial"
-              icon={<Building2 size={14} />}
-              options={filiaisFiltradas}
-              selected={selectedFiliais}
-              onChange={(newSelection) => {
-                console.log('🏢 Filiais selecionadas:', newSelection);
-                setSelectedFiliais(newSelection);
-              }}
-              colorScheme="blue"
-            />
+            {/* Filtro de Filial (Unidade) */}
+            <div className="flex items-center gap-2">
+              <Building2 size={16} className="text-blue-600 shrink-0" />
+              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Filial:</span>
+              <select
+                value={selectedFiliais[0] || ''}
+                onChange={(e) => {
+                  const novaFilial = e.target.value;
+                  console.log('🏢 Filial selecionada:', novaFilial || 'TODAS');
+                  setSelectedFiliais(novaFilial ? [novaFilial] : []);
+                }}
+                className="bg-white text-[12px] font-bold text-gray-900 border border-blue-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-blue-500 transition-colors"
+              >
+                <option value="">Todas</option>
+                {filiaisFiltradas.map((filial) => (
+                  <option key={filial} value={filial}>{filial}</option>
+                ))}
+              </select>
+            </div>
 
-            {/* Filtro de Tag01 - MULTI-SELEÇÃO */}
-            <MultiSelectFilter
-              label="Tag01"
-              icon={<Layers size={14} />}
-              options={filterOptions.tags01}
-              selected={selectedTags01}
-              onChange={(newSelection) => {
-                console.log('🏷️ Tags01 selecionadas:', newSelection);
-                setSelectedTags01(newSelection);
-              }}
-              colorScheme="purple"
-            />
+            {/* Filtro de Tag01 */}
+            <div className="flex items-center gap-2">
+              <Layers size={16} className="text-purple-600 shrink-0" />
+              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Tag01:</span>
+              <select
+                value={selectedTags01[0] || ''}
+                onChange={(e) => {
+                  const novaTag = e.target.value;
+                  console.log('🏷️ Tag01 selecionada:', novaTag || 'TODAS');
+                  setSelectedTags01(novaTag ? [novaTag] : []);
+                }}
+                className="bg-white text-[12px] font-bold text-gray-900 border border-purple-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-purple-500 transition-colors"
+              >
+                <option value="">Todas</option>
+                {filterOptions.tags01.map((tag) => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Controles de Período */}
             <div className="flex items-center gap-2 scale-100">
@@ -2530,32 +2700,6 @@ const DREViewV2: React.FC<DREViewProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* Separador */}
-            <div className="flex-1" />
-
-            {/* Controle de Escopo EBITDA */}
-            <button
-              onClick={() => setShowOnlyEbitda(!showOnlyEbitda)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-md ${
-                showOnlyEbitda
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                  : 'bg-gradient-to-r from-gray-600 to-slate-600 text-white'
-              }`}
-              title={showOnlyEbitda ? 'Exibindo apenas até EBITDA' : 'Exibindo todas as Tag0'}
-            >
-              {showOnlyEbitda ? (
-                <>
-                  <CheckSquare size={14} strokeWidth={2.5} />
-                  <span>Até EBITDA</span>
-                </>
-              ) : (
-                <>
-                  <Square size={14} strokeWidth={2.5} />
-                  <span>Todas Tag0</span>
-                </>
-              )}
-            </button>
 
             {/* Botão Limpar Filtros (se houver filtros ativos) */}
             {hasAnyFilterActive && (
@@ -3215,38 +3359,6 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
       {/* 🎨 V2: TABELA DETALHADA (só mostra se presentationMode === 'detailed') */}
       {presentationMode === 'detailed' && (
-      <>
-        {/* Seção informativa do modo de visualização */}
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 shadow-sm p-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-1.5 rounded-lg shadow-sm">
-              <Brain size={14} className="text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-900">💡 Modo Detalhado</span>
-              <div className="h-4 w-px bg-indigo-300" />
-              <p className="text-xs text-gray-700">
-                <span className="font-bold text-indigo-600">
-                  {(() => {
-                    const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
-                    const totalTag0 = Object.keys(dreStructure.data).length;
-                    const displayedTag0 = showOnlyEbitda
-                      ? Object.values(dreStructure.data).filter(n => ebitdaPrefixes.some(p => n.label.startsWith(p))).length
-                      : totalTag0;
-                    return `${displayedTag0}/${totalTag0}`;
-                  })()}
-                </span>
-                <span className="text-gray-600 ml-1">Tag0</span>
-                {showOnlyEbitda && (
-                  <span className="ml-1 text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                    EBITDA
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
       <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-2xl overflow-hidden relative">
         {/* Loading overlay */}
         {isLoadingDRE && (
@@ -3514,9 +3626,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
                 const allCostCategories: string[][] = [];      // Todos os custos (para EBITDA)
 
                 entries.forEach(([, nivel1Data]) => {
-                  // items agora é Record<tag01, contas[]> - flatten para pegar todas as contas
-                  const tag01Items = nivel1Data.items as Record<string, string[]>;
-                  const allCats = Object.values(tag01Items).flat();
+                  const allCats = nivel1Data.items as string[];
                   const label = nivel1Data.label;
 
                   if (label.startsWith('01.')) {
@@ -3536,16 +3646,15 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
                 // 🔍 DEBUG: Log para verificar se categories estão corretas
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log('🎨 [RENDERIZAÇÃO] Renderizando tag0 → tag01 → contas');
+                console.log('🎨 [RENDERIZAÇÃO] Renderizando níveis 1 e 2');
                 console.log('   Filtros ativos:', { marca: selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS', filial: selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS' });
-                console.log('   Total de tag0s a renderizar:', entries.length);
+                console.log('   Total de Types a renderizar:', entries.length);
 
                 return (
                   <>
                     {entries.map(([nivel1Code, nivel1Data], entryIdx) => {
-                      // items é Record<tag01, contas[]> - flatten para pegar todas as contas
-                      const tag01Items = nivel1Data.items as Record<string, string[]>;
-                      const allCategories = Object.values(tag01Items).flat();
+                      // 🔥 TESTE: Agora items é array direto de contas (sem Tag01)
+                      const allCategories = nivel1Data.items as string[];
 
                       // 🔍 DEBUG: Verificar se as contas existem no dataMap
                       const contasNoDataMap = allCategories.filter(c => dataMap['Real'][c] !== undefined).length;
@@ -3554,10 +3663,9 @@ const DREViewV2: React.FC<DREViewProps> = ({
                         return sum + vals.reduce((s, v) => s + v, 0);
                       }, 0);
 
-                      // Log para todos os tag0s
+                      // Log para TODOS os Types (não apenas o primeiro)
                       console.log(`   📊 ${nivel1Data.label} (${nivel1Code}):`);
-                      console.log(`      - Total tag01s: ${Object.keys(tag01Items).length}`);
-                      console.log(`      - Total contas: ${allCategories.length}`);
+                      console.log(`      - Total contas na estrutura: ${allCategories.length}`);
                       console.log(`      - Contas no dataMap: ${contasNoDataMap}`);
                       console.log(`      - Valor total Real: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
 
@@ -3595,7 +3703,6 @@ const DREViewV2: React.FC<DREViewProps> = ({
           </table>
         </div>
       </div>
-      </>
       )}
       {/* FIM DO MODO DETALHADO */}
 
@@ -3984,9 +4091,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
                   const node = dreStructure.data[code];
                   if (!node) return null;
 
-                  // items é Record<tag01, contas[]> - flatten
-                  const tag01Items = node.items as Record<string, string[]>;
-                  const categories = Object.values(tag01Items).flat();
+                  const categories = node.items as string[];
                   const realValues = getValues('Real', categories);
                   const orcadoValues = getValues('Orçado', categories);
                   const realTotal = realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
@@ -4008,7 +4113,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
                           }`}>
                             {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
                           </div>
-                          <p className="text-sm text-gray-600 font-semibold">{Object.keys(tag01Items).length} tag01s</p>
+                          <p className="text-sm text-gray-600 font-semibold">{node.items.length} subgrupos</p>
                         </div>
                       </div>
 
@@ -4082,11 +4187,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
                   if (!card1 || !card2) return null;
 
-                  // items é Record<tag01, contas[]> - flatten
-                  const tag01Items1 = card1.items as Record<string, string[]>;
-                  const tag01Items2 = card2.items as Record<string, string[]>;
-                  const categories1 = Object.values(tag01Items1).flat();
-                  const categories2 = Object.values(tag01Items2).flat();
+                  const categories1 = card1.items as string[];
+                  const categories2 = card2.items as string[];
                   const real1 = getValues('Real', categories1).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const real2 = getValues('Real', categories2).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const diff = real1 - real2;
@@ -4124,4 +4226,4 @@ const DREViewV2: React.FC<DREViewProps> = ({
   );
 };
 
-export default DREViewV2;
+export default DREViewV3;

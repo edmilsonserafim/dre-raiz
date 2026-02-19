@@ -42,8 +42,170 @@ import {
   FileSpreadsheet,
   CheckCircle,
   Plus,
-  Maximize2
+  Maximize2,
+  Check
 } from 'lucide-react';
+
+// ========== COMPONENTE EXTERNO: MultiSelectFilter ==========
+// IMPORTANTE: Componente externo para evitar re-criação a cada render
+const MultiSelectFilter: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  options: string[];
+  selected: string[];
+  onChange: (newSelection: string[]) => void;
+  colorScheme: 'blue' | 'orange' | 'purple';
+}> = React.memo(({ label, icon, options, selected, onChange, colorScheme }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
+
+  const colors = {
+    blue: {
+      border: 'border-[#1B75BB]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#1B75BB]',
+      bgLight: 'bg-blue-50',
+      text: 'text-[#1B75BB]',
+      ring: 'ring-[#1B75BB]/10'
+    },
+    orange: {
+      border: 'border-[#F44C00]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#F44C00]',
+      bgLight: 'bg-orange-50',
+      text: 'text-[#F44C00]',
+      ring: 'ring-[#F44C00]/10'
+    },
+    purple: {
+      border: 'border-purple-600',
+      borderLight: 'border-gray-100',
+      bg: 'bg-purple-600',
+      bgLight: 'bg-purple-50',
+      text: 'text-purple-600',
+      ring: 'ring-purple-600/10'
+    }
+  };
+
+  const scheme = colors[colorScheme];
+  const hasSelection = selected.length > 0;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(item => item !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  const selectAll = () => {
+    onChange(options);
+  };
+
+  const clearAll = () => {
+    onChange([]);
+  };
+
+  const displayText = selected.length === 0
+    ? 'TODAS'
+    : selected.length === 1
+    ? selected[0].toUpperCase()
+    : `${selected.length} SELECIONADAS`;
+
+  // Calcular posição do dropdown quando abrir
+  const handleToggle = () => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 8,
+        left: rect.left
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <div
+        ref={buttonRef}
+        onClick={handleToggle}
+        className={`flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
+          hasSelection ? `${scheme.border} ring-4 ${scheme.ring}` : scheme.borderLight
+        }`}
+      >
+        <div className={`p-1.5 rounded-lg ${hasSelection ? `${scheme.bg} text-white` : `${scheme.bgLight} ${scheme.text}`}`}>
+          {icon}
+        </div>
+        <div className="flex flex-col justify-center">
+          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-black text-[10px] uppercase tracking-tight text-gray-900 min-w-[100px]">
+              {displayText}
+            </span>
+            <ChevronDown size={12} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown - position fixed para "explodir" fora do container */}
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          className="fixed bg-white rounded-md border border-gray-300 shadow-lg z-[9999] w-[200px] max-h-[320px] overflow-hidden flex flex-col"
+          style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}
+        >
+          {/* Header */}
+          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+            <span className="text-xs font-semibold text-gray-700">Selecione</span>
+            <button
+              onClick={clearAll}
+              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Limpar
+            </button>
+          </div>
+
+          {/* Options list - interface limpa */}
+          <div className="overflow-y-auto">
+            {options.map((option) => {
+              const isSelected = selected.includes(option);
+              return (
+                <div
+                  key={option}
+                  onClick={() => toggleOption(option)}
+                  className={`px-3 py-2.5 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
+                    isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{option}</span>
+                    {isSelected && <Check size={14} className="text-blue-600" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+MultiSelectFilter.displayName = 'MultiSelectFilter';
+
+// ========== INTERFACE ==========
 
 interface DREViewProps {
   transactions?: Transaction[];  // Mantido para compatibilidade, mas NÃO usado para DRE
@@ -72,7 +234,7 @@ const DRE_DIMENSIONS = [
   { id: 'ticket', label: 'Ticket' },
 ];
 
-const DREViewV3: React.FC<DREViewProps> = ({
+const DREView: React.FC<DREViewProps> = ({
   onDrillDown,
   onRefresh,
   isRefreshing = false,
@@ -82,7 +244,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
   onRegisterActions,
   onLoadingChange
 }) => {
-  // console.log('🚀 DREViewV3: Componente montado');
+  // console.log('🚀 DREViewV2: Componente montado');
 
   // Estado para dados agregados do servidor
   const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
@@ -107,49 +269,51 @@ const DREViewV3: React.FC<DREViewProps> = ({
     const saved = sessionStorage.getItem('dreTags01');
     return saved ? JSON.parse(saved) : [];
   });
-  // Filtros de Marca e Filial removidos da UI (mantidos internamente para compatibilidade)
-  const [selectedMarcas] = useState<string[]>([]);
-  const [selectedFiliais] = useState<string[]>([]);
 
-  // ✅ NOVO: Filtro de Marca (CIA) para DRE Gerencial
-  const [selectedMarca, setSelectedMarca] = useState<string>(() => {
-    const saved = sessionStorage.getItem('dreMarca');
-    return saved || '';
+  // ✅ NOVO: Filtro de Marca (CIA) para DRE Gerencial - MULTI-SELEÇÃO
+  const [selectedMarcas, setSelectedMarcas] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreMarcas');
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // ✅ NOVO: Filtro de Filial (Unidade) para DRE Gerencial
-  const [selectedFilial, setSelectedFilial] = useState<string>(() => {
-    const saved = sessionStorage.getItem('dreFilial');
-    return saved || '';
+  // ✅ NOVO: Filtro de Filial (Unidade) para DRE Gerencial - MULTI-SELEÇÃO
+  const [selectedFiliais, setSelectedFiliais] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreFiliais');
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 🔑 KEY para forçar re-render quando marca ou filial muda
   const componentKey = useMemo(() => {
-    return `marca-${selectedMarca}-filial-${selectedFilial}-${currentYear}`;
-  }, [selectedMarca, selectedFilial, currentYear]);
+    const marcasKey = selectedMarcas.join(',');
+    const filiaisKey = selectedFiliais.join(',');
+    return `marca-${marcasKey}-filial-${filiaisKey}-${currentYear}`;
+  }, [selectedMarcas, selectedFiliais, currentYear]);
 
   // 🔄 Filtrar opções de filial baseado na marca selecionada (cascata)
   const filiaisFiltradas = useMemo(() => {
-    if (!selectedMarca) {
+    if (selectedMarcas.length === 0) {
       // Se nenhuma marca selecionada, mostra todas as filiais
       return filterOptions.nome_filiais;
     }
-    // Filtra filiais que começam com a marca selecionada (ex: "AP - ")
+    // Filtra filiais que começam com alguma das marcas selecionadas (ex: "AP - ")
     return filterOptions.nome_filiais.filter(filial =>
-      filial.startsWith(selectedMarca + ' - ') || filial.startsWith(selectedMarca + '-')
+      selectedMarcas.some(marca =>
+        filial.startsWith(marca + ' - ') || filial.startsWith(marca + '-')
+      )
     );
-  }, [selectedMarca, filterOptions.nome_filiais]);
+  }, [selectedMarcas, filterOptions.nome_filiais]);
 
   // 🔄 Limpar filial selecionada quando mudar marca (se não pertence mais)
   useEffect(() => {
-    if (selectedFilial && selectedMarca) {
-      const filialPertenceMarca = filiaisFiltradas.includes(selectedFilial);
-      if (!filialPertenceMarca) {
-        console.log('⚠️ Filial selecionada não pertence à marca, limpando...');
-        setSelectedFilial('');
+    if (selectedFiliais.length > 0 && selectedMarcas.length > 0) {
+      // Remove filiais que não pertencem mais às marcas selecionadas
+      const filiaisValidas = selectedFiliais.filter(f => filiaisFiltradas.includes(f));
+      if (filiaisValidas.length !== selectedFiliais.length) {
+        console.log('⚠️ Filiais selecionadas não pertencem às marcas, limpando...');
+        setSelectedFiliais(filiaisValidas);
       }
     }
-  }, [selectedMarca, selectedFilial, filiaisFiltradas]);
+  }, [selectedMarcas, selectedFiliais, filiaisFiltradas]);
 
   // 🔄 Versão dos dados para forçar invalidação de cache
   const [dataVersion, setDataVersion] = useState(0);
@@ -181,7 +345,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
   // 🎨 V2: FILTROS DO MODO EXECUTIVO
   const [execFilterType, setExecFilterType] = useState<'all' | 'positive' | 'negative'>('all');
   const [execSortBy, setExecSortBy] = useState<'alphabetical' | 'value' | 'delta'>('value');
-  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(false); // V3: Desativado - sem Tag0, mostrar todas as linhas
+  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(true); // ✅ ATIVO por padrão - mostra até EBITDA
 
   // 🎨 V2: Estado para hover nos sparklines (formato: "code-barIndex")
   const [hoveredSparkline, setHoveredSparkline] = useState<string | null>(null);
@@ -218,6 +382,8 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
   // Estados de UI (Dropdowns abertos)
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
+  const [isMarcaFilterOpen, setIsMarcaFilterOpen] = useState(false);
+  const [isFilialFilterOpen, setIsFilialFilterOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
 
   const [dynamicPath, setDynamicPath] = useState<string[]>([]);
@@ -228,6 +394,8 @@ const DREViewV3: React.FC<DREViewProps> = ({
   });
 
   const tagRef = useRef<HTMLDivElement>(null);
+  const marcaRef = useRef<HTMLDivElement>(null);
+  const filialRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
 
   // Função para formatar valores com separador de milhares (ponto)
@@ -322,12 +490,25 @@ const DREViewV3: React.FC<DREViewProps> = ({
   }, [selectedTags01]);
 
   useEffect(() => {
-    sessionStorage.setItem('dreMarca', selectedMarca);
-  }, [selectedMarca]);
+    sessionStorage.setItem('dreMarcas', JSON.stringify(selectedMarcas));
+  }, [selectedMarcas]);
 
   useEffect(() => {
-    sessionStorage.setItem('dreFilial', selectedFilial);
-  }, [selectedFilial]);
+    sessionStorage.setItem('dreFiliais', JSON.stringify(selectedFiliais));
+  }, [selectedFiliais]);
+
+  // ✅ NOVO: Selecionar todas as Tag01 por padrão quando carregar as opções
+  useEffect(() => {
+    // Só ativar se:
+    // 1. filterOptions.tags01 tiver dados (foi carregado do servidor)
+    // 2. selectedTags01 estiver vazio (nenhuma seleção atual)
+    // 3. Não houver dados salvos no sessionStorage (primeira vez)
+    const savedTags = sessionStorage.getItem('dreTags01');
+    if (filterOptions.tags01.length > 0 && selectedTags01.length === 0 && !savedTags) {
+      console.log('✅ Ativando todas as Tag01 por padrão:', filterOptions.tags01);
+      setSelectedTags01(filterOptions.tags01);
+    }
+  }, [filterOptions.tags01]); // Apenas quando filterOptions.tags01 mudar
 
   // Notificar mudanças no loading
   useEffect(() => {
@@ -336,14 +517,31 @@ const DREViewV3: React.FC<DREViewProps> = ({
     }
   }, [isLoadingDRE, onLoadingChange]);
 
+  // 🖱️ Fechar dropdown de Marca ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (marcaRef.current && !marcaRef.current.contains(event.target as Node)) {
+        setIsMarcaFilterOpen(false);
+      }
+    };
+
+    if (isMarcaFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMarcaFilterOpen]);
+
   // (Removido: useEffect que buscava filiais dinamicamente - agora usa estrutura da tabela FILIAL)
 
   // ========== BUSCA DE DADOS AGREGADOS DO SERVIDOR ==========
   const fetchDREData = useCallback(async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🚀🚀🚀 fetchDREData() CHAMADO!');
-    console.log('   🎯 selectedMarca:', selectedMarca);
-    console.log('   🏢 selectedFilial:', selectedFilial);
+    console.log('   🎯 selectedMarcas:', selectedMarcas);
+    console.log('   🏢 selectedFiliais:', selectedFiliais);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     const fetchId = ++fetchIdRef.current;
@@ -355,14 +553,14 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
     try {
       // Aplicar filtros de Marca e Filial (se selecionados)
-      const finalMarcas = selectedMarca ? [selectedMarca] : undefined;
-      const finalFiliais = selectedFilial ? [selectedFilial] : undefined;
+      const finalMarcas = selectedMarcas.length > 0 ? selectedMarcas : undefined;
+      const finalFiliais = selectedFiliais.length > 0 ? selectedFiliais : undefined;
       const finalTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🔍 [DEBUG FILTROS]');
-      console.log('   selectedMarca:', selectedMarca);
-      console.log('   selectedFilial:', selectedFilial);
+      console.log('   selectedMarcas:', JSON.stringify(selectedMarcas), '(length:', selectedMarcas.length, ')');
+      console.log('   selectedFiliais:', JSON.stringify(selectedFiliais), '(length:', selectedFiliais.length, ')');
       console.log('   finalMarcas:', finalMarcas);
       console.log('   finalFiliais:', finalFiliais);
       console.log('   finalTags01:', finalTags01);
@@ -467,15 +665,15 @@ const DREViewV3: React.FC<DREViewProps> = ({
         setIsLoadingDRE(false);
       }
     }
-  }, [currentYear, selectedMarca, selectedFilial, selectedTags01]); // 🔥 FIX: Mudado para SINGULAR
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]); // 🔥 FIX: Mudado para SINGULAR
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔄 [TRIGGER] useEffect detectou mudança nos filtros!');
     console.log('   currentYear:', currentYear);
-    console.log('   selectedMarca:', selectedMarca);
-    console.log('   selectedFilial:', selectedFilial);
+    console.log('   selectedMarcas:', selectedMarcas);
+    console.log('   selectedFiliais:', selectedFiliais);
     console.log('   selectedTags01:', selectedTags01);
     console.log('   ⚡ LIMPANDO dados antigos e chamando fetchDREData()...');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -486,7 +684,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
     fetchDREData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYear, selectedMarca, selectedFilial, selectedTags01]);
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
 
   // 🔄 REMOVIDO: ATIVADOR causava race condition
   // O dataVersion já é incrementado dentro do fetchDREData() após setSummaryRows
@@ -728,15 +926,15 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
   const clearAllFilters = () => {
     setSelectedTags01([]);
-    setSelectedMarca('');
-    setSelectedFilial('');
+    setSelectedMarcas([]);
+    setSelectedFiliais([]);
   };
 
-  const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarca !== '' || selectedFilial !== '';
+  const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarcas.length > 0 || selectedFiliais.length > 0;
 
   // ========== FUNÇÕES DE EXPORTAÇÃO ==========
 
-  const exportAsTable = () => {
+  const exportAsTable = useCallback(() => {
     console.log('📊 Exportando dados como tabela Excel...');
 
     if (summaryRows.length === 0) {
@@ -776,7 +974,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
     XLSX.writeFile(wb, `DRE_Tabela_${currentYear}.xlsx`);
 
     console.log('✅ Exportado', rows.length, 'linhas como Excel');
-  };
+  }, [summaryRows, currentYear]);
 
   const exportCurrentLayout = () => {
     console.log('📊 Exportando layout atual como Excel formatado...');
@@ -835,14 +1033,16 @@ const DREViewV3: React.FC<DREViewProps> = ({
       const node = dreStructure.data[code];
       if (!node) return;
 
-      // 🔥 ATUALIZADO: Agora temos apenas 1 nível fixo (Type → Contas direto)
-      const categories = node.items as string[];
+      // items é Record<tag01, contas[]> - flatten para exportar
+      const tag01Items = node.items as Record<string, string[]>;
+      const categories = Object.values(tag01Items).flat();
 
       console.log(`🔍 [EXPORT] Processando ${code} - ${node.label}`);
-      console.log(`   Categories count: ${categories.length}`);
+      console.log(`   Tag01s count: ${Object.keys(tag01Items).length}`);
+      console.log(`   Total categories: ${categories.length}`);
       console.log(`   Sample categories:`, categories.slice(0, 3));
 
-      // Linha Type (Nível 1) - único nível fixo
+      // Linha tag0 (Nível 1)
       const tag0Row: any[] = [node.label];
 
       for (let idx = selectedMonthStart; idx <= selectedMonthEnd; idx++) {
@@ -889,8 +1089,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
       exportData.push(tag0Row);
       rowLevels.push(1);
 
-      // 🔥 REMOVIDO: Não temos mais nível 2 fixo (Tag01)
-      // Os dados detalhados estão no drill-down, não na exportação básica
+      // Tag01s podem ser exportados em drill-down separado se necessário
     };
 
     // Processar todos os níveis TAG0
@@ -1025,8 +1224,8 @@ const DREViewV3: React.FC<DREViewProps> = ({
     console.log('🗺️ [MEMO] dataMap sendo RECONSTRUÍDO!');
     console.log('📊 summaryRows.length:', summaryRows.length);
     console.log('🎯 Filtros aplicados:', {
-      marca: selectedMarca || 'TODAS',
-      filial: selectedFilial || 'TODAS',
+      marca: selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS',
+      filial: selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS',
       dataVersion: dataVersion
     });
 
@@ -1035,14 +1234,14 @@ const DREViewV3: React.FC<DREViewProps> = ({
     const filiaisNosdados = [...new Set(summaryRows.map(r => r.nome_filial))];
     console.log('🏷️ Marcas ÚNICAS nos dados:', marcasNosdados);
     console.log('🏢 Filiais ÚNICAS nos dados:', filiaisNosdados);
-    console.log('🎯 Marca selecionada:', selectedMarca || 'TODAS');
-    console.log('🎯 Filial selecionada:', selectedFilial || 'TODAS');
+    console.log('🎯 Marca selecionada:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS');
+    console.log('🎯 Filial selecionada:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
 
     // ✅ DADOS JÁ VÊM FILTRADOS DO RPC - não precisa filtrar localmente!
     // O RPC getDRESummary() já aplica os filtros de marca, filial e tags01 no servidor
     const filteredRows = summaryRows;
 
-    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarca || 'TODAS'}, Filial: ${selectedFilial || 'TODAS'}`);
+    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial: ${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
     const map: Record<string, Record<string, number[]>> = { Real: {}, Orçado: {}, 'A-1': {} };
@@ -1102,12 +1301,12 @@ const DREViewV3: React.FC<DREViewProps> = ({
     console.log('   Real:', Object.keys(map.Real).length, 'contas →', totais.Real.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
     console.log('   Orçado:', Object.keys(map.Orçado).length, 'contas →', totais.Orçado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
     console.log('   A-1:', Object.keys(map['A-1']).length, 'contas →', totais['A-1'].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-    console.log('   🏷️ Filtros ativos - Marca:', selectedMarca || 'TODAS', '| Filial:', selectedFilial || 'TODAS');
+    console.log('   🏷️ Filtros ativos - Marca:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS', '| Filial:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
     console.log('   📌 dataVersion:', dataVersion);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return map;
-  }, [summaryRows, selectedMarca, selectedFilial, currentYear, dataVersion]);
+  }, [summaryRows, selectedMarcas, selectedFiliais, currentYear, dataVersion]);
 
   // Construir hierarquia DRE a partir de summaryRows (tag0 → tag01 → conta_contabil)
   const dreStructure = useMemo(() => {
@@ -1124,84 +1323,76 @@ const DREViewV3: React.FC<DREViewProps> = ({
     console.log('📦 Linhas por marca:', porMarca);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    // 🔥 V3 TESTE: Hierarquia com APENAS 1 NÍVEL (Type), sem Tag01
-    // Type → drill-down direto (Tag02, Tag03, etc)
-    const typeMap = new Map<string, Set<string>>(); // Type → Contas
+    // ✅ Hierarquia ORIGINAL: tag0 → tag01 → conta_contabil
+    const tag0Map = new Map<string, Map<string, Set<string>>>(); // tag0 → tag01 → contas
 
     // ✅ DADOS JÁ VÊM FILTRADOS DO RPC - não precisa filtrar localmente!
     const filteredRows = summaryRows;
 
-    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarca || 'TODAS'}, Filial: ${selectedFilial || 'TODAS'}`);
+    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial: ${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
-    // Agrupar apenas por Type → Contas (SEM Tag01 intermediário)
+    // Agrupar por tag0 → tag01 → conta_contabil (hierarquia completa)
     filteredRows.forEach(row => {
-      const type = row.tipo || 'Sem Type';
+      const tag0 = row.tag0 || 'Sem Tag0';
+      const tag01 = row.tag01 || 'Sem Tag01';
       const conta = row.conta_contabil;
 
-      // Criar estrutura de 1 único nível fixo
-      if (!typeMap.has(type)) typeMap.set(type, new Set());
-      typeMap.get(type)!.add(conta);
+      // Criar estrutura hierárquica de 3 níveis
+      if (!tag0Map.has(tag0)) tag0Map.set(tag0, new Map());
+      const tag01Map = tag0Map.get(tag0)!;
+      if (!tag01Map.has(tag01)) tag01Map.set(tag01, new Set());
+      tag01Map.get(tag01)!.add(conta);
     });
 
     const data: Record<string, {
       label: string;
       type: string;
-      items: string[]; // Direto: array de contas (SEM nível intermediário)
+      items: Record<string, string[]> | string[]; // tag01 → contas OU array direto de contas
     }> = {};
 
-    // Ordenar Types
-    const sortedTypes = Array.from(typeMap.keys()).sort((a, b) => {
-      const typeOrder: Record<string, number> = {
-        'REVENUE': 1,
-        'VARIABLE_COST': 2,
-        'FIXED_COST': 3,
-        'SGA': 4,
-        'RATEIO': 5,
-        'Sem Type': 99
-      };
-      return (typeOrder[a] || 50) - (typeOrder[b] || 50);
+    // Ordenar tag0s
+    const sortedTag0s = Array.from(tag0Map.keys()).sort((a, b) => {
+      // Ordenar por prefixo numérico (01., 02., etc)
+      const matchA = a.match(/^(\d+)\./);
+      const matchB = b.match(/^(\d+)\./);
+      if (matchA && matchB) {
+        return parseInt(matchA[1]) - parseInt(matchB[1]);
+      }
+      return a.localeCompare(b);
     });
 
-    // Construir hierarquia de 1 único nível fixo
-    sortedTypes.forEach((type, typeIdx) => {
-      const code = String(typeIdx + 1).padStart(2, '0');
-      const contas = typeMap.get(type)!;
+    // Construir hierarquia completa: tag0 → tag01 → contas
+    sortedTag0s.forEach(tag0 => {
+      const tag01Map = tag0Map.get(tag0)!;
+      const tag01Items: Record<string, string[]> = {};
 
-      // Mapear nome amigável do tipo
-      const typeLabels: Record<string, string> = {
-        'REVENUE': 'Receita',
-        'VARIABLE_COST': 'Custos Variáveis',
-        'FIXED_COST': 'Custos Fixos',
-        'SGA': 'Despesas Administrativas',
-        'RATEIO': 'Rateio',
-        'Sem Type': 'Sem Classificação'
-      };
+      tag01Map.forEach((contas, tag01) => {
+        tag01Items[tag01] = Array.from(contas).sort();
+      });
 
-      data[code] = {
-        label: typeLabels[type] || type,
-        type: type,
-        items: Array.from(contas).sort() // Array direto de contas
+      data[tag0] = {
+        label: tag0,
+        type: tag0.split('.')[0] || 'outros', // Extrair prefixo numérico
+        items: tag01Items // Hierarquia de tag01 → contas
       };
     });
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`✅ [HIERARQUIA V3 TESTE] APENAS 1 NÍVEL (Type), sem Tag01`);
-    console.log(`   📊 Total de Types: ${sortedTypes.length}`);
-    sortedTypes.forEach(type => {
-      const code = Object.keys(data).find(k => data[k].type === type);
-      if (code) {
-        const nivel = data[code];
-        const totalContas = nivel.items.length;
-        console.log(`   ${code}. ${data[code].label}: ${totalContas} contas diretas`);
-      }
+    console.log(`✅ [HIERARQUIA ORIGINAL] tag0 → tag01 → conta_contabil`);
+    console.log(`   📊 Total de tag0s: ${sortedTag0s.length}`);
+    sortedTag0s.forEach(tag0 => {
+      const nivel = data[tag0];
+      const totalTag01s = Object.keys(nivel.items).length;
+      const totalContas = Object.values(nivel.items as Record<string, string[]>).reduce((acc, arr) => acc + arr.length, 0);
+      console.log(`   ${tag0}: ${totalTag01s} tag01s, ${totalContas} contas`);
     });
-    console.log('   🏷️ Filtro de marca ativo:', selectedMarca || 'TODAS');
-    console.log('   🏢 Filtro de filial ativo:', selectedFilial || 'TODAS');
+    console.log('   🏷️ Filtro de marca ativo:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS');
+    console.log('   🏢 Filtro de filial ativo:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
     console.log('   📌 dataVersion:', dataVersion);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return { source: 'data', data };
-  }, [summaryRows, selectedMarca, selectedFilial, currentYear, dataVersion]);
+  }, [summaryRows, selectedMarcas, selectedFiliais, currentYear, dataVersion]);
 
   const getValues = useCallback((scenario: string, categories: string[]) => {
     const values = new Array(12).fill(0);
@@ -1232,11 +1423,11 @@ const DREViewV3: React.FC<DREViewProps> = ({
       console.log(`   📋 Contas pedidas: ${categories.length}`);
       console.log(`   ✅ Contas encontradas: ${contasComValor}`);
       console.log(`   💵 Valor somado: R$ ${totalSomado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-      console.log(`   🎯 Filtros: Marca=${selectedMarca || 'TODAS'}, Filial=${selectedFilial || 'TODAS'}`);
+      console.log(`   🎯 Filtros: Marca=${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial=${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     }
 
     return values;
-  }, [dataMap, selectedMarca, selectedFilial]);
+  }, [dataMap, selectedMarcas, selectedFiliais]);
 
   // getDynamicValues: usa cache de dimensões carregadas do servidor
   // Para o nível de dimensão dinâmica, os dados são pré-carregados via getDREDimension
@@ -1281,11 +1472,11 @@ const DREViewV3: React.FC<DREViewProps> = ({
     // Merge filtros do dropdown + filtros acumulados do drill-down
     let mergedMarcas = accFilters.marca
       ? [accFilters.marca]
-      : (selectedMarca ? [selectedMarca] : undefined);
+      : (selectedMarcas.length > 0 ? selectedMarcas : undefined);
 
     let mergedFiliais = accFilters.nome_filial
       ? [accFilters.nome_filial]
-      : (selectedFilial ? [selectedFilial] : undefined);
+      : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
 
     // Merge filtros de TAG01, TAG02 e TAG03 (prioriza accFilters do drill-down)
     const mergedTags01 = accFilters.tag01
@@ -1296,8 +1487,8 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
     console.log('🔍 [DRILL-DOWN] Usando filtros:', {
       accFilters,
-      selectedMarca,
-      selectedFilial,
+      selectedMarcas,
+      selectedFiliais,
       mergedMarcas,
       mergedFiliais
     });
@@ -1332,7 +1523,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
       });
       return newCache;
     });
-  }, [currentYear, selectedMarca, selectedTags01, dimensionCache]);
+  }, [currentYear, selectedMarcas, selectedTags01, dimensionCache]);
 
   // 🚨 Helper: Verificar se linha tem alerta de desvio significativo
   const hasDeviationAlert = (label: string): { hasAlert: boolean; deviation?: typeof topDeviations[0] } => {
@@ -2101,25 +2292,53 @@ const DREViewV3: React.FC<DREViewProps> = ({
   };
 
   // Componente Reutilizável de Dropdown Multi-select
-  const MultiSelectDropdown = ({ 
-    label, 
-    summary, 
-    isOpen, 
-    setOpen, 
-    options, 
-    selected, 
-    toggle, 
-    allSelect, 
-    icon: Icon, 
+  const MultiSelectDropdown = ({
+    label,
+    summary,
+    isOpen,
+    setOpen,
+    options,
+    selected,
+    toggle,
+    allSelect,
+    icon: Icon,
     color,
     refObj
   }: any) => {
     const isActive = selected.length > 0;
+
+    // 🎨 Classes fixas para cada cor (Tailwind precisa ver as classes completas)
+    const colorClasses = {
+      orange: {
+        border: 'border-orange-500',
+        ring: 'ring-4 ring-orange-500/10'
+      },
+      blue: {
+        border: 'border-blue-500',
+        ring: 'ring-4 ring-blue-500/10'
+      },
+      purple: {
+        border: 'border-purple-500',
+        ring: 'ring-4 ring-purple-500/10'
+      }
+    };
+
+    const activeColorClasses = colorClasses[color as keyof typeof colorClasses] || colorClasses.purple;
+
     return (
       <div ref={refObj} className="relative">
-        <button 
-          onClick={() => setOpen(!isOpen)}
-          className={`flex items-center gap-3 bg-white px-3 md:px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[160px] md:min-w-[200px] shadow-sm hover:shadow-md ${isOpen ? `border-${color} ring-4 ring-${color}/10` : isActive ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50' : 'border-gray-100'}`}
+        <button
+          onClick={() => {
+            console.log(`🖱️ Clicou no filtro ${label}, isOpen:`, isOpen, '→', !isOpen, 'options:', options.length);
+            setOpen(!isOpen);
+          }}
+          className={`flex items-center gap-3 bg-white px-3 md:px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[160px] md:min-w-[200px] shadow-sm hover:shadow-md cursor-pointer ${
+            isOpen
+              ? `${activeColorClasses.border} ${activeColorClasses.ring}`
+              : isActive
+                ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50'
+                : 'border-gray-100'
+          }`}
         >
           <div className={`p-2 rounded-xl transition-colors ${isActive ? 'bg-yellow-400 text-black' : 'bg-gray-50 text-gray-400'}`}>
             <Icon size={16} />
@@ -2167,130 +2386,60 @@ const DREViewV3: React.FC<DREViewProps> = ({
     );
   };
 
+  // 🔍 DEBUG: Verificar se dados estão carregados
+  console.log('🎨 [RENDER DREViewV2]', {
+    marcas: filterOptions.marcas.length,
+    filiais: filterOptions.nome_filiais.length,
+    tags01: filterOptions.tags01.length,
+    isMarcaFilterOpen,
+    isFilialFilterOpen,
+    isTagFilterOpen
+  });
+
   return (
     <div key={componentKey} className="space-y-2 animate-in fade-in duration-500 pb-2">
       {/* Linha de Filtros */}
       <div className="flex items-center gap-2 p-2 bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 rounded-lg border border-blue-300 shadow-md overflow-x-auto">
           <span className="text-base shrink-0">🎯</span>
 
-            {/* Filtro de Marca (CIA) */}
-            <div className="flex items-center gap-2">
-              <Flag size={16} className="text-orange-600 shrink-0" />
-              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Marca:</span>
-              <select
-                value={selectedMarca}
-                onChange={(e) => {
-                  const novaMarca = e.target.value;
-                  console.log('🎯 Marca selecionada:', novaMarca || 'TODAS');
-                  setSelectedMarca(novaMarca);
-                }}
-                className="bg-white text-[12px] font-bold text-gray-900 border border-orange-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-orange-500 transition-colors"
-              >
-                <option value="">Todas</option>
-                {filterOptions.marcas.map((marca) => (
-                  <option key={marca} value={marca}>{marca}</option>
-                ))}
-              </select>
-            </div>
+            {/* Filtro de Marca (CIA) - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Marca"
+              icon={<Flag size={14} />}
+              options={filterOptions.marcas}
+              selected={selectedMarcas}
+              onChange={(newSelection) => {
+                console.log('🎯 Marcas selecionadas:', newSelection);
+                setSelectedMarcas(newSelection);
+              }}
+              colorScheme="orange"
+            />
 
-            {/* Filtro de Filial (Unidade) */}
-            <div className="flex items-center gap-2">
-              <Building2 size={16} className="text-blue-600 shrink-0" />
-              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Filial:</span>
-              <select
-                value={selectedFilial}
-                onChange={(e) => {
-                  const novaFilial = e.target.value;
-                  console.log('🏢 Filial selecionada:', novaFilial || 'TODAS');
-                  setSelectedFilial(novaFilial);
-                }}
-                className="bg-white text-[12px] font-bold text-gray-900 border border-blue-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-blue-500 transition-colors"
-              >
-                <option value="">Todas</option>
-                {filiaisFiltradas.map((filial) => (
-                  <option key={filial} value={filial}>{filial}</option>
-                ))}
-              </select>
-            </div>
+            {/* Filtro de Filial (Unidade) - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Filial"
+              icon={<Building2 size={14} />}
+              options={filiaisFiltradas}
+              selected={selectedFiliais}
+              onChange={(newSelection) => {
+                console.log('🏢 Filiais selecionadas:', newSelection);
+                setSelectedFiliais(newSelection);
+              }}
+              colorScheme="blue"
+            />
 
-              {/* 🔍 BOTÃO DE DEBUG */}
-              <button
-                onClick={() => {
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                  console.log('🔍 DEBUG: Estado atual do componente');
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                  console.log('📌 selectedMarca:', selectedMarca);
-                  console.log('🏢 selectedFilial:', selectedFilial);
-                  console.log('📊 summaryRows.length:', summaryRows.length);
-
-                  // Contar marcas nos dados
-                  const marcaCount = summaryRows.reduce((acc, row) => {
-                    const m = row.marca || 'null';
-                    acc[m] = (acc[m] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('📦 Marcas em summaryRows:', marcaCount);
-
-                  // Contar filiais nos dados
-                  const filialCount = summaryRows.reduce((acc, row) => {
-                    const f = row.nome_filial || 'null';
-                    acc[f] = (acc[f] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('🏢 Filiais em summaryRows:', filialCount);
-
-                  // Calcular totais por marca
-                  const marcaTotals = summaryRows.reduce((acc, row) => {
-                    const m = row.marca || 'null';
-                    acc[m] = (acc[m] || 0) + Number(row.total_amount);
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('💰 Totais por marca:', Object.entries(marcaTotals).map(([k, v]) =>
-                    `${k}: ${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                  ));
-
-                  // Calcular totais por filial
-                  const filialTotals = summaryRows.reduce((acc, row) => {
-                    const f = row.nome_filial || 'null';
-                    acc[f] = (acc[f] || 0) + Number(row.total_amount);
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('💰 Totais por filial:', Object.entries(filialTotals).map(([k, v]) =>
-                    `${k}: ${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                  ));
-
-                  console.log('🗺️ dataMap keys:', Object.keys(dataMap));
-                  console.log('🏗️ dreStructure:', Object.keys(dreStructure.data).length, 'níveis');
-                  console.log('🔑 componentKey:', componentKey);
-                  console.log('📌 dataVersion:', dataVersion);
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                }}
-                className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded hover:bg-red-600 transition-colors"
-                title="Clique para ver debug no console"
-              >
-                🔍 DEBUG
-              </button>
-
-              {/* 🔄 BOTÃO DE RESET */}
-              <button
-                onClick={() => {
-                  console.log('🔄 RESET: Limpando tudo e recarregando...');
-                  sessionStorage.removeItem('dreMarca');
-                  sessionStorage.removeItem('dreFilial');
-                  setSelectedMarca('');
-                  setSelectedFilial('');
-                  setSummaryRows([]);
-                  setDimensionCache({});
-                  setDataVersion(v => v + 1);
-                  setTimeout(() => {
-                    fetchDREData();
-                  }, 100);
-                }}
-                className="px-2 py-1 bg-orange-500 text-white text-[10px] font-bold rounded hover:bg-orange-600 transition-colors"
-                title="Limpar tudo e recarregar"
-              >
-                🔄 RESET
-              </button>
+            {/* Filtro de Tag01 - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Tag01"
+              icon={<Layers size={14} />}
+              options={filterOptions.tags01}
+              selected={selectedTags01}
+              onChange={(newSelection) => {
+                console.log('🏷️ Tags01 selecionadas:', newSelection);
+                setSelectedTags01(newSelection);
+              }}
+              colorScheme="purple"
+            />
 
             {/* Controles de Período */}
             <div className="flex items-center gap-2 scale-100">
@@ -2394,6 +2543,32 @@ const DREViewV3: React.FC<DREViewProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Separador */}
+            <div className="flex-1" />
+
+            {/* Controle de Escopo EBITDA */}
+            <button
+              onClick={() => setShowOnlyEbitda(!showOnlyEbitda)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-md ${
+                showOnlyEbitda
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                  : 'bg-gradient-to-r from-gray-600 to-slate-600 text-white'
+              }`}
+              title={showOnlyEbitda ? 'Exibindo apenas até EBITDA' : 'Exibindo todas as Tag0'}
+            >
+              {showOnlyEbitda ? (
+                <>
+                  <CheckSquare size={14} strokeWidth={2.5} />
+                  <span>Até EBITDA</span>
+                </>
+              ) : (
+                <>
+                  <Square size={14} strokeWidth={2.5} />
+                  <span>Todas Tag0</span>
+                </>
+              )}
+            </button>
 
             {/* Botão Limpar Filtros (se houver filtros ativos) */}
             {hasAnyFilterActive && (
@@ -3053,13 +3228,45 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
       {/* 🎨 V2: TABELA DETALHADA (só mostra se presentationMode === 'detailed') */}
       {presentationMode === 'detailed' && (
+      <>
+        {/* Seção informativa do modo de visualização */}
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 shadow-sm p-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-1.5 rounded-lg shadow-sm">
+              <Brain size={14} className="text-white" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-900">💡 Modo Detalhado</span>
+              <div className="h-4 w-px bg-indigo-300" />
+              <p className="text-xs text-gray-700">
+                <span className="font-bold text-indigo-600">
+                  {(() => {
+                    const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
+                    const totalTag0 = Object.keys(dreStructure.data).length;
+                    const displayedTag0 = showOnlyEbitda
+                      ? Object.values(dreStructure.data).filter(n => ebitdaPrefixes.some(p => n.label.startsWith(p))).length
+                      : totalTag0;
+                    return `${displayedTag0}/${totalTag0}`;
+                  })()}
+                </span>
+                <span className="text-gray-600 ml-1">Tag0</span>
+                {showOnlyEbitda && (
+                  <span className="ml-1 text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                    EBITDA
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
       <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-2xl overflow-hidden relative">
         {/* Loading overlay */}
         {isLoadingDRE && (
           <div className="absolute inset-0 bg-gradient-to-br from-white/95 to-gray-50/95 backdrop-blur-sm z-[100] flex items-center justify-center">
             <div className="text-center bg-white rounded-2xl shadow-xl p-8 border-2 border-indigo-100">
               <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
-              <p className="text-lg font-black text-gray-900 mb-1">Carregando DRE V2 (Teste)</p>
+              <p className="text-lg font-black text-gray-900 mb-1">Carregando DRE</p>
               <p className="text-sm text-gray-600">Processando dados financeiros...</p>
             </div>
           </div>
@@ -3320,7 +3527,9 @@ const DREViewV3: React.FC<DREViewProps> = ({
                 const allCostCategories: string[][] = [];      // Todos os custos (para EBITDA)
 
                 entries.forEach(([, nivel1Data]) => {
-                  const allCats = nivel1Data.items as string[];
+                  // items agora é Record<tag01, contas[]> - flatten para pegar todas as contas
+                  const tag01Items = nivel1Data.items as Record<string, string[]>;
+                  const allCats = Object.values(tag01Items).flat();
                   const label = nivel1Data.label;
 
                   if (label.startsWith('01.')) {
@@ -3340,15 +3549,16 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
                 // 🔍 DEBUG: Log para verificar se categories estão corretas
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log('🎨 [RENDERIZAÇÃO] Renderizando níveis 1 e 2');
-                console.log('   Filtros ativos:', { marca: selectedMarca || 'TODAS', filial: selectedFilial || 'TODAS' });
-                console.log('   Total de Types a renderizar:', entries.length);
+                console.log('🎨 [RENDERIZAÇÃO] Renderizando tag0 → tag01 → contas');
+                console.log('   Filtros ativos:', { marca: selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS', filial: selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS' });
+                console.log('   Total de tag0s a renderizar:', entries.length);
 
                 return (
                   <>
                     {entries.map(([nivel1Code, nivel1Data], entryIdx) => {
-                      // 🔥 TESTE: Agora items é array direto de contas (sem Tag01)
-                      const allCategories = nivel1Data.items as string[];
+                      // items é Record<tag01, contas[]> - flatten para pegar todas as contas
+                      const tag01Items = nivel1Data.items as Record<string, string[]>;
+                      const allCategories = Object.values(tag01Items).flat();
 
                       // 🔍 DEBUG: Verificar se as contas existem no dataMap
                       const contasNoDataMap = allCategories.filter(c => dataMap['Real'][c] !== undefined).length;
@@ -3357,9 +3567,10 @@ const DREViewV3: React.FC<DREViewProps> = ({
                         return sum + vals.reduce((s, v) => s + v, 0);
                       }, 0);
 
-                      // Log para TODOS os Types (não apenas o primeiro)
+                      // Log para todos os tag0s
                       console.log(`   📊 ${nivel1Data.label} (${nivel1Code}):`);
-                      console.log(`      - Total contas na estrutura: ${allCategories.length}`);
+                      console.log(`      - Total tag01s: ${Object.keys(tag01Items).length}`);
+                      console.log(`      - Total contas: ${allCategories.length}`);
                       console.log(`      - Contas no dataMap: ${contasNoDataMap}`);
                       console.log(`      - Valor total Real: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
 
@@ -3397,6 +3608,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
           </table>
         </div>
       </div>
+      </>
       )}
       {/* FIM DO MODO DETALHADO */}
 
@@ -3785,7 +3997,9 @@ const DREViewV3: React.FC<DREViewProps> = ({
                   const node = dreStructure.data[code];
                   if (!node) return null;
 
-                  const categories = node.items as string[];
+                  // items é Record<tag01, contas[]> - flatten
+                  const tag01Items = node.items as Record<string, string[]>;
+                  const categories = Object.values(tag01Items).flat();
                   const realValues = getValues('Real', categories);
                   const orcadoValues = getValues('Orçado', categories);
                   const realTotal = realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
@@ -3807,7 +4021,7 @@ const DREViewV3: React.FC<DREViewProps> = ({
                           }`}>
                             {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
                           </div>
-                          <p className="text-sm text-gray-600 font-semibold">{node.items.length} subgrupos</p>
+                          <p className="text-sm text-gray-600 font-semibold">{Object.keys(tag01Items).length} tag01s</p>
                         </div>
                       </div>
 
@@ -3881,8 +4095,11 @@ const DREViewV3: React.FC<DREViewProps> = ({
 
                   if (!card1 || !card2) return null;
 
-                  const categories1 = card1.items as string[];
-                  const categories2 = card2.items as string[];
+                  // items é Record<tag01, contas[]> - flatten
+                  const tag01Items1 = card1.items as Record<string, string[]>;
+                  const tag01Items2 = card2.items as Record<string, string[]>;
+                  const categories1 = Object.values(tag01Items1).flat();
+                  const categories2 = Object.values(tag01Items2).flat();
                   const real1 = getValues('Real', categories1).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const real2 = getValues('Real', categories2).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const diff = real1 - real2;
@@ -3920,4 +4137,4 @@ const DREViewV3: React.FC<DREViewProps> = ({
   );
 };
 
-export default DREViewV3;
+export default DREView;

@@ -10,7 +10,7 @@ import { Toaster } from 'sonner';
 // Lazy loading de views pesadas (carregam sob demanda)
 const KPIsView = React.lazy(() => import('./components/KPIsView'));
 const AnalysisView = React.lazy(() => import('./components/AnalysisView'));
-const DREView = React.lazy(() => import('./components/DREViewV2'));
+const DREView = React.lazy(() => import('./components/DREView'));
 const ManualChangesView = React.lazy(() => import('./components/ManualChangesView'));
 const TransactionsView = React.lazy(() => import('./components/TransactionsView'));
 const ForecastingView = React.lazy(() => import('./components/ForecastingView'));
