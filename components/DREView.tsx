@@ -386,7 +386,7 @@ const DREView: React.FC<DREViewProps> = ({
   const [isFilialFilterOpen, setIsFilialFilterOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
 
-  const [dynamicPath, setDynamicPath] = useState<string[]>([]);
+  const [dynamicPath, setDynamicPath] = useState<string[]>(['tag01']); // ✅ Tag01 ativa por padrão no drill-down
   // Ordenação de dimensões: 'alpha' (A-Z), 'desc' (maior→menor), 'asc' (menor→maior)
   const [dimensionSort, setDimensionSort] = useState<'alpha' | 'desc' | 'asc'>('alpha'); // 🔧 Padrão: A-Z
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({
