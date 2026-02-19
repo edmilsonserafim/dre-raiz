@@ -400,6 +400,18 @@ const DREView: React.FC<DREViewProps> = ({
   const isFirstMount = useRef<boolean>(true); // 🔧 Flag para evitar fetch duplicado na montagem
   const hasAutoSelectedTags = useRef<boolean>(false); // 🔧 Flag para garantir auto-select apenas uma vez
 
+  // 🔧 Refs para valores atuais dos filtros (evita recriar fetchDREData)
+  const currentYearRef = useRef(currentYear);
+  const selectedMarcasRef = useRef(selectedMarcas);
+  const selectedFiliaisRef = useRef(selectedFiliais);
+  const selectedTags01Ref = useRef(selectedTags01);
+
+  // Atualizar refs quando valores mudam
+  useEffect(() => { currentYearRef.current = currentYear; }, [currentYear]);
+  useEffect(() => { selectedMarcasRef.current = selectedMarcas; }, [selectedMarcas]);
+  useEffect(() => { selectedFiliaisRef.current = selectedFiliais; }, [selectedFiliais]);
+  useEffect(() => { selectedTags01Ref.current = selectedTags01; }, [selectedTags01]);
+
   // Função para formatar valores com separador de milhares (ponto)
   const formatValue = (value: number, decimals: number = 1): string => {
     const absValue = Math.abs(value);
@@ -549,29 +561,35 @@ const DREView: React.FC<DREViewProps> = ({
 
   // ========== BUSCA DE DADOS AGREGADOS DO SERVIDOR ==========
   const fetchDREData = useCallback(async () => {
+    // 🔧 Usar refs para obter valores atuais (evita recriar função)
+    const year = currentYearRef.current;
+    const marcas = selectedMarcasRef.current;
+    const filiais = selectedFiliaisRef.current;
+    const tags01 = selectedTags01Ref.current;
+
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🚀🚀🚀 fetchDREData() CHAMADO!');
-    console.log('   🎯 selectedMarcas:', selectedMarcas);
-    console.log('   🏢 selectedFiliais:', selectedFiliais);
+    console.log('   🎯 selectedMarcas:', marcas);
+    console.log('   🏢 selectedFiliais:', filiais);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     const fetchId = ++fetchIdRef.current;
     setIsLoadingDRE(true);
     setDimensionCache({});  // Limpar cache de dimensões
 
-    const monthFrom = `${currentYear}-01`;
-    const monthTo = `${currentYear}-12`;
+    const monthFrom = `${year}-01`;
+    const monthTo = `${year}-12`;
 
     try {
       // Aplicar filtros de Marca e Filial (se selecionados)
-      const finalMarcas = selectedMarcas.length > 0 ? selectedMarcas : undefined;
-      const finalFiliais = selectedFiliais.length > 0 ? selectedFiliais : undefined;
-      const finalTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
+      const finalMarcas = marcas.length > 0 ? marcas : undefined;
+      const finalFiliais = filiais.length > 0 ? filiais : undefined;
+      const finalTags01 = tags01.length > 0 ? tags01 : undefined;
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🔍 [DEBUG FILTROS]');
-      console.log('   selectedMarcas:', JSON.stringify(selectedMarcas), '(length:', selectedMarcas.length, ')');
-      console.log('   selectedFiliais:', JSON.stringify(selectedFiliais), '(length:', selectedFiliais.length, ')');
+      console.log('   marcas:', JSON.stringify(marcas), '(length:', marcas.length, ')');
+      console.log('   filiais:', JSON.stringify(filiais), '(length:', filiais.length, ')');
       console.log('   finalMarcas:', finalMarcas);
       console.log('   finalFiliais:', finalFiliais);
       console.log('   finalTags01:', finalTags01);
@@ -676,7 +694,7 @@ const DREView: React.FC<DREViewProps> = ({
         setIsLoadingDRE(false);
       }
     }
-  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]); // 🔥 FIX: Mudado para SINGULAR
+  }, []); // 🔧 SEM DEPENDÊNCIAS - usa refs para valores atuais
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
