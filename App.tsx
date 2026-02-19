@@ -15,7 +15,6 @@ const ManualChangesView = React.lazy(() => import('./components/ManualChangesVie
 const TransactionsView = React.lazy(() => import('./components/TransactionsView'));
 const ForecastingView = React.lazy(() => import('./components/ForecastingView'));
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
-const DREViewV3 = React.lazy(() => import('./components/DREViewV3'));
 import { ViewType, Transaction, SchoolKPIs, ManualChange, TransactionType } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES, BRANCHES } from './constants';
 import { PanelLeftOpen, Building2, Maximize2, Minimize2, Flag, Loader2, Lock, Menu, X, Activity, Table as TableIcon, RefreshCw, Download, ChevronDown } from 'lucide-react';
@@ -1006,11 +1005,6 @@ const App: React.FC = () => {
                 allowedFiliais={allowedFiliais}
                 allowedCategories={allowedCategories}
               />
-            </Suspense>
-          )}
-          {currentView === 'dre-v2' && (
-            <Suspense fallback={<LoadingSpinner message="Carregando DRE V2..." />}>
-              <DREViewV3 />
             </Suspense>
           )}
           {currentView === 'admin' && (

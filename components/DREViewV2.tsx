@@ -6,7 +6,6 @@ import {
   getDREDimension,
   getDREFilterOptions,
   getMarcasEFiliais,
-  getAllTag01WithTag0,
   DRESummaryRow,
   DREDimensionRow,
   DREFilterOptions
@@ -43,8 +42,170 @@ import {
   FileSpreadsheet,
   CheckCircle,
   Plus,
-  Maximize2
+  Maximize2,
+  Check
 } from 'lucide-react';
+
+// ========== COMPONENTE EXTERNO: MultiSelectFilter ==========
+// IMPORTANTE: Componente externo para evitar re-criação a cada render
+const MultiSelectFilter: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  options: string[];
+  selected: string[];
+  onChange: (newSelection: string[]) => void;
+  colorScheme: 'blue' | 'orange' | 'purple';
+}> = React.memo(({ label, icon, options, selected, onChange, colorScheme }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
+
+  const colors = {
+    blue: {
+      border: 'border-[#1B75BB]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#1B75BB]',
+      bgLight: 'bg-blue-50',
+      text: 'text-[#1B75BB]',
+      ring: 'ring-[#1B75BB]/10'
+    },
+    orange: {
+      border: 'border-[#F44C00]',
+      borderLight: 'border-gray-100',
+      bg: 'bg-[#F44C00]',
+      bgLight: 'bg-orange-50',
+      text: 'text-[#F44C00]',
+      ring: 'ring-[#F44C00]/10'
+    },
+    purple: {
+      border: 'border-purple-600',
+      borderLight: 'border-gray-100',
+      bg: 'bg-purple-600',
+      bgLight: 'bg-purple-50',
+      text: 'text-purple-600',
+      ring: 'ring-purple-600/10'
+    }
+  };
+
+  const scheme = colors[colorScheme];
+  const hasSelection = selected.length > 0;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(item => item !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  const selectAll = () => {
+    onChange(options);
+  };
+
+  const clearAll = () => {
+    onChange([]);
+  };
+
+  const displayText = selected.length === 0
+    ? 'TODAS'
+    : selected.length === 1
+    ? selected[0].toUpperCase()
+    : `${selected.length} SELECIONADAS`;
+
+  // Calcular posição do dropdown quando abrir
+  const handleToggle = () => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 8,
+        left: rect.left
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <div
+        ref={buttonRef}
+        onClick={handleToggle}
+        className={`flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border-2 shadow-sm transition-all cursor-pointer hover:shadow-md ${
+          hasSelection ? `${scheme.border} ring-4 ${scheme.ring}` : scheme.borderLight
+        }`}
+      >
+        <div className={`p-1.5 rounded-lg ${hasSelection ? `${scheme.bg} text-white` : `${scheme.bgLight} ${scheme.text}`}`}>
+          {icon}
+        </div>
+        <div className="flex flex-col justify-center">
+          <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">{label}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-black text-[10px] uppercase tracking-tight text-gray-900 min-w-[100px]">
+              {displayText}
+            </span>
+            <ChevronDown size={12} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown - position fixed para "explodir" fora do container */}
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          className="fixed bg-white rounded-md border border-gray-300 shadow-lg z-[9999] w-[200px] max-h-[320px] overflow-hidden flex flex-col"
+          style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}
+        >
+          {/* Header */}
+          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+            <span className="text-xs font-semibold text-gray-700">Selecione</span>
+            <button
+              onClick={clearAll}
+              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Limpar
+            </button>
+          </div>
+
+          {/* Options list - interface limpa */}
+          <div className="overflow-y-auto">
+            {options.map((option) => {
+              const isSelected = selected.includes(option);
+              return (
+                <div
+                  key={option}
+                  onClick={() => toggleOption(option)}
+                  className={`px-3 py-2.5 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
+                    isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{option}</span>
+                    {isSelected && <Check size={14} className="text-blue-600" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+MultiSelectFilter.displayName = 'MultiSelectFilter';
+
+// ========== INTERFACE ==========
 
 interface DREViewProps {
   transactions?: Transaction[];  // Mantido para compatibilidade, mas NÃO usado para DRE
@@ -64,8 +225,9 @@ interface DREViewProps {
 }
 
 const DRE_DIMENSIONS = [
-  { id: 'tag02', label: 'tag02' },
-  { id: 'tag03', label: 'tag03' },
+  { id: 'tag01', label: 'Tag01' },  // ✅ Adicionado Tag01 como dimensão
+  { id: 'tag02', label: 'Tag02' },
+  { id: 'tag03', label: 'Tag03' },
   { id: 'marca', label: 'Marca' },
   { id: 'nome_filial', label: 'Unidade' },
   { id: 'vendor', label: 'Fornecedor' },
@@ -87,8 +249,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
   // Estado para dados agregados do servidor
   const [summaryRows, setSummaryRows] = useState<DRESummaryRow[]>([]);
   const [filterOptions, setFilterOptions] = useState<DREFilterOptions>({ marcas: [], nome_filiais: [], tags01: [] });
-  // 🆕 TODAS as tag01 do banco (para sempre mostrar, mesmo zeradas)
-  const [allTag01Options, setAllTag01Options] = useState<Array<{ tag0: string; tag01: string }>>([]);
+
 
   const [isLoadingDRE, setIsLoadingDRE] = useState(true);
   const [dimensionCache, setDimensionCache] = useState<Record<string, DREDimensionRow[]>>({});
@@ -108,47 +269,51 @@ const DREViewV2: React.FC<DREViewProps> = ({
     const saved = sessionStorage.getItem('dreTags01');
     return saved ? JSON.parse(saved) : [];
   });
-  // Filtros de Marca e Filial removidos da UI (mantidos internamente para compatibilidade)
-  const [selectedMarcas] = useState<string[]>([]);
-  const [selectedFiliais] = useState<string[]>([]);
 
-  // ✅ NOVO: Filtro de Marca (CIA) para DRE Gerencial
-  const [selectedMarca, setSelectedMarca] = useState<string>(() => {
-    const saved = sessionStorage.getItem('dreMarca');
-    return saved || '';
+  // ✅ NOVO: Filtro de Marca (CIA) para DRE Gerencial - MULTI-SELEÇÃO
+  const [selectedMarcas, setSelectedMarcas] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreMarcas');
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // ✅ NOVO: Filtro de Filial (Unidade) para DRE Gerencial
-  const [selectedFilial, setSelectedFilial] = useState<string>(() => {
-    const saved = sessionStorage.getItem('dreFilial');
-    return saved || '';
+  // ✅ NOVO: Filtro de Filial (Unidade) para DRE Gerencial - MULTI-SELEÇÃO
+  const [selectedFiliais, setSelectedFiliais] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem('dreFiliais');
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 🔑 KEY para forçar re-render quando marca ou filial muda
   const componentKey = useMemo(() => {
-    return `marca-${selectedMarca}-filial-${selectedFilial}-${currentYear}`;
-  }, [selectedMarca, selectedFilial, currentYear]);
+    const marcasKey = selectedMarcas.join(',');
+    const filiaisKey = selectedFiliais.join(',');
+    return `marca-${marcasKey}-filial-${filiaisKey}-${currentYear}`;
+  }, [selectedMarcas, selectedFiliais, currentYear]);
 
   // 🔄 Filtrar opções de filial baseado na marca selecionada (cascata)
   const filiaisFiltradas = useMemo(() => {
-    if (!selectedMarca) {
+    if (selectedMarcas.length === 0) {
+      // Se nenhuma marca selecionada, mostra todas as filiais
       return filterOptions.nome_filiais;
     }
+    // Filtra filiais que começam com alguma das marcas selecionadas (ex: "AP - ")
     return filterOptions.nome_filiais.filter(filial =>
-      filial.startsWith(selectedMarca + ' - ') || filial.startsWith(selectedMarca + '-')
+      selectedMarcas.some(marca =>
+        filial.startsWith(marca + ' - ') || filial.startsWith(marca + '-')
+      )
     );
-  }, [selectedMarca, filterOptions.nome_filiais]);
+  }, [selectedMarcas, filterOptions.nome_filiais]);
 
   // 🔄 Limpar filial selecionada quando mudar marca (se não pertence mais)
   useEffect(() => {
-    if (selectedFilial && selectedMarca) {
-      const filialPertenceMarca = filiaisFiltradas.includes(selectedFilial);
-      if (!filialPertenceMarca) {
-        console.log('⚠️ Filial selecionada não pertence à marca, limpando...');
-        setSelectedFilial('');
+    if (selectedFiliais.length > 0 && selectedMarcas.length > 0) {
+      // Remove filiais que não pertencem mais às marcas selecionadas
+      const filiaisValidas = selectedFiliais.filter(f => filiaisFiltradas.includes(f));
+      if (filiaisValidas.length !== selectedFiliais.length) {
+        console.log('⚠️ Filiais selecionadas não pertencem às marcas, limpando...');
+        setSelectedFiliais(filiaisValidas);
       }
     }
-  }, [selectedMarca, selectedFilial, filiaisFiltradas]);
+  }, [selectedMarcas, selectedFiliais, filiaisFiltradas]);
 
   // 🔄 Versão dos dados para forçar invalidação de cache
   const [dataVersion, setDataVersion] = useState(0);
@@ -170,11 +335,9 @@ const DREViewV2: React.FC<DREViewProps> = ({
   // Modo de visualização: 'scenario' (por cenário) ou 'month' (por mês)
   const [viewMode, setViewMode] = useState<'scenario' | 'month'>('scenario');
 
-  // 🎨 V2: MODO DE APRESENTAÇÃO (Executivo com cards ou Detalhado com tabela)
-  // Usar props externas ou fallback para estado local (compatibilidade)
-  const [internalPresentationMode, setInternalPresentationMode] = useState<'executive' | 'detailed'>('executive');
-  const presentationMode = externalPresentationMode || internalPresentationMode;
-  const setPresentationMode = externalSetPresentationMode || setInternalPresentationMode;
+  // 🎨 V3: MODO FIXO COMO DETALHADO (sem botões de toggle)
+  const presentationMode: 'detailed' = 'detailed';
+  const setPresentationMode = () => {}; // Função vazia para compatibilidade
 
   // 🎨 V2: LAYOUT DOS CARDS (compacto, médio, expandido, lista)
   const [cardLayout, setCardLayout] = useState<'compact' | 'medium' | 'expanded' | 'list'>('compact'); // 🔧 Padrão: compact
@@ -182,7 +345,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
   // 🎨 V2: FILTROS DO MODO EXECUTIVO
   const [execFilterType, setExecFilterType] = useState<'all' | 'positive' | 'negative'>('all');
   const [execSortBy, setExecSortBy] = useState<'alphabetical' | 'value' | 'delta'>('value');
-  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(true); // Filtro EBITDA: true = apenas 01-04, false = todas
+  const [showOnlyEbitda, setShowOnlyEbitda] = useState<boolean>(true); // ✅ ATIVO por padrão - mostra até EBITDA
 
   // 🎨 V2: Estado para hover nos sparklines (formato: "code-barIndex")
   const [hoveredSparkline, setHoveredSparkline] = useState<string | null>(null);
@@ -219,6 +382,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
   // Estados de UI (Dropdowns abertos)
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
+  const [isMarcaFilterOpen, setIsMarcaFilterOpen] = useState(false);
+  const [isFilialFilterOpen, setIsFilialFilterOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
 
   const [dynamicPath, setDynamicPath] = useState<string[]>([]);
@@ -229,6 +394,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
   });
 
   const tagRef = useRef<HTMLDivElement>(null);
+  const marcaRef = useRef<HTMLDivElement>(null);
+  const filialRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
 
   // Função para formatar valores com separador de milhares (ponto)
@@ -323,12 +490,12 @@ const DREViewV2: React.FC<DREViewProps> = ({
   }, [selectedTags01]);
 
   useEffect(() => {
-    sessionStorage.setItem('dreMarca', selectedMarca);
-  }, [selectedMarca]);
+    sessionStorage.setItem('dreMarcas', JSON.stringify(selectedMarcas));
+  }, [selectedMarcas]);
 
   useEffect(() => {
-    sessionStorage.setItem('dreFilial', selectedFilial);
-  }, [selectedFilial]);
+    sessionStorage.setItem('dreFiliais', JSON.stringify(selectedFiliais));
+  }, [selectedFiliais]);
 
   // Notificar mudanças no loading
   useEffect(() => {
@@ -337,21 +504,33 @@ const DREViewV2: React.FC<DREViewProps> = ({
     }
   }, [isLoadingDRE, onLoadingChange]);
 
-  // 🆕 Buscar TODAS as tag01 do banco (uma vez na montagem)
+  // 🖱️ Fechar dropdown de Marca ao clicar fora
   useEffect(() => {
-    const loadAllTag01Options = async () => {
-      console.log('🏷️ Buscando TODAS as tag01 do banco...');
-      const options = await getAllTag01WithTag0();
-      setAllTag01Options(options);
-      console.log(`✅ ${options.length} tag01 carregadas para sempre mostrar`);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (marcaRef.current && !marcaRef.current.contains(event.target as Node)) {
+        setIsMarcaFilterOpen(false);
+      }
     };
-    loadAllTag01Options();
-  }, []); // Apenas na montagem
+
+    if (isMarcaFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMarcaFilterOpen]);
 
   // (Removido: useEffect que buscava filiais dinamicamente - agora usa estrutura da tabela FILIAL)
 
   // ========== BUSCA DE DADOS AGREGADOS DO SERVIDOR ==========
   const fetchDREData = useCallback(async () => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🚀🚀🚀 fetchDREData() CHAMADO!');
+    console.log('   🎯 selectedMarcas:', selectedMarcas);
+    console.log('   🏢 selectedFiliais:', selectedFiliais);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     const fetchId = ++fetchIdRef.current;
     setIsLoadingDRE(true);
     setDimensionCache({});  // Limpar cache de dimensões
@@ -361,15 +540,15 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
     try {
       // Aplicar filtros de Marca e Filial (se selecionados)
-      const finalMarcas = selectedMarca ? [selectedMarca] : undefined;
-      const finalFiliais = selectedFilial ? [selectedFilial] : undefined;
+      const finalMarcas = selectedMarcas.length > 0 ? selectedMarcas : undefined;
+      const finalFiliais = selectedFiliais.length > 0 ? selectedFiliais : undefined;
       const finalTags01 = selectedTags01.length > 0 ? selectedTags01 : undefined;
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🔍 [DEBUG FILTROS - fetchDREData]');
-      console.log('   selectedMarca:', JSON.stringify(selectedMarca), '(length:', selectedMarca.length, ')');
-      console.log('   selectedFilial:', JSON.stringify(selectedFilial));
-      console.log('   finalMarcas:', finalMarcas, '← deve ser undefined se marca=TODAS');
+      console.log('🔍 [DEBUG FILTROS]');
+      console.log('   selectedMarcas:', JSON.stringify(selectedMarcas), '(length:', selectedMarcas.length, ')');
+      console.log('   selectedFiliais:', JSON.stringify(selectedFiliais), '(length:', selectedFiliais.length, ')');
+      console.log('   finalMarcas:', finalMarcas);
       console.log('   finalFiliais:', finalFiliais);
       console.log('   finalTags01:', finalTags01);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -473,15 +652,15 @@ const DREViewV2: React.FC<DREViewProps> = ({
         setIsLoadingDRE(false);
       }
     }
-  }, [currentYear, selectedMarca, selectedFilial, selectedTags01]); // 🔥 FIX: Mudado para SINGULAR
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]); // 🔥 FIX: Mudado para SINGULAR
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔄 [TRIGGER] useEffect detectou mudança nos filtros!');
     console.log('   currentYear:', currentYear);
-    console.log('   selectedMarca:', selectedMarca);
-    console.log('   selectedFilial:', selectedFilial);
+    console.log('   selectedMarcas:', selectedMarcas);
+    console.log('   selectedFiliais:', selectedFiliais);
     console.log('   selectedTags01:', selectedTags01);
     console.log('   ⚡ LIMPANDO dados antigos e chamando fetchDREData()...');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -492,7 +671,11 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
     fetchDREData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYear, selectedMarca, selectedFilial, selectedTags01]);
+  }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+
+  // 🔄 REMOVIDO: ATIVADOR causava race condition
+  // O dataVersion já é incrementado dentro do fetchDREData() após setSummaryRows
+  // Não é necessário incrementar novamente aqui
 
   // 🎯 ANÁLISE AUTOMÁTICA: Calcular top desvios sempre que dados mudam
   useEffect(() => {
@@ -730,15 +913,15 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
   const clearAllFilters = () => {
     setSelectedTags01([]);
-    setSelectedMarca('');
-    setSelectedFilial('');
+    setSelectedMarcas([]);
+    setSelectedFiliais([]);
   };
 
-  const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarca !== '' || selectedFilial !== '';
+  const hasAnyFilterActive = selectedTags01.length > 0 || selectedMarcas.length > 0 || selectedFiliais.length > 0;
 
   // ========== FUNÇÕES DE EXPORTAÇÃO ==========
 
-  const exportAsTable = () => {
+  const exportAsTable = useCallback(() => {
     console.log('📊 Exportando dados como tabela Excel...');
 
     if (summaryRows.length === 0) {
@@ -778,13 +961,24 @@ const DREViewV2: React.FC<DREViewProps> = ({
     XLSX.writeFile(wb, `DRE_Tabela_${currentYear}.xlsx`);
 
     console.log('✅ Exportado', rows.length, 'linhas como Excel');
-  };
+  }, [summaryRows, currentYear]);
 
   const exportCurrentLayout = () => {
     console.log('📊 Exportando layout atual como Excel formatado...');
+    console.log('🔍 [EXPORT DEBUG] currentYear:', currentYear);
+    console.log('🔍 [EXPORT DEBUG] selectedMonthStart:', selectedMonthStart);
+    console.log('🔍 [EXPORT DEBUG] selectedMonthEnd:', selectedMonthEnd);
+    console.log('🔍 [EXPORT DEBUG] summaryRows.length:', summaryRows.length);
+    console.log('🔍 [EXPORT DEBUG] dataMap Real keys:', Object.keys(dataMap.Real || {}).length);
+    console.log('🔍 [EXPORT DEBUG] dreStructure.data keys:', Object.keys(dreStructure.data || {}).length);
 
     if (!dreStructure || !dreStructure.data) {
       alert('Nenhum dado disponível para exportar');
+      return;
+    }
+
+    if (summaryRows.length === 0) {
+      alert('Nenhum dado carregado. Clique em "Buscar Dados" primeiro.');
       return;
     }
 
@@ -826,15 +1020,25 @@ const DREViewV2: React.FC<DREViewProps> = ({
       const node = dreStructure.data[code];
       if (!node) return;
 
-      // Pegar categorias deste nível
-      const categories = node.items.flatMap(item => item.items);
+      // items é Record<tag01, contas[]> - flatten para exportar
+      const tag01Items = node.items as Record<string, string[]>;
+      const categories = Object.values(tag01Items).flat();
 
-      // Linha TAG0 (Nível 1)
+      console.log(`🔍 [EXPORT] Processando ${code} - ${node.label}`);
+      console.log(`   Tag01s count: ${Object.keys(tag01Items).length}`);
+      console.log(`   Total categories: ${categories.length}`);
+      console.log(`   Sample categories:`, categories.slice(0, 3));
+
+      // Linha tag0 (Nível 1)
       const tag0Row: any[] = [node.label];
 
       for (let idx = selectedMonthStart; idx <= selectedMonthEnd; idx++) {
         if (showReal) {
           const values = getValues('Real', categories);
+          if (idx === selectedMonthStart) {
+            console.log(`   getValues('Real') for ${node.label}:`, values.slice(0, 3), '...');
+            console.log(`   values[${idx}]:`, values[idx]);
+          }
           tag0Row.push(values[idx] || 0);
         }
         if (showOrcado) {
@@ -872,8 +1076,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
       exportData.push(tag0Row);
       rowLevels.push(1);
 
-      // 🔥 REMOVIDO: Não temos mais nível 2 fixo (Tag01)
-      // Os dados detalhados estão no drill-down, não na exportação básica
+      // Tag01s podem ser exportados em drill-down separado se necessário
     };
 
     // Processar todos os níveis TAG0
@@ -1007,23 +1210,47 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🗺️ [MEMO] dataMap sendo RECONSTRUÍDO!');
     console.log('📊 summaryRows.length:', summaryRows.length);
+    console.log('🎯 Filtros aplicados:', {
+      marca: selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS',
+      filial: selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS',
+      dataVersion: dataVersion
+    });
 
     // 🔍 DEBUG: Mostrar quais marcas e filiais existem nos dados
     const marcasNosdados = [...new Set(summaryRows.map(r => r.marca))];
     const filiaisNosdados = [...new Set(summaryRows.map(r => r.nome_filial))];
     console.log('🏷️ Marcas ÚNICAS nos dados:', marcasNosdados);
     console.log('🏢 Filiais ÚNICAS nos dados:', filiaisNosdados);
-    console.log('🎯 Marca selecionada:', selectedMarca || 'TODAS');
-    console.log('🎯 Filial selecionada:', selectedFilial || 'TODAS');
+    console.log('🎯 Marca selecionada:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS');
+    console.log('🎯 Filial selecionada:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
 
     // ✅ DADOS JÁ VÊM FILTRADOS DO RPC - não precisa filtrar localmente!
     // O RPC getDRESummary() já aplica os filtros de marca, filial e tags01 no servidor
     const filteredRows = summaryRows;
 
-    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarca || 'TODAS'}, Filial: ${selectedFilial || 'TODAS'}`);
+    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial: ${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
     const map: Record<string, Record<string, number[]>> = { Real: {}, Orçado: {}, 'A-1': {} };
+
+    // 🔍 DEBUG: Contar quantas linhas por conta para detectar agregação
+    const contasPorConta: Record<string, number> = {};
+    filteredRows.forEach(row => {
+      const key = row.conta_contabil;
+      contasPorConta[key] = (contasPorConta[key] || 0) + 1;
+    });
+
+    // Mostrar contas com múltiplas linhas (agregação)
+    const contasAgregadas = Object.entries(contasPorConta)
+      .filter(([_, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    if (contasAgregadas.length > 0) {
+      console.log('🔍 [AGREGAÇÃO] Contas com múltiplas linhas (top 5):');
+      contasAgregadas.forEach(([conta, count]) => {
+        console.log(`   ${conta}: ${count} linhas`);
+      });
+    }
 
     filteredRows.forEach(row => {
       // Normalizar scenario
@@ -1036,6 +1263,13 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
       if (!map[scenario]) map[scenario] = {};
       if (!map[scenario][key]) map[scenario][key] = new Array(12).fill(0);
+
+      // 🔍 DEBUG: Log antes e depois da soma para a primeira conta agregada
+      const isFirstAgregada = contasAgregadas.length > 0 && key === contasAgregadas[0][0];
+      if (isFirstAgregada && map[scenario][key][monthIdx] > 0) {
+        console.log(`   🔍 [SOMA] ${key} mês ${monthIdx}: ${map[scenario][key][monthIdx]} + ${row.total_amount} = ${map[scenario][key][monthIdx] + Number(row.total_amount)}`);
+      }
+
       map[scenario][key][monthIdx] += Number(row.total_amount);
     });
 
@@ -1054,12 +1288,12 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log('   Real:', Object.keys(map.Real).length, 'contas →', totais.Real.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
     console.log('   Orçado:', Object.keys(map.Orçado).length, 'contas →', totais.Orçado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
     console.log('   A-1:', Object.keys(map['A-1']).length, 'contas →', totais['A-1'].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-    console.log('   🏷️ Filtros ativos - Marca:', selectedMarca || 'TODAS', '| Filial:', selectedFilial || 'TODAS');
+    console.log('   🏷️ Filtros ativos - Marca:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS', '| Filial:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
     console.log('   📌 dataVersion:', dataVersion);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return map;
-  }, [summaryRows, selectedMarca, selectedFilial, currentYear, dataVersion]);
+  }, [summaryRows, selectedMarcas, selectedFiliais, currentYear, dataVersion]);
 
   // Construir hierarquia DRE a partir de summaryRows (tag0 → tag01 → conta_contabil)
   const dreStructure = useMemo(() => {
@@ -1076,141 +1310,111 @@ const DREViewV2: React.FC<DREViewProps> = ({
     console.log('📦 Linhas por marca:', porMarca);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    const tag0Map = new Map<string, Map<string, Set<string>>>();
-    const tag0TypeCount = new Map<string, Record<string, number>>();
+    // ✅ Hierarquia ORIGINAL: tag0 → tag01 → conta_contabil
+    const tag0Map = new Map<string, Map<string, Set<string>>>(); // tag0 → tag01 → contas
 
     // ✅ DADOS JÁ VÊM FILTRADOS DO RPC - não precisa filtrar localmente!
-    // O RPC getDRESummary() já aplica os filtros de marca, filial e tags01 no servidor
     const filteredRows = summaryRows;
 
-    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarca || 'TODAS'}, Filial: ${selectedFilial || 'TODAS'}`);
+    console.log(`📊 [DADOS DO RPC] Marca: ${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial: ${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     console.log(`📊 Total de linhas recebidas: ${filteredRows.length}`);
 
-    // 🆕 Se NÃO há filtro de marca/filial, agregar dados ignorando marca/filial
-    const hasFilter = selectedMarca || selectedFilial;
-    console.log(`🔄 Modo de agregação: ${hasFilter ? 'COM filtro (usar marca/filial)' : 'SEM filtro (ignorar marca/filial)'}`);
-
-    // Processar dados do summaryRows
+    // Agrupar por tag0 → tag01 → conta_contabil (hierarquia completa)
     filteredRows.forEach(row => {
-      const tag0 = row.tag0 || 'Sem Classificação';
-      const tag01 = row.tag01 || 'Sem Subclassificação';
+      const tag0 = row.tag0 || 'Sem Tag0';
+      const tag01 = row.tag01 || 'Sem Tag01';
       const conta = row.conta_contabil;
 
+      // Criar estrutura hierárquica de 3 níveis
       if (!tag0Map.has(tag0)) tag0Map.set(tag0, new Map());
       const tag01Map = tag0Map.get(tag0)!;
       if (!tag01Map.has(tag01)) tag01Map.set(tag01, new Set());
       tag01Map.get(tag01)!.add(conta);
-
-      if (!tag0TypeCount.has(tag0)) tag0TypeCount.set(tag0, {});
-      const counts = tag0TypeCount.get(tag0)!;
-      counts[row.tipo] = (counts[row.tipo] || 0) + Number(row.tx_count);
     });
 
-    // 🆕 ADICIONAR TODAS as tag01 do banco (para sempre mostrar, mesmo zeradas)
-    if (allTag01Options && allTag01Options.length > 0) {
-      console.log(`📋 Adicionando TODAS as tag01 do banco (${allTag01Options.length} opções)...`);
-      allTag01Options.forEach(({ tag0, tag01 }) => {
-        if (!tag0Map.has(tag0)) {
-          tag0Map.set(tag0, new Map());
-          // Inicializar typeCount com tipo padrão
-          tag0TypeCount.set(tag0, { 'FIXED_COST': 1 });
-        }
-        const tag01Map = tag0Map.get(tag0)!;
-        if (!tag01Map.has(tag01)) {
-          // Tag01 sem dados - adiciona com Set vazio (vai aparecer zerada)
-          tag01Map.set(tag01, new Set());
-        }
-      });
-    } else {
-      console.log('⚠️ allTag01Options ainda não carregado, pulando...');
-    }
+    const data: Record<string, {
+      label: string;
+      type: string;
+      items: Record<string, string[]> | string[]; // tag01 → contas OU array direto de contas
+    }> = {};
 
-    const data: Record<string, { label: string; type: string; items: Array<{ id: string; nivel_2_label: string; items: string[] }> }> = {};
-
+    // Ordenar tag0s
     const sortedTag0s = Array.from(tag0Map.keys()).sort((a, b) => {
-      if (a === 'Sem Classificação') return 1;
-      if (b === 'Sem Classificação') return -1;
+      // Ordenar por prefixo numérico (01., 02., etc)
+      const matchA = a.match(/^(\d+)\./);
+      const matchB = b.match(/^(\d+)\./);
+      if (matchA && matchB) {
+        return parseInt(matchA[1]) - parseInt(matchB[1]);
+      }
       return a.localeCompare(b);
     });
 
-    sortedTag0s.forEach((tag0, idx) => {
-      const code = String(idx + 1).padStart(2, '0');
+    // Construir hierarquia completa: tag0 → tag01 → contas
+    sortedTag0s.forEach(tag0 => {
       const tag01Map = tag0Map.get(tag0)!;
-      const sortedTag01s = Array.from(tag01Map.keys()).sort();
+      const tag01Items: Record<string, string[]> = {};
 
-      const counts = tag0TypeCount.get(tag0) || {};
-      const predominantType = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'FIXED_COST';
+      tag01Map.forEach((contas, tag01) => {
+        tag01Items[tag01] = Array.from(contas).sort();
+      });
 
-      data[code] = {
+      data[tag0] = {
         label: tag0,
-        type: predominantType,
-        items: sortedTag01s.map((tag01, jdx) => {
-          const contas = Array.from(tag01Map.get(tag01)!).sort();
-
-          // 🔍 DEBUG: Log para tags específicas
-          if (tag01.toLowerCase().includes('imovel') || tag01.toLowerCase().includes('concession')) {
-            console.log(`🔍 [HIERARQUIA] tag01="${tag01}" tem ${contas.length} contas:`, contas.slice(0, 5));
-          }
-
-          return {
-            id: `${code}-${jdx}`,
-            nivel_2_label: tag01,
-            items: contas
-          };
-        })
+        type: tag0.split('.')[0] || 'outros', // Extrair prefixo numérico
+        items: tag01Items // Hierarquia de tag01 → contas
       };
     });
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`✅ [HIERARQUIA] Construída com ${sortedTag0s.length} níveis 1:`);
+    console.log(`✅ [HIERARQUIA ORIGINAL] tag0 → tag01 → conta_contabil`);
+    console.log(`   📊 Total de tag0s: ${sortedTag0s.length}`);
     sortedTag0s.forEach(tag0 => {
-      const code = Object.keys(data).find(k => data[k].label === tag0);
-      if (code) {
-        const nivel1 = data[code];
-        // Usar filteredRows para calcular total
-        const totalNivel1 = filteredRows
-          .filter(r => r.tag0 === tag0)
-          .reduce((sum, r) => sum + Number(r.total_amount), 0);
-        console.log(`   ${code}. ${tag0}: R$ ${totalNivel1.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${nivel1.items.length} tag01s)`);
-
-        // 🔍 LOG DETALHADO: Listar TODAS as tag01 dentro deste tag0
-        const tag01List = nivel1.items.map(item => item.nivel_2_label).join(', ');
-        console.log(`      📋 Tag01s: ${tag01List}`);
-      }
+      const nivel = data[tag0];
+      const totalTag01s = Object.keys(nivel.items).length;
+      const totalContas = Object.values(nivel.items as Record<string, string[]>).reduce((acc, arr) => acc + arr.length, 0);
+      console.log(`   ${tag0}: ${totalTag01s} tag01s, ${totalContas} contas`);
     });
-    console.log('   🏷️ Filtro de marca ativo:', selectedMarca || 'TODAS');
+    console.log('   🏷️ Filtro de marca ativo:', selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS');
+    console.log('   🏢 Filtro de filial ativo:', selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS');
     console.log('   📌 dataVersion:', dataVersion);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return { source: 'data', data };
-  }, [summaryRows, selectedMarca, currentYear, dataVersion, allTag01Options]);
+  }, [summaryRows, selectedMarcas, selectedFiliais, currentYear, dataVersion]);
 
-  const getValues = (scenario: string, categories: string[]) => {
+  const getValues = useCallback((scenario: string, categories: string[]) => {
     const values = new Array(12).fill(0);
     const scenarioMap = dataMap[scenario] || {};
 
-    // 🔍 DEBUG: Log para tags específicas
-    const isDebugCategory = categories.some(cat =>
-      cat && (cat.toLowerCase().includes('imovel') || cat.toLowerCase().includes('aluguel'))
-    );
+    // 🔍 DEBUG: Contar quantas contas existem vs quantas têm valores
+    let contasComValor = 0;
+    let totalSomado = 0;
+
+    // 🔥 LOG CRÍTICO: Verificar qual dataMap está sendo usado
+    const totalContasNoDataMap = Object.keys(scenarioMap).length;
+    const totalValueNoDataMap = Object.values(scenarioMap).reduce((sum, arr) => sum + arr.reduce((s, v) => s + v, 0), 0);
 
     categories.forEach(cat => {
       if (scenarioMap[cat]) {
+        contasComValor++;
+        const somaCategoria = scenarioMap[cat].reduce((s, v) => s + v, 0);
+        totalSomado += somaCategoria;
         scenarioMap[cat].forEach((v, i) => values[i] += v);
       }
     });
 
-    if (isDebugCategory) {
-      console.log('🔍 getValues DEBUG:', {
-        scenario,
-        categories,
-        categoriasNoMap: categories.filter(c => scenarioMap[c]).length,
-        total: values.reduce((a,b) => a+b, 0),
-        primeiroMes: values[0]
-      });
+    // 🔥 LOG SEMPRE para Tag01 (categories.length < 100 = nível 2)
+    if (categories.length < 100 && categories.length > 1) {
+      console.log(`🔥 getValues(${scenario}):`);
+      console.log(`   📊 Total contas no dataMap[${scenario}]: ${totalContasNoDataMap}`);
+      console.log(`   💰 Valor total no dataMap[${scenario}]: R$ ${totalValueNoDataMap.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      console.log(`   📋 Contas pedidas: ${categories.length}`);
+      console.log(`   ✅ Contas encontradas: ${contasComValor}`);
+      console.log(`   💵 Valor somado: R$ ${totalSomado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      console.log(`   🎯 Filtros: Marca=${selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS'}, Filial=${selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS'}`);
     }
 
     return values;
-  };
+  }, [dataMap, selectedMarcas, selectedFiliais]);
 
   // getDynamicValues: usa cache de dimensões carregadas do servidor
   // Para o nível de dimensão dinâmica, os dados são pré-carregados via getDREDimension
@@ -1255,11 +1459,11 @@ const DREViewV2: React.FC<DREViewProps> = ({
     // Merge filtros do dropdown + filtros acumulados do drill-down
     let mergedMarcas = accFilters.marca
       ? [accFilters.marca]
-      : (selectedMarca ? [selectedMarca] : undefined);
+      : (selectedMarcas.length > 0 ? selectedMarcas : undefined);
 
     let mergedFiliais = accFilters.nome_filial
       ? [accFilters.nome_filial]
-      : (selectedFilial ? [selectedFilial] : undefined);
+      : (selectedFiliais.length > 0 ? selectedFiliais : undefined);
 
     // Merge filtros de TAG01, TAG02 e TAG03 (prioriza accFilters do drill-down)
     const mergedTags01 = accFilters.tag01
@@ -1270,8 +1474,8 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
     console.log('🔍 [DRILL-DOWN] Usando filtros:', {
       accFilters,
-      selectedMarca,
-      selectedFilial,
+      selectedMarcas,
+      selectedFiliais,
       mergedMarcas,
       mergedFiliais
     });
@@ -1306,7 +1510,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
       });
       return newCache;
     });
-  }, [currentYear, selectedMarca, selectedTags01, dimensionCache]);
+  }, [currentYear, selectedMarcas, selectedTags01, dimensionCache]);
 
   // 🚨 Helper: Verificar se linha tem alerta de desvio significativo
   const hasDeviationAlert = (label: string): { hasAlert: boolean; deviation?: typeof topDeviations[0] } => {
@@ -1332,16 +1536,17 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
     // Obter valores para todos os cenários
     // level 1-2: dados do summary (getValues), level 3+: drill-down dinâmico
+    // 🔥 TESTE: level 1 usa getValues (Type fixo), level 2+ usa getDynamicValues (drill-down)
     const scenarioValues: Record<string, number[]> = {
-      'Real': level <= 2
+      'Real': level <= 1
         ? getValues('Real', categories)
-        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'Real'),
-      'Orçado': level <= 2
+        : getDynamicValues(categories, dynamicPath[level - 2], label, accumulatedFilters, 'Real'),
+      'Orçado': level <= 1
         ? getValues('Orçado', categories)
-        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'Orçado'),
-      'A-1': level <= 2
+        : getDynamicValues(categories, dynamicPath[level - 2], label, accumulatedFilters, 'Orçado'),
+      'A-1': level <= 1
         ? getValues('A-1', categories)
-        : getDynamicValues(categories, dynamicPath[level - 3], label, accumulatedFilters, 'A-1')
+        : getDynamicValues(categories, dynamicPath[level - 2], label, accumulatedFilters, 'A-1')
     };
 
     // Calcular YTDs para todos os cenários
@@ -1672,34 +1877,13 @@ const DREViewV2: React.FC<DREViewProps> = ({
         </tr>
         
         {isExpanded && hasChildren && (() => {
-          if (level === 1) {
-            // Expandir para nível 2 (tag01 groups) a partir de dreStructure
-            const nivel1Data = dreStructure.data[id];
-            if (!nivel1Data) return null;
-            const hasDynamic = dynamicPath.length > 0;
+          // 🔥 TESTE: Removido nível 2 (Tag01), level=1 vai direto para drill-down
 
-            // Ordenar itens do nível 2 conforme dimensionSort
-            let sortedItems = [...nivel1Data.items];
-            if (dimensionSort !== 'alpha') {
-              sortedItems.sort((a: any, b: any) => {
-                const ytdA = getValues('Real', a.items).reduce((s: number, v: number) => s + v, 0);
-                const ytdB = getValues('Real', b.items).reduce((s: number, v: number) => s + v, 0);
-                return dimensionSort === 'desc'
-                  ? Math.abs(ytdB) - Math.abs(ytdA)
-                  : Math.abs(ytdA) - Math.abs(ytdB);
-              });
-            }
-
-            return sortedItems.map((item: any, idx: number) =>
-              renderRow(`${id}.${idx}`, item.nivel_2_label, 2, item.items, hasDynamic)
-            );
-          }
-
-          // Nível 2+: expande para drill-down dinâmico (dimensões selecionadas)
+          // Nível 1+: expande para drill-down dinâmico (dimensões selecionadas)
           // dynamicPath[0] = primeira dimensão, dynamicPath[1] = segunda, etc.
-          // Para level=2: usa dynamicPath[0], level=3: dynamicPath[1], etc.
-          if (level >= 2 && dynamicPath.length > (level - 2)) {
-            const dimIndex = level - 2;  // level 2 → index 0, level 3 → index 1, etc.
+          // Para level=1: usa dynamicPath[0], level=2: dynamicPath[1], etc.
+          if (level >= 1 && dynamicPath.length > (level - 1)) {
+            const dimIndex = level - 1;  // level 1 → index 0, level 2 → index 1, etc.
             const currentDimKey = dynamicPath[dimIndex];
 
             console.log('🚀 DRILL-DOWN: Iniciando expansão dinâmica', {
@@ -2095,25 +2279,53 @@ const DREViewV2: React.FC<DREViewProps> = ({
   };
 
   // Componente Reutilizável de Dropdown Multi-select
-  const MultiSelectDropdown = ({ 
-    label, 
-    summary, 
-    isOpen, 
-    setOpen, 
-    options, 
-    selected, 
-    toggle, 
-    allSelect, 
-    icon: Icon, 
+  const MultiSelectDropdown = ({
+    label,
+    summary,
+    isOpen,
+    setOpen,
+    options,
+    selected,
+    toggle,
+    allSelect,
+    icon: Icon,
     color,
     refObj
   }: any) => {
     const isActive = selected.length > 0;
+
+    // 🎨 Classes fixas para cada cor (Tailwind precisa ver as classes completas)
+    const colorClasses = {
+      orange: {
+        border: 'border-orange-500',
+        ring: 'ring-4 ring-orange-500/10'
+      },
+      blue: {
+        border: 'border-blue-500',
+        ring: 'ring-4 ring-blue-500/10'
+      },
+      purple: {
+        border: 'border-purple-500',
+        ring: 'ring-4 ring-purple-500/10'
+      }
+    };
+
+    const activeColorClasses = colorClasses[color as keyof typeof colorClasses] || colorClasses.purple;
+
     return (
       <div ref={refObj} className="relative">
-        <button 
-          onClick={() => setOpen(!isOpen)}
-          className={`flex items-center gap-3 bg-white px-3 md:px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[160px] md:min-w-[200px] shadow-sm hover:shadow-md ${isOpen ? `border-${color} ring-4 ring-${color}/10` : isActive ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50' : 'border-gray-100'}`}
+        <button
+          onClick={() => {
+            console.log(`🖱️ Clicou no filtro ${label}, isOpen:`, isOpen, '→', !isOpen, 'options:', options.length);
+            setOpen(!isOpen);
+          }}
+          className={`flex items-center gap-3 bg-white px-3 md:px-4 py-2.5 rounded-2xl border-2 transition-all min-w-[160px] md:min-w-[200px] shadow-sm hover:shadow-md cursor-pointer ${
+            isOpen
+              ? `${activeColorClasses.border} ${activeColorClasses.ring}`
+              : isActive
+                ? 'border-yellow-400 bg-yellow-50 shadow-yellow-100/50'
+                : 'border-gray-100'
+          }`}
         >
           <div className={`p-2 rounded-xl transition-colors ${isActive ? 'bg-yellow-400 text-black' : 'bg-gray-50 text-gray-400'}`}>
             <Icon size={16} />
@@ -2161,130 +2373,60 @@ const DREViewV2: React.FC<DREViewProps> = ({
     );
   };
 
+  // 🔍 DEBUG: Verificar se dados estão carregados
+  console.log('🎨 [RENDER DREViewV2]', {
+    marcas: filterOptions.marcas.length,
+    filiais: filterOptions.nome_filiais.length,
+    tags01: filterOptions.tags01.length,
+    isMarcaFilterOpen,
+    isFilialFilterOpen,
+    isTagFilterOpen
+  });
+
   return (
     <div key={componentKey} className="space-y-2 animate-in fade-in duration-500 pb-2">
       {/* Linha de Filtros */}
       <div className="flex items-center gap-2 p-2 bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 rounded-lg border border-blue-300 shadow-md overflow-x-auto">
           <span className="text-base shrink-0">🎯</span>
 
-            {/* Filtro de Marca (CIA) */}
-            <div className="flex items-center gap-2">
-              <Flag size={16} className="text-orange-600 shrink-0" />
-              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Marca:</span>
-              <select
-                value={selectedMarca}
-                onChange={(e) => {
-                  const novaMarca = e.target.value;
-                  console.log('🎯 Marca selecionada:', novaMarca || 'TODAS');
-                  setSelectedMarca(novaMarca);
-                }}
-                className="bg-white text-[12px] font-bold text-gray-900 border border-orange-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-orange-500 transition-colors"
-              >
-                <option value="">Todas</option>
-                {filterOptions.marcas.map((marca) => (
-                  <option key={marca} value={marca}>{marca}</option>
-                ))}
-              </select>
-            </div>
+            {/* Filtro de Marca (CIA) - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Marca"
+              icon={<Flag size={14} />}
+              options={filterOptions.marcas}
+              selected={selectedMarcas}
+              onChange={(newSelection) => {
+                console.log('🎯 Marcas selecionadas:', newSelection);
+                setSelectedMarcas(newSelection);
+              }}
+              colorScheme="orange"
+            />
 
-            {/* Filtro de Filial (Unidade) */}
-            <div className="flex items-center gap-2">
-              <Building2 size={16} className="text-blue-600 shrink-0" />
-              <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap">Filial:</span>
-              <select
-                value={selectedFilial}
-                onChange={(e) => {
-                  const novaFilial = e.target.value;
-                  console.log('🏢 Filial selecionada:', novaFilial || 'TODAS');
-                  setSelectedFilial(novaFilial);
-                }}
-                className="bg-white text-[12px] font-bold text-gray-900 border border-blue-300 rounded px-2 py-1 outline-none cursor-pointer hover:border-blue-500 transition-colors"
-              >
-                <option value="">Todas</option>
-                {filiaisFiltradas.map((filial) => (
-                  <option key={filial} value={filial}>{filial}</option>
-                ))}
-              </select>
-            </div>
+            {/* Filtro de Filial (Unidade) - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Filial"
+              icon={<Building2 size={14} />}
+              options={filiaisFiltradas}
+              selected={selectedFiliais}
+              onChange={(newSelection) => {
+                console.log('🏢 Filiais selecionadas:', newSelection);
+                setSelectedFiliais(newSelection);
+              }}
+              colorScheme="blue"
+            />
 
-              {/* 🔍 BOTÃO DE DEBUG */}
-              <button
-                onClick={() => {
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                  console.log('🔍 DEBUG: Estado atual do componente');
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                  console.log('📌 selectedMarca:', selectedMarca);
-                  console.log('🏢 selectedFilial:', selectedFilial);
-                  console.log('📊 summaryRows.length:', summaryRows.length);
-
-                  // Contar marcas nos dados
-                  const marcaCount = summaryRows.reduce((acc, row) => {
-                    const m = row.marca || 'null';
-                    acc[m] = (acc[m] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('📦 Marcas em summaryRows:', marcaCount);
-
-                  // Contar filiais nos dados
-                  const filialCount = summaryRows.reduce((acc, row) => {
-                    const f = row.nome_filial || 'null';
-                    acc[f] = (acc[f] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('🏢 Filiais em summaryRows:', filialCount);
-
-                  // Calcular totais por marca
-                  const marcaTotals = summaryRows.reduce((acc, row) => {
-                    const m = row.marca || 'null';
-                    acc[m] = (acc[m] || 0) + Number(row.total_amount);
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('💰 Totais por marca:', Object.entries(marcaTotals).map(([k, v]) =>
-                    `${k}: ${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                  ));
-
-                  // Calcular totais por filial
-                  const filialTotals = summaryRows.reduce((acc, row) => {
-                    const f = row.nome_filial || 'null';
-                    acc[f] = (acc[f] || 0) + Number(row.total_amount);
-                    return acc;
-                  }, {} as Record<string, number>);
-                  console.log('💰 Totais por filial:', Object.entries(filialTotals).map(([k, v]) =>
-                    `${k}: ${v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                  ));
-
-                  console.log('🗺️ dataMap keys:', Object.keys(dataMap));
-                  console.log('🏗️ dreStructure:', Object.keys(dreStructure.data).length, 'níveis');
-                  console.log('🔑 componentKey:', componentKey);
-                  console.log('📌 dataVersion:', dataVersion);
-                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                }}
-                className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded hover:bg-red-600 transition-colors"
-                title="Clique para ver debug no console"
-              >
-                🔍 DEBUG
-              </button>
-
-              {/* 🔄 BOTÃO DE RESET */}
-              <button
-                onClick={() => {
-                  console.log('🔄 RESET: Limpando tudo e recarregando...');
-                  sessionStorage.removeItem('dreMarca');
-                  sessionStorage.removeItem('dreFilial');
-                  setSelectedMarca('');
-                  setSelectedFilial('');
-                  setSummaryRows([]);
-                  setDimensionCache({});
-                  setDataVersion(v => v + 1);
-                  setTimeout(() => {
-                    fetchDREData();
-                  }, 100);
-                }}
-                className="px-2 py-1 bg-orange-500 text-white text-[10px] font-bold rounded hover:bg-orange-600 transition-colors"
-                title="Limpar tudo e recarregar"
-              >
-                🔄 RESET
-              </button>
+            {/* Filtro de Tag01 - MULTI-SELEÇÃO */}
+            <MultiSelectFilter
+              label="Tag01"
+              icon={<Layers size={14} />}
+              options={filterOptions.tags01}
+              selected={selectedTags01}
+              onChange={(newSelection) => {
+                console.log('🏷️ Tags01 selecionadas:', newSelection);
+                setSelectedTags01(newSelection);
+              }}
+              colorScheme="purple"
+            />
 
             {/* Controles de Período */}
             <div className="flex items-center gap-2 scale-100">
@@ -2388,6 +2530,32 @@ const DREViewV2: React.FC<DREViewProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Separador */}
+            <div className="flex-1" />
+
+            {/* Controle de Escopo EBITDA */}
+            <button
+              onClick={() => setShowOnlyEbitda(!showOnlyEbitda)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-md ${
+                showOnlyEbitda
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                  : 'bg-gradient-to-r from-gray-600 to-slate-600 text-white'
+              }`}
+              title={showOnlyEbitda ? 'Exibindo apenas até EBITDA' : 'Exibindo todas as Tag0'}
+            >
+              {showOnlyEbitda ? (
+                <>
+                  <CheckSquare size={14} strokeWidth={2.5} />
+                  <span>Até EBITDA</span>
+                </>
+              ) : (
+                <>
+                  <Square size={14} strokeWidth={2.5} />
+                  <span>Todas Tag0</span>
+                </>
+              )}
+            </button>
 
             {/* Botão Limpar Filtros (se houver filtros ativos) */}
             {hasAnyFilterActive && (
@@ -2608,625 +2776,6 @@ const DREViewV2: React.FC<DREViewProps> = ({
       )}
 
       {/* 🎨 V2: MODO EXECUTIVO COM CARDS - VERSÃO COMPLETA */}
-      {presentationMode === 'executive' && (
-        <div className="space-y-4 pb-4 animate-in fade-in duration-500">
-          {/* Barra de controles do Modo Executivo */}
-          <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 px-4 py-4 rounded-2xl border-2 border-blue-300 shadow-lg">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-              {/* Info */}
-              <div className="flex items-center gap-2">
-                <div className="bg-white p-1.5 rounded-lg shadow-sm">
-                  <Activity className="w-4 h-4 text-purple-600" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="text-xs font-black text-gray-900 leading-tight">💡 Modo Executivo</p>
-                    <p className="text-[10px] text-gray-600 leading-tight">Cards interativos</p>
-                  </div>
-                  {/* 📊 Indicador de Cards Exibidos - inline */}
-                  {(() => {
-                    const totalCards = Object.keys(dreStructure.data).length;
-                    const ebitdaCards = Object.keys(dreStructure.data).filter(code => {
-                      const node = dreStructure.data[code];
-                      const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
-                      return ebitdaPrefixes.some(prefix => node.label.startsWith(prefix));
-                    }).length;
-                    const displayedCards = showOnlyEbitda ? ebitdaCards : totalCards;
-
-                    return (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg shadow-sm">
-                        <Layers size={12} className="text-indigo-600" />
-                        <span className="text-[10px] font-bold text-gray-700 whitespace-nowrap">
-                          <span className="text-indigo-600">{displayedCards}</span>/{totalCards} Tag0
-                        </span>
-                        {showOnlyEbitda && (
-                          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                            EBITDA
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Controles */}
-              <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
-                {/* Filtro por Tipo */}
-                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
-                  <span className="text-xs font-bold text-gray-600">Mostrar:</span>
-                  <button
-                    onClick={() => setExecFilterType('all')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      execFilterType === 'all'
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  <button
-                    onClick={() => setExecFilterType('positive')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      execFilterType === 'positive'
-                        ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    ✅ Positivos
-                  </button>
-                  <button
-                    onClick={() => setExecFilterType('negative')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      execFilterType === 'negative'
-                        ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    ❌ Negativos
-                  </button>
-                </div>
-
-                {/* Ordenação */}
-                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
-                  <span className="text-xs font-bold text-gray-600 whitespace-nowrap">Ordenar:</span>
-                  <button
-                    onClick={() => setExecSortBy('alphabetical')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                      execSortBy === 'alphabetical'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    A-Z
-                  </button>
-                  <button
-                    onClick={() => setExecSortBy('value')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                      execSortBy === 'value'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    💰 Valor
-                  </button>
-                  <button
-                    onClick={() => setExecSortBy('delta')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                      execSortBy === 'delta'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    📈 Δ%
-                  </button>
-                </div>
-
-                {/* Layout dos Cards */}
-                <div className="flex items-center gap-1 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
-                  <span className="text-xs font-bold text-gray-600">Layout:</span>
-                  <button
-                    onClick={() => setCardLayout('compact')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      cardLayout === 'compact'
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                    title="Compacto - 4 colunas"
-                  >
-                    ⚡
-                  </button>
-                  <button
-                    onClick={() => setCardLayout('medium')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      cardLayout === 'medium'
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                    title="Médio - Comparativo Real vs Orçado (3 colunas)"
-                  >
-                    📊
-                  </button>
-                  <button
-                    onClick={() => setCardLayout('expanded')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      cardLayout === 'expanded'
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                    title="Expandido - 2 colunas"
-                  >
-                    📈
-                  </button>
-                  <button
-                    onClick={() => setCardLayout('list')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      cardLayout === 'list'
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                    title="Lista - 1 coluna"
-                  >
-                    📋
-                  </button>
-                </div>
-
-                {/* 🎯 Filtro EBITDA: Apenas 01-04 ou Todas */}
-                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border-2 border-gray-200 shadow-sm">
-                  <span className="text-xs font-bold text-gray-600">Escopo:</span>
-                  <button
-                    onClick={() => setShowOnlyEbitda(!showOnlyEbitda)}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      showOnlyEbitda
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
-                        : 'bg-gradient-to-r from-gray-600 to-slate-600 text-white shadow-md'
-                    }`}
-                    title={showOnlyEbitda ? 'Mostrando apenas EBITDA (Tag0 01-04)' : 'Mostrando todas as Tag0'}
-                  >
-                    {showOnlyEbitda ? (
-                      <>
-                        <CheckSquare size={14} />
-                        <span>Até EBITDA</span>
-                      </>
-                    ) : (
-                      <>
-                        <Square size={14} />
-                        <span>Todas Tag0</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Botão Comparar (aparece quando 2 cards selecionados) */}
-          {selectedCardsForComparison.length === 2 && (
-            <div className="mb-4 flex justify-center animate-in fade-in slide-in-from-top-4">
-              <button
-                onClick={() => setShowComparison(true)}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 flex items-center gap-2"
-              >
-                <ArrowLeftRight size={20} />
-                Comparar {selectedCardsForComparison.length} Cards Selecionados
-              </button>
-            </div>
-          )}
-
-          {/* Grid de Cards */}
-          <div className={`grid gap-4 ${
-            cardLayout === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' :
-            cardLayout === 'medium' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-            cardLayout === 'expanded' ? 'grid-cols-1 lg:grid-cols-2' :
-            'grid-cols-1'
-          }`}>
-            {Object.keys(dreStructure.data)
-              .map((code) => {
-                const node = dreStructure.data[code];
-                const categories = node.items.flatMap(item => item.items);
-                const realValues = getValues('Real', categories);
-                const orcadoValues = getValues('Orçado', categories);
-
-                // Calcular totais APENAS para o período filtrado
-                const realTotal = realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
-                const orcadoTotal = orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
-                const delta = orcadoTotal !== 0 ? ((realTotal - orcadoTotal) / Math.abs(orcadoTotal) * 100) : 0;
-
-                return { code, node, categories, realValues, orcadoValues, realTotal, orcadoTotal, delta };
-              })
-              // 🎯 Filtrar por EBITDA (apenas tag0 01-04) ou Todas
-              .filter(({ node }) => {
-                if (!showOnlyEbitda) return true; // Mostrar todas
-                // Mostrar apenas tag0s que começam com 01., 02., 03., 04.
-                const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
-                return ebitdaPrefixes.some(prefix => node.label.startsWith(prefix));
-              })
-              // Filtrar por tipo (positive/negative/all)
-              .filter(({ delta }) => {
-                if (execFilterType === 'positive') return delta >= 0;
-                if (execFilterType === 'negative') return delta < 0;
-                return true;
-              })
-              // Ordenar
-              .sort((a, b) => {
-                if (execSortBy === 'alphabetical') return a.node.label.localeCompare(b.node.label);
-                if (execSortBy === 'value') return Math.abs(b.realTotal) - Math.abs(a.realTotal);
-                if (execSortBy === 'delta') return Math.abs(b.delta) - Math.abs(a.delta);
-                return 0;
-              })
-              .map(({ code, node, categories, realValues, orcadoValues, realTotal, orcadoTotal, delta }, cardIndex) => {
-
-              // Mini sparkline
-              const sparklineData = realValues.slice(selectedMonthStart, selectedMonthEnd + 1);
-              const maxVal = Math.max(...sparklineData);
-              const minVal = Math.min(...sparklineData);
-
-              const isSelected = selectedCardsForComparison.includes(code);
-
-              return (
-                <div
-                  key={code}
-                  className={`bg-white rounded-2xl border-2 shadow-lg hover:shadow-2xl transition-all duration-500 ease-out cursor-pointer animate-in fade-in slide-in-from-bottom-4 group ${
-                    cardLayout === 'list' ? 'flex items-center gap-6 p-4' : 'p-5 hover:scale-105'
-                  } ${isSelected ? 'border-blue-500 ring-4 ring-blue-200' : 'border-gray-200'}`}
-                  style={{
-                    animationDelay: `${cardIndex * 50}ms`,
-                    transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-                  }}
-                >
-                  {/* Header */}
-                  <div className={`flex items-start justify-between ${cardLayout === 'compact' ? 'mb-2' : 'mb-4'}`}>
-                    <div className="flex-1" onClick={() => {
-                      setPresentationMode('detailed');
-                      const element = document.getElementById(`row-${code}`);
-                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }}>
-                      <h3 className={`font-black text-gray-900 ${
-                        cardLayout === 'compact'
-                          ? 'text-sm leading-tight line-clamp-2'
-                          : 'text-lg'
-                      }`}>{node.label}</h3>
-                      <p className={`text-gray-500 font-semibold ${
-                        cardLayout === 'compact' ? 'text-[10px]' : 'text-xs'
-                      }`}>{node.items.length} subgrupos</p>
-                    </div>
-
-                    {/* Ações do Card */}
-                    <div className="flex items-center gap-2">
-                      <div className={`px-3 py-1 rounded-full text-xs font-black ${
-                        delta >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                      }`}>
-                        {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
-                      </div>
-
-                      {/* Botão Export */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          exportIndividualCard(code, node.label, realValues, orcadoValues);
-                        }}
-                        className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
-                        title="Exportar este card"
-                      >
-                        <Download size={14} />
-                      </button>
-
-                      {/* Checkbox para Comparação */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCardSelection(code);
-                        }}
-                        className={`p-2 rounded-lg transition-all ${
-                          isSelected
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                        }`}
-                        title={isSelected ? "Remover da comparação" : "Adicionar para comparar (máx 2)"}
-                      >
-                        {isSelected ? <CheckCircle size={14} /> : <Plus size={14} />}
-                      </button>
-
-                      {/* Botão Expandir Gráfico (apenas para layouts médio e expandido) */}
-                      {(cardLayout === 'medium' || cardLayout === 'expanded') && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFullscreenChart({
-                              code,
-                              label: node.label,
-                              realValues,
-                              orcadoValues,
-                              layout: cardLayout
-                            });
-                          }}
-                          className="p-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 transition-colors"
-                          title="Expandir gráfico em tela cheia"
-                        >
-                          <Maximize2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Valor Principal */}
-                  <div className="mb-4">
-                    <p className="text-xs text-gray-500 font-semibold mb-1">Real (YTD)</p>
-                    <p className="text-2xl font-black text-gray-900">
-                      {realTotal >= 0 ? 'R$ ' : '-R$ '}
-                      {formatValue(realTotal / 1000)}
-                    </p>
-                  </div>
-
-                  {/* 🎨 V2: Sparkline com Estilos Diferentes por Layout */}
-                  <div className={`relative ${cardLayout === 'compact' ? 'h-8' : cardLayout === 'list' ? 'h-16 w-64' : cardLayout === 'expanded' ? 'h-20' : 'h-16'} mb-3`}>
-                    {/* COMPACTO: Barras finas verticais */}
-                    {cardLayout === 'compact' && (
-                      <div className="flex items-end gap-px h-full">
-                        {sparklineData.map((val, idx) => {
-                          const height = maxVal !== minVal ? ((val - minVal) / (maxVal - minVal)) * 100 : 50;
-                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                          const monthName = months[selectedMonthStart + idx] || `M${idx + 1}`;
-                          return (
-                            <div key={idx} className="relative flex-1 group/bar" onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)} onMouseLeave={() => setHoveredSparkline(null)}>
-                              <div className={`w-full rounded-t transition-all ${val >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ height: `${height}%` }} />
-                              {hoveredSparkline === `${code}-${idx}` && (
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-[10px] font-bold rounded shadow-xl z-50 whitespace-nowrap">
-                                  {monthName}: {formatValue(val / 1000)}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* MÉDIO: Barras Agrupadas (Real vs Orçado lado a lado) */}
-                    {cardLayout === 'medium' && (
-                      <div className="flex items-end gap-1 h-full px-1">
-                        {sparklineData.map((realVal, idx) => {
-                          const orcadoVal = orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)[idx] || 0;
-
-                          // Normalizar alturas baseado no maior/menor valor entre Real e Orçado
-                          const allValues = [...sparklineData, ...orcadoValues.slice(selectedMonthStart, selectedMonthEnd + 1)];
-                          const maxValue = Math.max(...allValues);
-                          const minValue = Math.min(...allValues);
-
-                          // Garantir altura mínima de 8% para visibilidade (mesmo quando valor é 0)
-                          const realHeight = Math.max(8, maxValue !== minValue ? ((realVal - minValue) / (maxValue - minValue)) * 100 : 50);
-                          const orcadoHeight = Math.max(8, maxValue !== minValue ? ((orcadoVal - minValue) / (maxValue - minValue)) * 100 : 50);
-
-                          // Debug: Log para verificar valores (remover depois)
-                          if (idx === 0) {
-                            console.log(`📊 Card ${code} - Real: ${realVal}, Orçado: ${orcadoVal}, Heights: R=${realHeight}%, O=${orcadoHeight}%`);
-                          }
-
-                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                          const monthName = months[selectedMonthStart + idx] || `M${idx + 1}`;
-
-                          // Calcular % de variação
-                          const variance = orcadoVal !== 0 ? (((realVal - orcadoVal) / Math.abs(orcadoVal)) * 100) : 0;
-                          const isHovered = hoveredSparkline === `${code}-${idx}`;
-
-                          return (
-                            <div
-                              key={idx}
-                              className="relative flex-1 group/month"
-                              onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)}
-                              onMouseLeave={() => setHoveredSparkline(null)}
-                            >
-                              {/* Container das duas barras */}
-                              <div className="flex items-end gap-0.5 h-full">
-                                {/* Barra REAL (azul/verde) */}
-                                <div className="relative flex-1 flex items-end h-full">
-                                  <div
-                                    className={`w-full rounded-t transition-all duration-300 ${
-                                      realVal >= 0
-                                        ? 'bg-gradient-to-t from-blue-400 to-blue-600 group-hover/month:from-blue-500 group-hover/month:to-blue-700'
-                                        : 'bg-gradient-to-t from-rose-400 to-rose-600 group-hover/month:from-rose-500 group-hover/month:to-rose-700'
-                                    } ${isHovered ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`}
-                                    style={{ height: `${realHeight}%`, minHeight: '4px' }}
-                                  />
-                                </div>
-
-                                {/* Barra ORÇADO (roxo/cinza transparente) */}
-                                <div className="relative flex-1 flex items-end h-full">
-                                  <div
-                                    className={`w-full rounded-t transition-all duration-300 ${
-                                      orcadoVal >= 0
-                                        ? 'bg-gradient-to-t from-purple-300/60 to-purple-500/60 group-hover/month:from-purple-400/70 group-hover/month:to-purple-600/70'
-                                        : 'bg-gradient-to-t from-gray-300/60 to-gray-500/60 group-hover/month:from-gray-400/70 group-hover/month:to-gray-600/70'
-                                    } ${isHovered ? 'ring-2 ring-offset-1 ring-purple-500' : ''}`}
-                                    style={{ height: `${orcadoHeight}%`, minHeight: '4px' }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Tooltip com informações detalhadas */}
-                              {isHovered && (
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs font-bold rounded-lg shadow-xl z-50 whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
-                                  <div className="text-center space-y-1">
-                                    <div className="text-[10px] text-gray-300 font-bold">{monthName}</div>
-                                    <div className="flex items-center gap-2 text-[10px]">
-                                      <span className="text-blue-400">Real:</span>
-                                      <span className="text-white">{realVal >= 0 ? 'R$ ' : '-R$ '}{formatValue(Math.abs(realVal) / 1000)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-[10px]">
-                                      <span className="text-purple-400">Orç:</span>
-                                      <span className="text-white">{orcadoVal >= 0 ? 'R$ ' : '-R$ '}{formatValue(Math.abs(orcadoVal) / 1000)}</span>
-                                    </div>
-                                    <div className="pt-1 border-t border-gray-700">
-                                      <span className={`text-[11px] font-black ${variance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {variance >= 0 ? '▲' : '▼'} {Math.abs(variance).toFixed(1)}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
-                                </div>
-                              )}
-
-                              {/* Badge de variação (sempre visível no topo) */}
-                              {Math.abs(variance) >= 10 && (
-                                <div className="absolute -top-5 left-1/2 transform -translate-x-1/2">
-                                  <span className={`text-[8px] font-black px-1 py-0.5 rounded ${
-                                    variance >= 0
-                                      ? 'bg-emerald-100 text-emerald-700'
-                                      : 'bg-rose-100 text-rose-700'
-                                  }`}>
-                                    {variance >= 0 ? '+' : ''}{variance.toFixed(0)}%
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* EXPANDIDO: Área chart com linha + gradiente */}
-                    {cardLayout === 'expanded' && (
-                      <div className="relative h-full">
-                        <svg className="w-full h-full">
-                          {/* Área preenchida */}
-                          <defs>
-                            <linearGradient id={`gradient-${code}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor={realTotal >= 0 ? '#10b981' : '#ef4444'} stopOpacity="0.6" />
-                              <stop offset="100%" stopColor={realTotal >= 0 ? '#10b981' : '#ef4444'} stopOpacity="0.1" />
-                            </linearGradient>
-                          </defs>
-                          <path
-                            d={`M 0 ${80} ${sparklineData.map((val, idx) => {
-                              const x = (idx / (sparklineData.length - 1)) * 100;
-                              const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
-                              return `L ${x} ${y}`;
-                            }).join(' ')} L 100 80 Z`}
-                            fill={`url(#gradient-${code})`}
-                          />
-                          {/* Linha */}
-                          <path
-                            d={`M 0 ${maxVal !== minVal ? 80 - ((sparklineData[0] - minVal) / (maxVal - minVal)) * 70 : 40} ${sparklineData.map((val, idx) => {
-                              const x = (idx / (sparklineData.length - 1)) * 100;
-                              const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
-                              return `L ${x} ${y}`;
-                            }).join(' ')}`}
-                            fill="none"
-                            stroke={realTotal >= 0 ? '#059669' : '#dc2626'}
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          {/* Pontos interativos */}
-                          {sparklineData.map((val, idx) => {
-                            const x = (idx / (sparklineData.length - 1)) * 100;
-                            const y = maxVal !== minVal ? 80 - ((val - minVal) / (maxVal - minVal)) * 70 : 40;
-                            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                            const monthName = months[selectedMonthStart + idx];
-                            return (
-                              <g key={idx}>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r={hoveredSparkline === `${code}-${idx}` ? 4 : 2.5}
-                                  fill={realTotal >= 0 ? '#059669' : '#dc2626'}
-                                  stroke="white"
-                                  strokeWidth="2"
-                                  className="cursor-pointer transition-all"
-                                  onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)}
-                                  onMouseLeave={() => setHoveredSparkline(null)}
-                                />
-                                {hoveredSparkline === `${code}-${idx}` && (
-                                  <g>
-                                    <rect x={x - 30} y={y - 35} width="60" height="30" rx="4" fill="#1f2937" />
-                                    <text x={x} y={y - 22} textAnchor="middle" fill="#d1d5db" fontSize="9" fontWeight="bold">{monthName}</text>
-                                    <text x={x} y={y - 12} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{formatValue(val / 1000)}</text>
-                                  </g>
-                                )}
-                              </g>
-                            );
-                          })}
-                        </svg>
-                      </div>
-                    )}
-
-                    {/* LISTA: Barras horizontais com valores */}
-                    {cardLayout === 'list' && (
-                      <div className="space-y-1">
-                        {sparklineData.map((val, idx) => {
-                          const width = maxVal !== minVal ? ((val - minVal) / (maxVal - minVal)) * 100 : 50;
-                          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                          const monthName = months[selectedMonthStart + idx];
-                          return (
-                            <div key={idx} className="flex items-center gap-2 group/bar" onMouseEnter={() => setHoveredSparkline(`${code}-${idx}`)} onMouseLeave={() => setHoveredSparkline(null)}>
-                              <span className="text-[9px] font-bold text-gray-500 w-8">{monthName}</span>
-                              <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden relative">
-                                <div className={`h-full rounded-full transition-all duration-300 ${val >= 0 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-rose-400 to-rose-600'} ${hoveredSparkline === `${code}-${idx}` ? 'ring-2 ring-blue-500' : ''}`} style={{ width: `${width}%` }} />
-                              </div>
-                              <span className={`text-[10px] font-black w-16 text-right ${val >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {formatValue(val / 1000)}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer com Legenda Visual para Layout Médio */}
-                  {cardLayout === 'medium' ? (
-                    <div className="space-y-2">
-                      {/* Legenda Real vs Orçado */}
-                      <div className="flex items-center justify-center gap-3 text-[10px]">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-blue-400 to-blue-600"></div>
-                          <span className="text-gray-600 font-bold">Real</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-t from-purple-300/60 to-purple-500/60"></div>
-                          <span className="text-gray-600 font-bold">Orçado</span>
-                        </div>
-                      </div>
-                      {/* Delta Total */}
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-                        <span className="text-gray-500 font-semibold">Variação Total</span>
-                        <span className={`font-black ${(realTotal - orcadoTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {(realTotal - orcadoTotal) >= 0 ? '+' : '-'}{formatValue(Math.abs(realTotal - orcadoTotal))}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">vs Orçado</span>
-                      <span className={`font-black ${(realTotal - orcadoTotal) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {(realTotal - orcadoTotal) >= 0 ? '+' : '-'}{formatValue(Math.abs(realTotal - orcadoTotal))}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* 🎨 V2: Botão Ver Detalhes com Animação */}
-                  <button
-                    className={`w-full px-4 py-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white rounded-xl font-bold text-sm hover:shadow-2xl transition-all duration-300 hover:scale-105 group-hover:from-blue-700 group-hover:via-purple-700 group-hover:to-pink-700 ${
-                      cardLayout === 'compact' ? 'py-1.5 text-xs mt-2' : 'mt-4'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPresentationMode('detailed');
-                      setTimeout(() => {
-                        const element = document.getElementById(`row-${code}`);
-                        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 100);
-                    }}
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <span>Ver Detalhes</span>
-                      <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 📊 MODAL FULLSCREEN - Gráfico Ampliado */}
       {fullscreenChart && (
@@ -3666,13 +3215,45 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
       {/* 🎨 V2: TABELA DETALHADA (só mostra se presentationMode === 'detailed') */}
       {presentationMode === 'detailed' && (
+      <>
+        {/* Seção informativa do modo de visualização */}
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 shadow-sm p-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-1.5 rounded-lg shadow-sm">
+              <Brain size={14} className="text-white" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-900">💡 Modo Detalhado</span>
+              <div className="h-4 w-px bg-indigo-300" />
+              <p className="text-xs text-gray-700">
+                <span className="font-bold text-indigo-600">
+                  {(() => {
+                    const ebitdaPrefixes = ['01.', '02.', '03.', '04.'];
+                    const totalTag0 = Object.keys(dreStructure.data).length;
+                    const displayedTag0 = showOnlyEbitda
+                      ? Object.values(dreStructure.data).filter(n => ebitdaPrefixes.some(p => n.label.startsWith(p))).length
+                      : totalTag0;
+                    return `${displayedTag0}/${totalTag0}`;
+                  })()}
+                </span>
+                <span className="text-gray-600 ml-1">Tag0</span>
+                {showOnlyEbitda && (
+                  <span className="ml-1 text-[9px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                    EBITDA
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
       <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-2xl overflow-hidden relative">
         {/* Loading overlay */}
         {isLoadingDRE && (
           <div className="absolute inset-0 bg-gradient-to-br from-white/95 to-gray-50/95 backdrop-blur-sm z-[100] flex items-center justify-center">
             <div className="text-center bg-white rounded-2xl shadow-xl p-8 border-2 border-indigo-100">
               <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
-              <p className="text-lg font-black text-gray-900 mb-1">Carregando DRE Gerencial</p>
+              <p className="text-lg font-black text-gray-900 mb-1">Carregando DRE V2 (Teste)</p>
               <p className="text-sm text-gray-600">Processando dados financeiros...</p>
             </div>
           </div>
@@ -3933,7 +3514,9 @@ const DREViewV2: React.FC<DREViewProps> = ({
                 const allCostCategories: string[][] = [];      // Todos os custos (para EBITDA)
 
                 entries.forEach(([, nivel1Data]) => {
-                  const allCats = nivel1Data.items.flatMap((item: any) => item.items);
+                  // items agora é Record<tag01, contas[]> - flatten para pegar todas as contas
+                  const tag01Items = nivel1Data.items as Record<string, string[]>;
+                  const allCats = Object.values(tag01Items).flat();
                   const label = nivel1Data.label;
 
                   if (label.startsWith('01.')) {
@@ -3951,10 +3534,37 @@ const DREViewV2: React.FC<DREViewProps> = ({
                 // Encontrar o índice após "03. CUSTOS FIXOS" para inserir MARGEM
                 const margemAfterIdx = entries.findIndex(([, d]) => d.label.startsWith('03.'));
 
+                // 🔍 DEBUG: Log para verificar se categories estão corretas
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log('🎨 [RENDERIZAÇÃO] Renderizando tag0 → tag01 → contas');
+                console.log('   Filtros ativos:', { marca: selectedMarcas.length > 0 ? selectedMarcas.join(', ') : 'TODAS', filial: selectedFiliais.length > 0 ? selectedFiliais.join(', ') : 'TODAS' });
+                console.log('   Total de tag0s a renderizar:', entries.length);
+
                 return (
                   <>
                     {entries.map(([nivel1Code, nivel1Data], entryIdx) => {
-                      const allCategories = nivel1Data.items.flatMap((item: any) => item.items);
+                      // items é Record<tag01, contas[]> - flatten para pegar todas as contas
+                      const tag01Items = nivel1Data.items as Record<string, string[]>;
+                      const allCategories = Object.values(tag01Items).flat();
+
+                      // 🔍 DEBUG: Verificar se as contas existem no dataMap
+                      const contasNoDataMap = allCategories.filter(c => dataMap['Real'][c] !== undefined).length;
+                      const valorTotal = allCategories.reduce((sum, c) => {
+                        const vals = dataMap['Real'][c] || new Array(12).fill(0);
+                        return sum + vals.reduce((s, v) => s + v, 0);
+                      }, 0);
+
+                      // Log para todos os tag0s
+                      console.log(`   📊 ${nivel1Data.label} (${nivel1Code}):`);
+                      console.log(`      - Total tag01s: ${Object.keys(tag01Items).length}`);
+                      console.log(`      - Total contas: ${allCategories.length}`);
+                      console.log(`      - Contas no dataMap: ${contasNoDataMap}`);
+                      console.log(`      - Valor total Real: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+
+                      // Verificar YTD que será exibido na tela
+                      const valoresReal = getValues('Real', allCategories);
+                      const ytdCalculado = valoresReal.reduce((a, b) => a + b, 0);
+                      console.log(`      - YTD que será exibido: R$ ${ytdCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
 
                       return (
                         <React.Fragment key={nivel1Code}>
@@ -3985,6 +3595,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
           </table>
         </div>
       </div>
+      </>
       )}
       {/* FIM DO MODO DETALHADO */}
 
@@ -4373,7 +3984,9 @@ const DREViewV2: React.FC<DREViewProps> = ({
                   const node = dreStructure.data[code];
                   if (!node) return null;
 
-                  const categories = node.items.flatMap(item => item.items);
+                  // items é Record<tag01, contas[]> - flatten
+                  const tag01Items = node.items as Record<string, string[]>;
+                  const categories = Object.values(tag01Items).flat();
                   const realValues = getValues('Real', categories);
                   const orcadoValues = getValues('Orçado', categories);
                   const realTotal = realValues.slice(selectedMonthStart, selectedMonthEnd + 1).reduce((sum, val) => sum + val, 0);
@@ -4395,7 +4008,7 @@ const DREViewV2: React.FC<DREViewProps> = ({
                           }`}>
                             {delta >= 0 ? '+' : ''}{delta.toFixed(0)}%
                           </div>
-                          <p className="text-sm text-gray-600 font-semibold">{node.items.length} subgrupos</p>
+                          <p className="text-sm text-gray-600 font-semibold">{Object.keys(tag01Items).length} tag01s</p>
                         </div>
                       </div>
 
@@ -4469,8 +4082,11 @@ const DREViewV2: React.FC<DREViewProps> = ({
 
                   if (!card1 || !card2) return null;
 
-                  const categories1 = card1.items.flatMap(item => item.items);
-                  const categories2 = card2.items.flatMap(item => item.items);
+                  // items é Record<tag01, contas[]> - flatten
+                  const tag01Items1 = card1.items as Record<string, string[]>;
+                  const tag01Items2 = card2.items as Record<string, string[]>;
+                  const categories1 = Object.values(tag01Items1).flat();
+                  const categories2 = Object.values(tag01Items2).flat();
                   const real1 = getValues('Real', categories1).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const real2 = getValues('Real', categories2).slice(selectedMonthStart, selectedMonthEnd + 1).reduce((a, b) => a + b, 0);
                   const diff = real1 - real2;
