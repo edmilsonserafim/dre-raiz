@@ -3004,7 +3004,8 @@ const DREView: React.FC<DREViewProps> = ({
             {Object.keys(dreStructure.data)
               .map((code) => {
                 const node = dreStructure.data[code];
-                const categories = node.items.flatMap(item => item.items);
+                // node.items agora é Record<tag01, contas[]>, não array
+                const categories = Object.values(node.items).flat();
                 const realValues = getValues('Real', categories);
                 const orcadoValues = getValues('Orçado', categories);
 
@@ -3069,7 +3070,7 @@ const DREView: React.FC<DREViewProps> = ({
                       }`}>{node.label}</h3>
                       <p className={`text-gray-500 font-semibold ${
                         cardLayout === 'compact' ? 'text-[10px]' : 'text-xs'
-                      }`}>{node.items.length} subgrupos</p>
+                      }`}>{Object.keys(node.items).length} subgrupos</p>
                     </div>
 
                     {/* Ações do Card */}
