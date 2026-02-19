@@ -397,6 +397,8 @@ const DREView: React.FC<DREViewProps> = ({
   const marcaRef = useRef<HTMLDivElement>(null);
   const filialRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const isFirstMount = useRef<boolean>(true); // 🔧 Flag para evitar fetch duplicado na montagem
+  const hasAutoSelectedTags = useRef<boolean>(false); // 🔧 Flag para garantir auto-select apenas uma vez
 
   // Função para formatar valores com separador de milhares (ponto)
   const formatValue = (value: number, decimals: number = 1): string => {
@@ -497,18 +499,27 @@ const DREView: React.FC<DREViewProps> = ({
     sessionStorage.setItem('dreFiliais', JSON.stringify(selectedFiliais));
   }, [selectedFiliais]);
 
-  // ✅ NOVO: Selecionar todas as Tag01 por padrão quando carregar as opções
+  // ✅ NOVO: Selecionar todas as Tag01 por padrão quando carregar as opções (APENAS UMA VEZ)
   useEffect(() => {
     // Só ativar se:
     // 1. filterOptions.tags01 tiver dados (foi carregado do servidor)
     // 2. selectedTags01 estiver vazio (nenhuma seleção atual)
     // 3. Não houver dados salvos no sessionStorage (primeira vez)
+    // 4. Não tiver sido feito auto-select anteriormente (hasAutoSelectedTags)
     const savedTags = sessionStorage.getItem('dreTags01');
-    if (filterOptions.tags01.length > 0 && selectedTags01.length === 0 && !savedTags) {
-      console.log('✅ Ativando todas as Tag01 por padrão:', filterOptions.tags01);
+
+    if (
+      filterOptions.tags01.length > 0 &&
+      selectedTags01.length === 0 &&
+      !savedTags &&
+      !hasAutoSelectedTags.current
+    ) {
+      console.log('✅ Ativando todas as Tag01 por padrão (PRIMEIRA VEZ):', filterOptions.tags01);
+      hasAutoSelectedTags.current = true; // Marcar como feito
       setSelectedTags01(filterOptions.tags01);
     }
-  }, [filterOptions.tags01]); // Apenas quando filterOptions.tags01 mudar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions.tags01]); // Apenas filterOptions.tags01 - não incluir selectedTags01 para evitar loop
 
   // Notificar mudanças no loading
   useEffect(() => {
@@ -669,6 +680,13 @@ const DREView: React.FC<DREViewProps> = ({
 
   // Carregar dados na montagem e quando filtros mudam
   useEffect(() => {
+    // ⚠️ Pular primeira montagem - fetchDREData será chamado manualmente após componente montar
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      console.log('🔧 [SKIP] Primeira montagem - aguardando inicialização de filtros...');
+      return;
+    }
+
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔄 [TRIGGER] useEffect detectou mudança nos filtros!');
     console.log('   currentYear:', currentYear);
@@ -685,6 +703,13 @@ const DREView: React.FC<DREViewProps> = ({
     fetchDREData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, selectedMarcas, selectedFiliais, selectedTags01]);
+
+  // 🚀 Fetch inicial APENAS na montagem do componente
+  useEffect(() => {
+    console.log('🚀 [MOUNT] Componente montado - iniciando fetch inicial...');
+    fetchDREData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Array vazio = executa apenas uma vez na montagem
 
   // 🔄 REMOVIDO: ATIVADOR causava race condition
   // O dataVersion já é incrementado dentro do fetchDREData() após setSummaryRows
